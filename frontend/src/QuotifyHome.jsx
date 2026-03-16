@@ -86,6 +86,7 @@ export default function QuotifyHome() {
   const [fileName, setFileName] = React.useState("");
   const [formData, setFormData] = React.useState(EMPTY_FORM);
   const [isParsing, setIsParsing] = React.useState(false);
+  const [isGenerating, setIsGenerating] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
   const fileInputRef = React.useRef(null);
 
@@ -132,6 +133,52 @@ export default function QuotifyHome() {
     }
   };
 
+  const generateAndDownloadQuote = async () => {
+    setErrorMessage("");
+    setIsGenerating(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/generate-homeowners-quote`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        let detail = "Failed to generate homeowners quote.";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+      }
+
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get("content-disposition") || "";
+      let fileName = "homeowners_quote_filled.pdf";
+
+      const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+      if (match?.[1]) {
+        fileName = match[1];
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      setErrorMessage(error.message || "Something went wrong while generating the quote.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleFile = async (file) => {
     if (!file) return;
     await parseFile(file);
@@ -143,6 +190,8 @@ export default function QuotifyHome() {
     const file = e.dataTransfer.files?.[0];
     await handleFile(file);
   };
+
+  const hasFormValues = Object.values(formData).some((value) => String(value).trim() !== "");
 
   return (
     <div
@@ -389,7 +438,7 @@ export default function QuotifyHome() {
           </div>
         ) : null}
 
-        {Object.values(formData).some((value) => String(value).trim() !== "") ? (
+        {hasFormValues ? (
           <div
             style={{
               maxWidth: 1120,
@@ -439,6 +488,36 @@ export default function QuotifyHome() {
                   />
                 ))}
               </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 28,
+                display: "flex",
+                justifyContent: "center",
+              }}
+            >
+              <button
+                type="button"
+                onClick={generateAndDownloadQuote}
+                disabled={isGenerating}
+                style={{
+                  background: COLORS.blue,
+                  color: "#FFFFFF",
+                  border: "2px solid #FFFFFF",
+                  borderRadius: 14,
+                  minHeight: 56,
+                  padding: "0 28px",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  fontFamily: "Poppins, sans-serif",
+                  cursor: isGenerating ? "not-allowed" : "pointer",
+                  boxShadow: "0 6px 18px rgba(23, 101, 212, 0.18)",
+                  transition: "all 200ms ease",
+                }}
+              >
+                {isGenerating ? "GENERATING..." : "Generate + Download Quote"}
+              </button>
             </div>
           </div>
         ) : null}
