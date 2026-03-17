@@ -3,12 +3,15 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from fastapi import APIRouter, File, UploadFile, HTTPException
 from openai import OpenAI
 
-from dotenv import load_dotenv
 load_dotenv()
+
+
+router = APIRouter()
+
 
 def get_openai_client() -> OpenAI:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -150,9 +153,9 @@ def parse_homeowners_quote_with_ai(pdf_path: Path, model: str = "gpt-4o-mini") -
         parsed = json.loads(response.output_text)
 
         for key in HOMEOWNERS_SCHEMA["schema"]["required"]:
-          parsed.setdefault(key, "")
-          if parsed[key] is None:
-              parsed[key] = ""
+            parsed.setdefault(key, "")
+            if parsed[key] is None:
+                parsed[key] = ""
 
         return parsed
 
@@ -163,20 +166,7 @@ def parse_homeowners_quote_with_ai(pdf_path: Path, model: str = "gpt-4o-mini") -
             pass
 
 
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-@app.post("/api/parse-homeowners-quote")
+@router.post("/api/parse-homeowners-quote")
 async def parse_homeowners_quote(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Please upload a PDF file.")

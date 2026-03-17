@@ -1,12 +1,13 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import NameObject, BooleanObject
 
+
+router = APIRouter()
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATE_PDF_PATH = BASE_DIR / "templates" / "homeowners_quote_template.pdf"
@@ -39,39 +40,6 @@ FIELD_MAP = {
 }
 
 
-class HomeownersQuotePayload(BaseModel):
-    carrier: str = ""
-    total_premium: str = ""
-    dwelling: str = ""
-    other_structures: str = ""
-    of_dwelling: str = ""
-    personal_property: str = ""
-    loss_of_use: str = ""
-    personal_liability: str = ""
-    medical_payments: str = ""
-    replacement_cost_on_contents: str = ""
-    **{"25_extended_replacement_cost": ""}  # kept for clarity below
-    all_perils_deductible: str = ""
-    wind_hail_deductible: str = ""
-    water_and_sewer_backup: str = ""
-    client_name: str = ""
-    client_address: str = ""
-    client_phone: str = ""
-    client_email: str = ""
-    agent_name: str = ""
-    agent_address: str = ""
-    agent_phone: str = ""
-    agent_email: str = ""
-
-    class Config:
-        extra = "allow"
-
-
-# Python identifier fix for the 25% field
-HomeownersQuotePayload.__annotations__["25_extended_replacement_cost"] = str
-setattr(HomeownersQuotePayload, "25_extended_replacement_cost", "")
-
-
 def fill_branded_pdf(template_pdf_path: Path, output_pdf_path: Path, parsed_data: dict):
     reader = PdfReader(str(template_pdf_path))
     writer = PdfWriter()
@@ -100,30 +68,36 @@ def fill_branded_pdf(template_pdf_path: Path, output_pdf_path: Path, parsed_data
         writer.write(f)
 
 
-router = APIRouter()
-
-
 @router.post("/api/generate-homeowners-quote")
 async def generate_homeowners_quote(payload: dict):
     if not TEMPLATE_PDF_PATH.exists():
         raise HTTPException(
             status_code=500,
-            detail=f"Template not found at: {TEMPLATE_PDF_PATH}"
+            detail=f"Template not found at: {TEMPLATE_PDF_PATH}",
         )
 
     try:
         output_path = GENERATED_DIR / f"homeowners_quote_{uuid4().hex}.pdf"
+
         fill_branded_pdf(
             template_pdf_path=TEMPLATE_PDF_PATH,
             output_pdf_path=output_path,
             parsed_data=payload,
         )
 
-        download_name = "homeowners_quote_filled.pdf"
+        from datetime import datetime
+
         client_name = str(payload.get("client_name", "")).strip()
+
+        # format date MM-DD-YYYY
+        date_str = datetime.now().strftime("%m-%d-%Y")
+
+        # format client name Kevin-Li
+        safe_client = "Unknown"
         if client_name:
-            safe_name = "_".join(client_name.split()).lower()
-            download_name = f"{safe_name}_homeowners_quote.pdf"
+            safe_client = "-".join(client_name.split())
+
+        download_name = f"homeowners_quote_{date_str}_{safe_client}.pdf"
 
         return FileResponse(
             path=output_path,
@@ -132,7 +106,3 @@ async def generate_homeowners_quote(payload: dict):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-app = FastAPI()
-app.include_router(router)

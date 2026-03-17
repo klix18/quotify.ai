@@ -90,7 +90,7 @@ export default function QuotifyHome() {
   const [errorMessage, setErrorMessage] = React.useState("");
   const fileInputRef = React.useRef(null);
 
-  const maxWidth = 980;
+  const maxWidth = 920;
   const uploaderEnabled = selectedInsurance === "homeowners";
   const uploaderActive = uploaderEnabled && isDragging;
 
@@ -136,7 +136,7 @@ export default function QuotifyHome() {
   const generateAndDownloadQuote = async () => {
     setErrorMessage("");
     setIsGenerating(true);
-
+  
     try {
       const response = await fetch(`${API_BASE_URL}/api/generate-homeowners-quote`, {
         method: "POST",
@@ -145,7 +145,7 @@ export default function QuotifyHome() {
         },
         body: JSON.stringify(formData),
       });
-
+  
       if (!response.ok) {
         let detail = "Failed to generate homeowners quote.";
         try {
@@ -154,16 +154,21 @@ export default function QuotifyHome() {
         } catch (_) {}
         throw new Error(detail);
       }
-
+  
       const blob = await response.blob();
+  
       const contentDisposition = response.headers.get("content-disposition") || "";
       let fileName = "homeowners_quote_filled.pdf";
-
-      const match = contentDisposition.match(/filename="?([^"]+)"?/i);
-      if (match?.[1]) {
-        fileName = match[1];
+  
+      const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const plainMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+  
+      if (utf8Match?.[1]) {
+        fileName = decodeURIComponent(utf8Match[1]);
+      } else if (plainMatch?.[1]) {
+        fileName = plainMatch[1];
       }
-
+  
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -203,17 +208,17 @@ export default function QuotifyHome() {
         color: COLORS.black,
       }}
     >
-      <div style={{ maxWidth: 1120, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ maxWidth, margin: "0 auto", textAlign: "center" }}>
         <img
           src="/Combination_Blue_Medium.png"
           alt="Sizemore Insurance"
-          style={{ height: 54, marginBottom: 10 }}
+          style={{ height: 48, marginBottom: 8 }}
         />
 
         <h1
           style={{
             fontFamily: "SentientCustom, Georgia, serif",
-            fontSize: 88,
+            fontSize: 78,
             lineHeight: 0.95,
             margin: "6px 0 8px 0",
             color: COLORS.black,
@@ -226,7 +231,7 @@ export default function QuotifyHome() {
           style={{
             fontSize: 18,
             fontWeight: 500,
-            margin: "0 0 34px 0",
+            margin: "16px 0 34px 0",
             color: COLORS.black,
           }}
         >
@@ -302,6 +307,7 @@ export default function QuotifyHome() {
                   style={{
                     fontSize: 16,
                     fontWeight: 500,
+                    fontFamily: "Poppins, sans-serif",
                     color: isEnabled ? COLORS.black : COLORS.disabledText,
                     transition: "all 200ms ease",
                   }}
@@ -358,7 +364,7 @@ export default function QuotifyHome() {
             <div style={{ textAlign: "left" }}>
               <div
                 style={{
-                  color: uploaderEnabled ? (uploaderActive ? COLORS.blue : COLORS.black) : COLORS.black,
+                  color: uploaderEnabled ? COLORS.blue : COLORS.black,
                   fontWeight: 500,
                   fontSize: 16,
                   transition: "all 200ms ease",
@@ -441,7 +447,7 @@ export default function QuotifyHome() {
         {hasFormValues ? (
           <div
             style={{
-              maxWidth: 1120,
+              maxWidth,
               margin: "42px auto 0",
               textAlign: "left",
             }}
