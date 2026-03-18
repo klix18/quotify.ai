@@ -29,7 +29,7 @@ const EDITABLE_FIELDS = [
   ["total_premium", "Total Premium"],
   ["dwelling", "Dwelling"],
   ["other_structures", "Other Structures"],
-  ["of_dwelling", "Of Dwelling"],
+  ["of_dwelling", "% Of Dwelling"],
   ["personal_property", "Personal Property"],
   ["loss_of_use", "Loss of Use"],
   ["personal_liability", "Personal Liability"],
@@ -82,6 +82,10 @@ export default function QuotifyHome() {
   const [selectedInsurance, setSelectedInsurance] = React.useState("");
   const [hoveredCard, setHoveredCard] = React.useState("");
   const [isBrowseHovered, setIsBrowseHovered] = React.useState(false);
+  const [isGenerateHovered, setIsGenerateHovered] = React.useState(false);
+  const [advisors, setAdvisors] = React.useState([]);
+  const [advisorSearch, setAdvisorSearch] = React.useState("");
+  const [isAdvisorDropdownOpen, setIsAdvisorDropdownOpen] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
   const [fileName, setFileName] = React.useState("");
   const [formData, setFormData] = React.useState(EMPTY_FORM);
@@ -89,6 +93,7 @@ export default function QuotifyHome() {
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
   const fileInputRef = React.useRef(null);
+  const advisorDropdownRef = React.useRef(null);
 
   const maxWidth = 920;
   const uploaderEnabled = selectedInsurance === "homeowners";
@@ -98,6 +103,60 @@ export default function QuotifyHome() {
 
   const updateField = (key, value) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
+  };
+
+  React.useEffect(() => {
+    const loadAdvisors = async () => {
+      try {
+        const resp = await fetch(`${API_BASE_URL}/api/advisors`);
+        console.log("Advisors response status:", resp.status);
+  
+        if (!resp.ok) {
+          const text = await resp.text();
+          console.error("Failed advisors response:", text);
+          return;
+        }
+  
+        const data = await resp.json();
+        console.log("Advisors data:", data);
+  
+        setAdvisors(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Error loading advisors:", err);
+      }
+    };
+  
+    loadAdvisors();
+  }, []);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        advisorDropdownRef.current &&
+        !advisorDropdownRef.current.contains(event.target)
+      ) {
+        setIsAdvisorDropdownOpen(false);
+        setAdvisorSearch(selectedAdvisorName);
+      }
+    };
+  
+    document.addEventListener("mousedown", handleClickOutside);
+  
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleAdvisorSelect = (advisor) => {
+    setAdvisorSearch(advisor.name || "");
+    setIsAdvisorDropdownOpen(false);
+    setFormData((prev) => ({
+      ...prev,
+      agent_name: advisor.name || "",
+      agent_address: advisor.office_address || "",
+      agent_phone: advisor.phone || "",
+      agent_email: advisor.email || "",
+    }));
   };
 
   const parseFile = async (file) => {
@@ -122,10 +181,26 @@ export default function QuotifyHome() {
         throw new Error(payload?.detail || "Failed to parse homeowners quote.");
       }
 
-      setFormData({
+      // Keep agent_* fields manual-only: never overwrite them from AI payload.
+      const {
+        agent_name,
+        agent_address,
+        agent_phone,
+        agent_email,
+        ...restPayload
+      } = payload || {};
+
+      setFormData((prev) => ({
+        // reset all non-agent fields
         ...EMPTY_FORM,
-        ...payload,
-      });
+        // restore any existing manual agent values
+        agent_name: prev.agent_name || "",
+        agent_address: prev.agent_address || "",
+        agent_phone: prev.agent_phone || "",
+        agent_email: prev.agent_email || "",
+        // apply AI-parsed values for the remaining fields
+        ...restPayload,
+      }));
     } catch (error) {
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
     } finally {
@@ -195,8 +270,17 @@ export default function QuotifyHome() {
     const file = e.dataTransfer.files?.[0];
     await handleFile(file);
   };
+  
+  const filteredAdvisors = [...advisors]
+  .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+  .filter((advisor) =>
+    (advisor.name || "")
+      .toLowerCase()
+      .includes(advisorSearch.toLowerCase().trim())
+  );
 
-  const hasFormValues = Object.values(formData).some((value) => String(value).trim() !== "");
+  const selectedAdvisorName = formData.agent_name || "";
+  const advisorInputValue = isAdvisorDropdownOpen ? advisorSearch : selectedAdvisorName;
 
   return (
     <div
@@ -212,19 +296,20 @@ export default function QuotifyHome() {
         <img
           src="/Combination_Blue_Medium.png"
           alt="Sizemore Insurance"
-          style={{ height: 48, marginBottom: 8 }}
+          style={{ height: 38, marginBottom: 10 }}
         />
 
         <h1
           style={{
             fontFamily: "SentientCustom, Georgia, serif",
-            fontSize: 78,
+            fontSize: 66,
             lineHeight: 0.95,
             margin: "6px 0 8px 0",
             color: COLORS.black,
+            letterSpacing: "-0.06em",
           }}
         >
-          Quotify.ai
+          The Sizemore Snapshot
         </h1>
 
         <p
@@ -235,18 +320,36 @@ export default function QuotifyHome() {
             color: COLORS.black,
           }}
         >
-          Your Automatic Quote Filler
+          Your AI Quote Filler
         </p>
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 18,
             maxWidth,
             margin: "0 auto",
+            textAlign: "left",
           }}
         >
+          <h2
+            style={{
+              fontSize: 28,
+              fontWeight: 700,
+              color: COLORS.blue,
+              margin: "2rem 0 22px 0",
+            }}
+          >
+            Select Insurance Type
+          </h2>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: 18,
+              maxWidth,
+              margin: "0 auto",
+            }}
+          >
           {INSURANCE_OPTIONS.map((item) => {
             const isSelected = selectedInsurance === item.key;
             const isEnabled = item.enabled;
@@ -314,17 +417,141 @@ export default function QuotifyHome() {
                 >
                   {item.label}
                 </div>
+                
               </button>
             );
           })}
+        </div>
+      </div>
+
+        <div
+          style={{
+            maxWidth,
+            margin: "24px auto 0",
+            textAlign: "left",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 28,
+              fontWeight: 700,
+              color: COLORS.blue,
+              margin: "5rem 0 10px 0",
+            }}
+          >
+            Select Advisor
+          </h2>
+
+
+          <div ref={advisorDropdownRef} style={{ position: "relative" }}>
+            <input
+              type="text"
+              value={advisorInputValue}
+              onChange={(e) => {
+                setAdvisorSearch(e.target.value);
+                setIsAdvisorDropdownOpen(true);
+              }}
+              onFocus={() => {
+                setAdvisorSearch("");
+                setIsAdvisorDropdownOpen(true);
+              }}
+              placeholder="Search by name"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                background: COLORS.lightGrey,
+                border: "none",
+                borderRadius: 12,
+                color: COLORS.black,
+                fontSize: 16,
+                fontFamily: "Poppins, sans-serif",
+                outline: "none",
+                padding: "0 14px",
+                height: 48,
+              }}
+            />
+
+          {isAdvisorDropdownOpen && (
+            <div
+              style={{
+                position: "absolute",
+                top: "56px",
+                left: 0,
+                right: 0,
+                maxHeight: 260,
+                overflowY: "auto",
+                background: "#FFFFFF",
+                borderRadius: 12,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                border: "1px solid #E8E8E8",
+                zIndex: 10,
+              }}
+            >
+              {filteredAdvisors.length > 0 ? (
+                filteredAdvisors.map((advisor) => (
+                  <button
+                    key={advisor.name}
+                    type="button"
+                    onClick={() => handleAdvisorSelect(advisor)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 14px",
+                      background: "#FFFFFF",
+                      border: "none",
+                      borderBottom: "1px solid #F1F1F1",
+                      cursor: "pointer",
+                      fontFamily: "Poppins, sans-serif",
+                      fontSize: 14,
+                      color: COLORS.black,
+                    }}
+                  >
+                    <div style={{ fontWeight: 500 }}>{advisor.name}</div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: COLORS.subtextGrey,
+                        marginTop: 2,
+                      }}
+                    >
+                      {advisor.office_address || advisor.email || ""}
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    fontSize: 14,
+                    color: COLORS.subtextGrey,
+                    fontFamily: "Poppins, sans-serif",
+                  }}
+                >
+                  No advisors found
+                </div>
+              )}
+            </div>
+          )}
+          </div>
         </div>
 
         <div
           style={{
             maxWidth,
             margin: "22px auto 0 auto",
+            textAlign: "left",
           }}
         >
+          <h2
+            style={{
+              fontSize: 28,
+              fontWeight: 700,
+              color: COLORS.blue,
+              margin: "5rem 0 22px 0",
+            }}
+          >
+            Upload Quote Document
+          </h2>
           <div
             onDragEnter={(e) => {
               if (!uploaderEnabled) return;
@@ -444,89 +671,106 @@ export default function QuotifyHome() {
           </div>
         ) : null}
 
-        {hasFormValues ? (
-          <div
+        <div
+          style={{
+            maxWidth,
+            margin: "42px auto 0",
+            textAlign: "left",
+          }}
+        >
+          <h2
             style={{
-              maxWidth,
-              margin: "42px auto 0",
-              textAlign: "left",
+              fontSize: 28,
+              fontWeight: 700,
+              color: COLORS.blue,
+              margin: "0 0 6px 0",
             }}
           >
-            <h2
-              style={{
-                fontSize: 28,
-                fontWeight: 700,
-                color: COLORS.black,
-                margin: "0 0 22px 0",
-              }}
-            >
-              Extracted Values – Please Edit Where Needed
-            </h2>
+            Extracted Values
+          </h2>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 18,
-                alignItems: "start",
-              }}
-            >
-              <div style={{ display: "grid", gap: 18 }}>
-                {EDITABLE_FIELDS.filter(([key]) => LEFT_KEYS.has(key)).map(([key, label]) => (
-                  <FieldControl
-                    key={key}
-                    fieldKey={key}
-                    label={label}
-                    value={formData[key] || ""}
-                    onChange={updateField}
-                  />
-                ))}
-              </div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 500,
+              fontFamily: "Poppins, sans-serif",
+              color: COLORS.black,
+              marginBottom: 22,
+            }}
+          >
+            Please double check the information is correct and edit where needed
+          </div>
 
-              <div style={{ display: "grid", gap: 18 }}>
-                {EDITABLE_FIELDS.filter(([key]) => !LEFT_KEYS.has(key)).map(([key, label]) => (
-                  <FieldControl
-                    key={key}
-                    fieldKey={key}
-                    label={label}
-                    value={formData[key] || ""}
-                    onChange={updateField}
-                  />
-                ))}
-              </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 18,
+              alignItems: "start",
+            }}
+          >
+            <div style={{ display: "grid", gap: 18 }}>
+              {EDITABLE_FIELDS.filter(([key]) => LEFT_KEYS.has(key)).map(([key, label]) => (
+                <FieldControl
+                  key={key}
+                  fieldKey={key}
+                  label={label}
+                  value={formData[key] || ""}
+                  onChange={updateField}
+                />
+              ))}
             </div>
 
-            <div
-              style={{
-                marginTop: 28,
-                display: "flex",
-                justifyContent: "center",
-              }}
-            >
-              <button
-                type="button"
-                onClick={generateAndDownloadQuote}
-                disabled={isGenerating}
-                style={{
-                  background: COLORS.blue,
-                  color: "#FFFFFF",
-                  border: "2px solid #FFFFFF",
-                  borderRadius: 14,
-                  minHeight: 56,
-                  padding: "0 28px",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  fontFamily: "Poppins, sans-serif",
-                  cursor: isGenerating ? "not-allowed" : "pointer",
-                  boxShadow: "0 6px 18px rgba(23, 101, 212, 0.18)",
-                  transition: "all 200ms ease",
-                }}
-              >
-                {isGenerating ? "GENERATING..." : "Generate + Download Quote"}
-              </button>
+            <div style={{ display: "grid", gap: 18 }}>
+              {EDITABLE_FIELDS.filter(([key]) => !LEFT_KEYS.has(key)).map(([key, label]) => (
+                <FieldControl
+                  key={key}
+                  fieldKey={key}
+                  label={label}
+                  value={formData[key] || ""}
+                  onChange={updateField}
+                />
+              ))}
             </div>
           </div>
-        ) : null}
+
+          <div
+            style={{
+              marginTop: 28,
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <button
+              type="button"
+              onClick={generateAndDownloadQuote}
+              disabled={isGenerating}
+              onMouseEnter={() => {
+                if (!isGenerating) setIsGenerateHovered(true);
+              }}
+              onMouseLeave={() => setIsGenerateHovered(false)}
+              style={{
+                background: COLORS.blue,
+                color: "#FFFFFF",
+                border: "none",
+                borderRadius: 14,
+                minHeight: 56,
+                padding: "0 28px",
+                fontSize: 16,
+                fontWeight: 500,
+                fontFamily: "Poppins, sans-serif",
+                cursor: isGenerating ? "not-allowed" : "pointer",
+                boxShadow:
+                  !isGenerating && isGenerateHovered
+                    ? `0 0 32px ${COLORS.hoverShadow}`
+                    : "0 0 0 rgba(0,0,0,0)",
+                transition: "all 200ms ease",
+              }}
+            >
+              {isGenerating ? "GENERATING..." : "Generate + Download Quote"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

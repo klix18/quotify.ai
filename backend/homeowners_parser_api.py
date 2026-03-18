@@ -42,10 +42,8 @@ HOMEOWNERS_SCHEMA = {
             "client_address": {"type": "string"},
             "client_phone": {"type": "string"},
             "client_email": {"type": "string"},
-            "agent_name": {"type": "string"},
-            "agent_address": {"type": "string"},
-            "agent_phone": {"type": "string"},
-            "agent_email": {"type": "string"},
+            # NOTE: agent_* fields are intentionally omitted from the AI schema
+            # so they remain manual-entry only in the UI.
             "replacement_cost_on_contents": {
                 "type": "string",
                 "enum": ["Yes", "No", ""]
@@ -72,10 +70,6 @@ HOMEOWNERS_SCHEMA = {
             "client_address",
             "client_phone",
             "client_email",
-            "agent_name",
-            "agent_address",
-            "agent_phone",
-            "agent_email",
             "replacement_cost_on_contents",
             "25_extended_replacement_cost",
         ],

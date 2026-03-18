@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from homeowners_parser_api import router as parser_router
 from homeowners_filler_api import router as filler_router
+from advisor_info_api import router as advisor_router
 
 app = FastAPI()
 
@@ -20,3 +21,4 @@ app.add_middleware(
 
 app.include_router(parser_router)
 app.include_router(filler_router)
+app.include_router(advisor_router)
