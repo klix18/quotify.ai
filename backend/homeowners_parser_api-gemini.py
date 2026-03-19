@@ -1,6 +1,7 @@
 #Uses Gemini Flash 2.5
 #Shows different states, like ingesting pdf, analyzing, etc
-#2 pass - first pass: OCR+streaming, second pass:OCR+full reviewing
+#Only starts streaming in the last stage, not analyzing, which is the longest phase
+
 
 import json
 import os
@@ -47,7 +48,6 @@ ALL_HOMEOWNERS_KEYS = [
     "replacement_cost_on_contents",
     "25_extended_replacement_cost",
 ]
-
 
 HOMEOWNERS_SCHEMA = {
     "type": "object",
@@ -123,41 +123,6 @@ Rules:
 """
 
 
-QUICK_PASS_PROMPT = """
-Extract likely homeowners quote fields from this PDF as quickly as possible.
-
-Output ONLY lines in this exact format:
-field_key: value
-
-Rules:
-- One field per line
-- Only use these field keys:
-  carrier
-  total_premium
-  dwelling
-  of_dwelling
-  other_structures
-  personal_property
-  loss_of_use
-  personal_liability
-  medical_payments
-  all_perils_deductible
-  wind_hail_deductible
-  water_and_sewer_backup
-  client_name
-  client_address
-  client_phone
-  client_email
-  replacement_cost_on_contents
-  25_extended_replacement_cost
-- Skip fields you cannot identify yet
-- Do not explain anything
-- Prefer speed over perfection
-- replacement_cost_on_contents must be Yes or No if known
-- 25_extended_replacement_cost must be Yes or No if known
-"""
-
-
 def normalize_homeowners_result(parsed: dict) -> dict:
     for key in ALL_HOMEOWNERS_KEYS:
         parsed.setdefault(key, "")
@@ -166,7 +131,11 @@ def normalize_homeowners_result(parsed: dict) -> dict:
     return parsed
 
 
-def extract_partial_json_fields(streamed_json: str) -> dict:
+def extract_partial_fields(streamed_json: str) -> dict:
+    """
+    Pulls completed key/value pairs out of an incomplete JSON string.
+    Only extracts fields whose string value is fully closed.
+    """
     partial = {}
 
     for key in ALL_HOMEOWNERS_KEYS:
@@ -180,53 +149,9 @@ def extract_partial_json_fields(streamed_json: str) -> dict:
     return partial
 
 
-def extract_quick_pass_lines(text: str) -> dict:
-    found = {}
-
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or ":" not in line:
-            continue
-
-        key, value = line.split(":", 1)
-        key = key.strip()
-        value = value.strip()
-
-        if key in ALL_HOMEOWNERS_KEYS and value:
-            found[key] = value
-
-    return found
-
-
-def clean_patch_values(data: dict) -> dict:
-    cleaned = {}
-
-    for key, value in data.items():
-        if key not in ALL_HOMEOWNERS_KEYS:
-            continue
-
-        if value is None:
-            continue
-
-        value = str(value).strip()
-
-        if key in {"replacement_cost_on_contents", "25_extended_replacement_cost"}:
-            if value.lower() == "yes":
-                value = "Yes"
-            elif value.lower() == "no":
-                value = "No"
-            else:
-                continue
-
-        cleaned[key] = value
-
-    return cleaned
-
-
 def stream_homeowners_quote_with_gemini(
     pdf_path: Path,
-    model_quick: str = "gemini-2.5-flash-lite",
-    model_final: str = "gemini-2.5-flash",
+    model: str = "gemini-2.5-flash",
 ) -> Iterator[str]:
     client = get_gemini_client()
     uploaded_file = None
@@ -237,51 +162,13 @@ def stream_homeowners_quote_with_gemini(
             config={"mime_type": "application/pdf"},
         )
 
-        sent_draft = {}
-        sent_final = {}
+        yield json.dumps({"type": "status", "message": "Analyzing document..."}) + "\n"
 
-        yield json.dumps({"type": "status", "message": "Reading quote..."}) + "\n"
-
-        # PASS 1: quick draft extraction
-        quick_text = ""
-        quick_stream = client.models.generate_content_stream(
-            model=model_quick,
-            contents=[
-                "Quickly extract likely fields from this homeowners quote PDF.",
-                uploaded_file,
-            ],
-            config=types.GenerateContentConfig(
-                system_instruction=QUICK_PASS_PROMPT,
-                temperature=0,
-            ),
-        )
-
-        for chunk in quick_stream:
-            text = chunk.text or ""
-            if not text:
-                continue
-
-            quick_text += text
-            found = clean_patch_values(extract_quick_pass_lines(quick_text))
-
-            patch = {}
-            for key, value in found.items():
-                if sent_draft.get(key) != value:
-                    sent_draft[key] = value
-                    patch[key] = value
-
-            if patch:
-                yield json.dumps({
-                    "type": "draft_patch",
-                    "data": patch,
-                }) + "\n"
-
-        yield json.dumps({"type": "status", "message": "Verifying extracted fields..."}) + "\n"
-
-        # PASS 2: strict structured extraction
         full_text = ""
-        final_stream = client.models.generate_content_stream(
-            model=model_final,
+        sent_values = {}
+
+        stream = client.models.generate_content_stream(
+            model=model,
             contents=[
                 "Extract the homeowners insurance quote fields from this PDF.",
                 uploaded_file,
@@ -294,39 +181,36 @@ def stream_homeowners_quote_with_gemini(
             ),
         )
 
-        for chunk in final_stream:
+        for chunk in stream:
             text = chunk.text or ""
             if not text:
                 continue
 
             full_text += text
-            partial = clean_patch_values(extract_partial_json_fields(full_text))
 
+            yield json.dumps({"type": "delta", "text": text}) + "\n"
+
+            partial = extract_partial_fields(full_text)
             patch = {}
+
             for key, value in partial.items():
-                if sent_final.get(key) != value:
-                    sent_final[key] = value
+                if sent_values.get(key) != value:
+                    sent_values[key] = value
                     patch[key] = value
 
             if patch:
-                yield json.dumps({
-                    "type": "final_patch",
-                    "data": patch,
-                }) + "\n"
+                yield json.dumps({"type": "patch", "data": patch}) + "\n"
 
         parsed = json.loads(full_text)
         parsed = normalize_homeowners_result(parsed)
 
         final_patch = {}
         for key, value in parsed.items():
-            if sent_final.get(key) != value:
+            if sent_values.get(key) != value:
                 final_patch[key] = value
 
         if final_patch:
-            yield json.dumps({
-                "type": "final_patch",
-                "data": final_patch,
-            }) + "\n"
+            yield json.dumps({"type": "patch", "data": final_patch}) + "\n"
 
         yield json.dumps({"type": "result", "data": parsed}) + "\n"
 
