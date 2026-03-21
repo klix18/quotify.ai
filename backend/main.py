@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from homeowners_parser_api import router as parser_router
-from homeowners_filler_api import router as filler_router
 from advisor_info_api import router as advisor_router
+
+from homeowners_parser_api import router as homeowners_parser_router
+from homeowners_filler_api import router as filler_router
+
+from auto_parser_api import router as auto_parser_router
 
 app = FastAPI()
 
@@ -19,6 +22,7 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
-app.include_router(parser_router)
+app.include_router(homeowners_parser_router)
 app.include_router(filler_router)
 app.include_router(advisor_router)
+app.include_router(auto_parser_router)

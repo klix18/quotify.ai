@@ -1,6 +1,7 @@
 #Uses Gemini Flash 2.5
 #Shows different states, like ingesting pdf, analyzing, etc
 #2 pass - first pass: OCR+streaming, second pass:OCR+full reviewing
+# this is the best!!!
 
 import json
 import os
@@ -28,10 +29,8 @@ def get_gemini_client() -> genai.Client:
 
 
 ALL_HOMEOWNERS_KEYS = [
-    "carrier",
     "total_premium",
     "dwelling",
-    "of_dwelling",
     "other_structures",
     "personal_property",
     "loss_of_use",
@@ -52,10 +51,8 @@ ALL_HOMEOWNERS_KEYS = [
 HOMEOWNERS_SCHEMA = {
     "type": "object",
     "properties": {
-        "carrier": {"type": "string"},
         "total_premium": {"type": "string"},
         "dwelling": {"type": "string"},
-        "of_dwelling": {"type": "string"},
         "other_structures": {"type": "string"},
         "personal_property": {"type": "string"},
         "loss_of_use": {"type": "string"},
@@ -78,10 +75,8 @@ HOMEOWNERS_SCHEMA = {
         },
     },
     "required": [
-        "carrier",
         "total_premium",
         "dwelling",
-        "of_dwelling",
         "other_structures",
         "personal_property",
         "loss_of_use",
@@ -106,8 +101,6 @@ Rules:
 - If a field cannot be found, return "".
 - Preserve money formatting with a leading $ when the source is a money amount.
   Examples: "$1,015.00", "$153,814", "$2,500".
-- Preserve percent formatting with a trailing % when the source is a percent.
-  Examples: "10%", "25%".
 - For deductible fields that combine percent and dollars, preserve both if present.
   Example: "2% - $3,076".
 - replacement_cost_on_contents must be "Yes", "No", or "".
@@ -115,11 +108,8 @@ Rules:
 - Do not infer agent info unless clearly present.
 - client_address should be a single line string.
 - Use the quote's actual insured / prepared-for person as client_name, not the agency.
-- For of_dwelling:
-  - only populate it if the quote explicitly states a percent amount for that field
-  - otherwise return "".
 - If an endorsement indicates 25% extended replacement cost is included, set
-  25_extended_replacement_cost to "Yes", not of_dwelling.
+  25_extended_replacement_cost to "Yes".
 """
 
 
@@ -132,10 +122,8 @@ field_key: value
 Rules:
 - One field per line
 - Only use these field keys:
-  carrier
   total_premium
   dwelling
-  of_dwelling
   other_structures
   personal_property
   loss_of_use
