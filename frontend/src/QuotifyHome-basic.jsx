@@ -25,17 +25,15 @@ const INSURANCE_OPTIONS = [
 ];
 
 const EDITABLE_FIELDS = [
-  ["carrier", "Carrier"],
   ["total_premium", "Total Premium"],
   ["dwelling", "Dwelling"],
   ["other_structures", "Other Structures"],
-  ["of_dwelling", "% Of Dwelling"],
   ["personal_property", "Personal Property"],
   ["loss_of_use", "Loss of Use"],
   ["personal_liability", "Personal Liability"],
   ["medical_payments", "Medical Payments"],
   ["replacement_cost_on_contents", "Replacement Cost on Contents"],
-  ["25_extended_replacement_cost", "25% Extended Replacement Cost"],
+  ["25_ext_replacement_cost", "25% Ext Replacement Cost"],
   ["all_perils_deductible", "All Perils Deductible"],
   ["wind_hail_deductible", "Wind / Hail Deductible"],
   ["water_and_sewer_backup", "Water and Sewer Backup"],
@@ -49,32 +47,65 @@ const EDITABLE_FIELDS = [
   ["agent_email", "Agent Email"],
 ];
 
-const LEFT_KEYS = new Set([
-  "carrier",
-  "total_premium",
-  "dwelling",
-  "other_structures",
-  "of_dwelling",
-  "personal_property",
-  "loss_of_use",
-  "personal_liability",
-  "medical_payments",
-  "replacement_cost_on_contents",
-  "25_extended_replacement_cost",
-  "all_perils_deductible",
-  "wind_hail_deductible",
-  "water_and_sewer_backup",
-]);
-
 const YES_NO_FIELDS = new Set([
   "replacement_cost_on_contents",
-  "25_extended_replacement_cost",
+  "25_ext_replacement_cost",
 ]);
 
 const TEXTAREA_FIELDS = new Set([
   "client_address",
   "agent_address",
 ]);
+
+const NO_STATUS_FIELDS = new Set([
+  "client_name",
+  "client_address",
+  "client_phone",
+  "client_email",
+  "agent_name",
+  "agent_address",
+  "agent_phone",
+  "agent_email",
+]);
+
+const LABEL_MAP = Object.fromEntries(EDITABLE_FIELDS);
+
+const EXTRACTED_ROWS = [
+  [
+    { key: "total_premium", span: 5 },
+    { key: "dwelling", span: 5 },
+    { key: "other_structures", span: 5 },
+    { key: "personal_property", span: 5 },
+  ],
+
+  [
+    { key: "loss_of_use", span: 5 },
+    { key: "personal_liability", span: 5 },
+    { key: "medical_payments", span: 5 },
+    { key: "all_perils_deductible", span: 5 },
+  ],
+
+  [
+    { key: "replacement_cost_on_contents", span: 5 },
+    { key: "25_ext_replacement_cost", span: 5 },
+    { key: "water_and_sewer_backup", span: 5 },
+    { key: "wind_hail_deductible", span: 5 },
+  ],
+
+  [
+    { key: "client_name", span: 5 },
+    { key: "client_address", span: 5 },
+    { key: "client_phone", span: 5 },
+    { key: "client_email", span: 5 },
+  ],
+
+  [
+    { key: "agent_name", span: 5 },
+    { key: "agent_address", span: 5 },
+    { key: "agent_phone", span: 5 },
+    { key: "agent_email", span: 5 },
+  ],
+];
 
 const EMPTY_FORM = Object.fromEntries(EDITABLE_FIELDS.map(([key]) => [key, ""]));
 
@@ -92,12 +123,45 @@ export default function QuotifyHome() {
   const [isParsing, setIsParsing] = React.useState(false);
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
+  const [parseStatus, setParseStatus] = React.useState("");
   const fileInputRef = React.useRef(null);
   const advisorDropdownRef = React.useRef(null);
+  const [loadingFields, setLoadingFields] = React.useState(
+    () => Object.fromEntries(EDITABLE_FIELDS.map(([key]) => [key, false]))
+  );
+  const [finalizedFields, setFinalizedFields] = React.useState(
+    () => Object.fromEntries(EDITABLE_FIELDS.map(([key]) => [key, false]))
+  );
+
+  const resetFieldLoadingState = () => {
+    setLoadingFields(
+      Object.fromEntries(EDITABLE_FIELDS.map(([key]) => [key, false]))
+    );
+    setFinalizedFields(
+      Object.fromEntries(EDITABLE_FIELDS.map(([key]) => [key, false]))
+    );
+  };
+
+  const startFieldLoadingState = () => {
+    const next = Object.fromEntries(
+      EDITABLE_FIELDS.map(([key]) => [
+        key,
+        !key.startsWith("agent_"),
+      ])
+    );
+    setLoadingFields(next);
+
+    setFinalizedFields(
+      Object.fromEntries(EDITABLE_FIELDS.map(([key]) => [key, false]))
+    );
+  };
 
   const maxWidth = 920;
+  const extractedMaxWidth = 1280;
   const uploaderEnabled = selectedInsurance === "homeowners";
   const uploaderActive = uploaderEnabled && isDragging;
+  const selectedAdvisorName = formData.agent_name || "";
+  const advisorInputValue = isAdvisorDropdownOpen ? advisorSearch : selectedAdvisorName;
 
   const onBrowseClick = () => fileInputRef.current?.click();
 
@@ -109,23 +173,19 @@ export default function QuotifyHome() {
     const loadAdvisors = async () => {
       try {
         const resp = await fetch(`${API_BASE_URL}/api/advisors`);
-        console.log("Advisors response status:", resp.status);
-  
         if (!resp.ok) {
           const text = await resp.text();
           console.error("Failed advisors response:", text);
           return;
         }
-  
+
         const data = await resp.json();
-        console.log("Advisors data:", data);
-  
         setAdvisors(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Error loading advisors:", err);
       }
     };
-  
+
     loadAdvisors();
   }, []);
 
@@ -139,13 +199,12 @@ export default function QuotifyHome() {
         setAdvisorSearch(selectedAdvisorName);
       }
     };
-  
+
     document.addEventListener("mousedown", handleClickOutside);
-  
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [selectedAdvisorName]);
 
   const handleAdvisorSelect = (advisor) => {
     setAdvisorSearch(advisor.name || "");
@@ -164,7 +223,9 @@ export default function QuotifyHome() {
 
     setFileName(file.name);
     setErrorMessage("");
+    setParseStatus("Uploading PDF...");
     setIsParsing(true);
+    startFieldLoadingState();
 
     try {
       const body = new FormData();
@@ -175,34 +236,157 @@ export default function QuotifyHome() {
         body,
       });
 
-      const payload = await response.json();
-
       if (!response.ok) {
-        throw new Error(payload?.detail || "Failed to parse homeowners quote.");
+        let detail = "Failed to parse homeowners quote.";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
       }
 
-      // Keep agent_* fields manual-only: never overwrite them from AI payload.
+      if (!response.body) {
+        throw new Error("Streaming response body is not available.");
+      }
+
+      setFormData((prev) => ({
+        ...EMPTY_FORM,
+        agent_name: prev.agent_name || "",
+        agent_address: prev.agent_address || "",
+        agent_phone: prev.agent_phone || "",
+        agent_email: prev.agent_email || "",
+      }));
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData = null;
+
+      const applyPatch = (patch, isFinal = false) => {
+        const {
+          agent_name,
+          agent_address,
+          agent_phone,
+          agent_email,
+          ...restPatch
+        } = patch || {};
+
+        const keys = Object.keys(restPatch);
+
+        if (keys.length === 0) return;
+
+        setFormData((prev) => ({
+          ...prev,
+          ...restPatch,
+        }));
+
+        setLoadingFields((prev) => {
+          const next = { ...prev };
+          for (const key of keys) next[key] = false;
+          return next;
+        });
+
+        if (isFinal) {
+          setFinalizedFields((prev) => {
+            const next = { ...prev };
+            for (const key of keys) next[key] = true;
+            return next;
+          });
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          let message;
+          try {
+            message = JSON.parse(line);
+          } catch {
+            continue;
+          }
+
+          if (message.type === "status") {
+            setParseStatus(message.message || "Parsing...");
+          }
+
+          if (message.type === "draft_patch" && message.data) {
+            setParseStatus("Filling likely fields...");
+            applyPatch(message.data, false);
+          }
+
+          if (message.type === "final_patch" && message.data) {
+            setParseStatus("Verifying and refining fields...");
+            applyPatch(message.data, true);
+          }
+
+          if (message.type === "result") {
+            finalData = message.data;
+            setParseStatus("Applying final values...");
+          }
+
+          if (message.type === "error") {
+            throw new Error(message.error || "Streaming parse failed.");
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        try {
+          const message = JSON.parse(buffer);
+
+          if (message.type === "draft_patch" && message.data) {
+            applyPatch(message.data, false);
+          } else if (message.type === "final_patch" && message.data) {
+            applyPatch(message.data, true);
+          } else if (message.type === "result") {
+            finalData = message.data;
+          } else if (message.type === "error") {
+            throw new Error(message.error || "Streaming parse failed.");
+          }
+        } catch (_) {}
+      }
+
+      if (!finalData) {
+        throw new Error("No final parsed result was returned.");
+      }
+
       const {
         agent_name,
         agent_address,
         agent_phone,
         agent_email,
         ...restPayload
-      } = payload || {};
+      } = finalData || {};
 
       setFormData((prev) => ({
-        // reset all non-agent fields
-        ...EMPTY_FORM,
-        // restore any existing manual agent values
-        agent_name: prev.agent_name || "",
-        agent_address: prev.agent_address || "",
-        agent_phone: prev.agent_phone || "",
-        agent_email: prev.agent_email || "",
-        // apply AI-parsed values for the remaining fields
+        ...prev,
         ...restPayload,
       }));
+
+      setLoadingFields(
+        Object.fromEntries(EDITABLE_FIELDS.map(([key]) => [key, false]))
+      );
+      setFinalizedFields((prev) => {
+        const next = { ...prev };
+        for (const key of Object.keys(restPayload)) {
+          next[key] = true;
+        }
+        return next;
+      });
+
+      setParseStatus("Done.");
     } catch (error) {
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
+      setParseStatus("");
+      resetFieldLoadingState();
     } finally {
       setIsParsing(false);
     }
@@ -211,7 +395,7 @@ export default function QuotifyHome() {
   const generateAndDownloadQuote = async () => {
     setErrorMessage("");
     setIsGenerating(true);
-  
+
     try {
       const response = await fetch(`${API_BASE_URL}/api/generate-homeowners-quote`, {
         method: "POST",
@@ -220,7 +404,7 @@ export default function QuotifyHome() {
         },
         body: JSON.stringify(formData),
       });
-  
+
       if (!response.ok) {
         let detail = "Failed to generate homeowners quote.";
         try {
@@ -229,25 +413,25 @@ export default function QuotifyHome() {
         } catch (_) {}
         throw new Error(detail);
       }
-  
+
       const blob = await response.blob();
-  
+
       const contentDisposition = response.headers.get("content-disposition") || "";
-      let fileName = "homeowners_quote_filled.pdf";
-  
+      let outFileName = "homeowners_quote_filled.pdf";
+
       const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
       const plainMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
-  
+
       if (utf8Match?.[1]) {
-        fileName = decodeURIComponent(utf8Match[1]);
+        outFileName = decodeURIComponent(utf8Match[1]);
       } else if (plainMatch?.[1]) {
-        fileName = plainMatch[1];
+        outFileName = plainMatch[1];
       }
-  
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = fileName;
+      link.download = outFileName;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -270,17 +454,14 @@ export default function QuotifyHome() {
     const file = e.dataTransfer.files?.[0];
     await handleFile(file);
   };
-  
-  const filteredAdvisors = [...advisors]
-  .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-  .filter((advisor) =>
-    (advisor.name || "")
-      .toLowerCase()
-      .includes(advisorSearch.toLowerCase().trim())
-  );
 
-  const selectedAdvisorName = formData.agent_name || "";
-  const advisorInputValue = isAdvisorDropdownOpen ? advisorSearch : selectedAdvisorName;
+  const filteredAdvisors = [...advisors]
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+    .filter((advisor) =>
+      (advisor.name || "")
+        .toLowerCase()
+        .includes(advisorSearch.toLowerCase().trim())
+    );
 
   return (
     <div
@@ -292,7 +473,16 @@ export default function QuotifyHome() {
         color: COLORS.black,
       }}
     >
-      <div style={{ maxWidth, margin: "0 auto", textAlign: "center" }}>
+      <style>
+        {`
+          @keyframes quotifyShimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+          }
+        `}
+      </style>
+
+      <div style={{ maxWidth: extractedMaxWidth, margin: "0 auto", textAlign: "center" }}>
         <img
           src="/Combination_Blue_Medium.png"
           alt="Sizemore Insurance"
@@ -350,79 +540,80 @@ export default function QuotifyHome() {
               margin: "0 auto",
             }}
           >
-          {INSURANCE_OPTIONS.map((item) => {
-            const isSelected = selectedInsurance === item.key;
-            const isEnabled = item.enabled;
-            const isHovered = hoveredCard === item.key;
+            {INSURANCE_OPTIONS.map((item) => {
+              const isSelected = selectedInsurance === item.key;
+              const isEnabled = item.enabled;
+              const isHovered = hoveredCard === item.key;
 
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => {
-                  if (!isEnabled) return;
-                  setSelectedInsurance(item.key);
-                  setIsDragging(false);
-                  setErrorMessage("");
-                }}
-                onMouseEnter={() => setHoveredCard(item.key)}
-                onMouseLeave={() => setHoveredCard("")}
-                disabled={!isEnabled}
-                style={{
-                  background: COLORS.lightGrey,
-                  borderRadius: 20,
-                  padding: "20px 16px 16px 16px",
-                  textAlign: "center",
-                  minHeight: 220,
-                  border: `3px solid ${isSelected ? COLORS.blue : "transparent"}`,
-                  cursor: isEnabled ? "pointer" : "not-allowed",
-                  transition: "all 200ms ease",
-                  boxShadow:
-                    isEnabled && isHovered
-                      ? `0 0 32px ${COLORS.hoverShadow}`
-                      : "0 0 0 rgba(0,0,0,0)",
-                }}
-              >
-                <div
-                  style={{
-                    height: 110,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 14,
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => {
+                    if (!isEnabled) return;
+                    setSelectedInsurance(item.key);
+                    setIsDragging(false);
+                    setErrorMessage("");
+                    setParseStatus("");
                   }}
-                >
-                  <img
-                    src={item.icon}
-                    alt={item.label}
-                    style={{
-                      width: 82,
-                      height: "auto",
-                      objectFit: "contain",
-                      display: "block",
-                      filter: isEnabled ? "none" : COLORS.disabledIcon,
-                      transition: "all 200ms ease",
-                    }}
-                  />
-                </div>
-
-                <div
+                  onMouseEnter={() => setHoveredCard(item.key)}
+                  onMouseLeave={() => setHoveredCard("")}
+                  disabled={!isEnabled}
                   style={{
-                    fontSize: 16,
-                    fontWeight: 500,
-                    fontFamily: "Poppins, sans-serif",
-                    color: isEnabled ? COLORS.black : COLORS.disabledText,
+                    background: COLORS.lightGrey,
+                    borderRadius: 18,
+                    padding: "14px 14px 12px 14px",
+                    textAlign: "center",
+                    minHeight: 148,
+                    border: `3px solid ${isSelected ? COLORS.blue : "transparent"}`,
+                    cursor: isEnabled ? "pointer" : "not-allowed",
                     transition: "all 200ms ease",
+                    boxShadow:
+                      isEnabled && isHovered
+                        ? `0 0 32px ${COLORS.hoverShadow}`
+                        : "0 0 0 rgba(0,0,0,0)",
                   }}
                 >
-                  {item.label}
-                </div>
-                
-              </button>
-            );
-          })}
+                  <div
+                    style={{
+                      height: 76,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <img
+                      src={item.icon}
+                      alt={item.label}
+                      style={{
+                        width: 66,
+                        height: "auto",
+                        objectFit: "contain",
+                        display: "block",
+                        filter: isEnabled ? "none" : COLORS.disabledIcon,
+                        transition: "all 200ms ease",
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 500,
+                      fontFamily: "Poppins, sans-serif",
+                      color: isEnabled ? COLORS.black : COLORS.disabledText,
+                      transition: "all 200ms ease",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {item.label}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
         <div
           style={{
@@ -441,7 +632,6 @@ export default function QuotifyHome() {
           >
             Select Advisor
           </h2>
-
 
           <div ref={advisorDropdownRef} style={{ position: "relative" }}>
             <input
@@ -467,71 +657,71 @@ export default function QuotifyHome() {
                 fontFamily: "Poppins, sans-serif",
                 outline: "none",
                 padding: "0 14px",
-                height: 48,
+                height: 52,
               }}
             />
 
-          {isAdvisorDropdownOpen && (
-            <div
-              style={{
-                position: "absolute",
-                top: "56px",
-                left: 0,
-                right: 0,
-                maxHeight: 260,
-                overflowY: "auto",
-                background: "#FFFFFF",
-                borderRadius: 12,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-                border: "1px solid #E8E8E8",
-                zIndex: 10,
-              }}
-            >
-              {filteredAdvisors.length > 0 ? (
-                filteredAdvisors.map((advisor) => (
-                  <button
-                    key={advisor.name}
-                    type="button"
-                    onClick={() => handleAdvisorSelect(advisor)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "10px 14px",
-                      background: "#FFFFFF",
-                      border: "none",
-                      borderBottom: "1px solid #F1F1F1",
-                      cursor: "pointer",
-                      fontFamily: "Poppins, sans-serif",
-                      fontSize: 14,
-                      color: COLORS.black,
-                    }}
-                  >
-                    <div style={{ fontWeight: 500 }}>{advisor.name}</div>
-                    <div
+            {isAdvisorDropdownOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "60px",
+                  left: 0,
+                  right: 0,
+                  maxHeight: 260,
+                  overflowY: "auto",
+                  background: "#FFFFFF",
+                  borderRadius: 12,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                  border: "1px solid #E8E8E8",
+                  zIndex: 10,
+                }}
+              >
+                {filteredAdvisors.length > 0 ? (
+                  filteredAdvisors.map((advisor) => (
+                    <button
+                      key={advisor.name}
+                      type="button"
+                      onClick={() => handleAdvisorSelect(advisor)}
                       style={{
-                        fontSize: 12,
-                        color: COLORS.subtextGrey,
-                        marginTop: 2,
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "10px 14px",
+                        background: "#FFFFFF",
+                        border: "none",
+                        borderBottom: "1px solid #F1F1F1",
+                        cursor: "pointer",
+                        fontFamily: "Poppins, sans-serif",
+                        fontSize: 14,
+                        color: COLORS.black,
                       }}
                     >
-                      {advisor.office_address || advisor.email || ""}
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    fontSize: 14,
-                    color: COLORS.subtextGrey,
-                    fontFamily: "Poppins, sans-serif",
-                  }}
-                >
-                  No advisors found
-                </div>
-              )}
-            </div>
-          )}
+                      <div style={{ fontWeight: 500 }}>{advisor.name}</div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: COLORS.subtextGrey,
+                          marginTop: 2,
+                        }}
+                      >
+                        {advisor.office_address || advisor.email || ""}
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      fontSize: 14,
+                      color: COLORS.subtextGrey,
+                      fontFamily: "Poppins, sans-serif",
+                    }}
+                  >
+                    No advisors found
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -552,6 +742,7 @@ export default function QuotifyHome() {
           >
             Upload Quote Document
           </h2>
+
           <div
             onDragEnter={(e) => {
               if (!uploaderEnabled) return;
@@ -575,7 +766,11 @@ export default function QuotifyHome() {
             style={{
               borderRadius: 20,
               border: `2px dashed ${
-                uploaderEnabled ? (uploaderActive ? COLORS.blue : COLORS.borderGrey) : COLORS.borderGrey
+                uploaderEnabled
+                  ? uploaderActive
+                    ? COLORS.blue
+                    : COLORS.borderGrey
+                  : COLORS.borderGrey
               }`,
               background: "#fff",
               padding: "21px 24px",
@@ -610,6 +805,19 @@ export default function QuotifyHome() {
               >
                 Limit 200MB per file - PDF
               </div>
+
+              {isParsing && parseStatus ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 13,
+                    color: COLORS.black,
+                    fontWeight: 500,
+                  }}
+                >
+                  {parseStatus}
+                </div>
+              ) : null}
             </div>
 
             <div>
@@ -673,7 +881,7 @@ export default function QuotifyHome() {
 
         <div
           style={{
-            maxWidth,
+            maxWidth: extractedMaxWidth,
             margin: "42px auto 0",
             textAlign: "left",
           }}
@@ -701,37 +909,38 @@ export default function QuotifyHome() {
             Please double check the information is correct and edit where needed
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 18,
-              alignItems: "start",
-            }}
-          >
-            <div style={{ display: "grid", gap: 18 }}>
-              {EDITABLE_FIELDS.filter(([key]) => LEFT_KEYS.has(key)).map(([key, label]) => (
-                <FieldControl
-                  key={key}
-                  fieldKey={key}
-                  label={label}
-                  value={formData[key] || ""}
-                  onChange={updateField}
-                />
-              ))}
-            </div>
-
-            <div style={{ display: "grid", gap: 18 }}>
-              {EDITABLE_FIELDS.filter(([key]) => !LEFT_KEYS.has(key)).map(([key, label]) => (
-                <FieldControl
-                  key={key}
-                  fieldKey={key}
-                  label={label}
-                  value={formData[key] || ""}
-                  onChange={updateField}
-                />
-              ))}
-            </div>
+          <div style={{ display: "grid", gap: 18 }}>
+            {EXTRACTED_ROWS.map((row, rowIndex) => (
+              <div
+                key={rowIndex}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(20, minmax(0, 1fr))",
+                  gap: 18,
+                  alignItems: "start",
+                }}
+              >
+                {row.map(({ key, span }) => (
+                  <div
+                    key={key}
+                    style={{
+                      gridColumn: `span ${span}`,
+                      minWidth: 0,
+                    }}
+                  >
+                    <FieldControl
+                      fieldKey={key}
+                      label={LABEL_MAP[key]}
+                      value={formData[key] || ""}
+                      onChange={updateField}
+                      isLoading={loadingFields[key]}
+                      isFinal={finalizedFields[key]}
+                      hideStatus={NO_STATUS_FIELDS.has(key)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
 
           <div
@@ -776,7 +985,17 @@ export default function QuotifyHome() {
   );
 }
 
-function FieldControl({ fieldKey, label, value, onChange }) {
+function FieldControl({
+  fieldKey,
+  label,
+  value,
+  onChange,
+  isLoading,
+  isFinal,
+  hideStatus = false,
+}) {
+  const showSkeleton = isLoading && !value;
+
   const commonInputStyle = {
     width: "100%",
     boxSizing: "border-box",
@@ -790,6 +1009,65 @@ function FieldControl({ fieldKey, label, value, onChange }) {
     transition: "all 200ms ease",
   };
 
+  const wrapperStyle = {
+    position: "relative",
+  };
+
+  const statusStyle = {
+    fontSize: 12,
+    color: isFinal ? COLORS.blue : COLORS.subtextGrey,
+    fontWeight: 500,
+    lineHeight: 1,
+    marginLeft: 8,
+    whiteSpace: "nowrap",
+  };
+
+  const skeletonStyle = {
+    position: "absolute",
+    inset: 0,
+    borderRadius: 12,
+    background:
+      "linear-gradient(90deg, #F2F2F2 0%, #E8E8E8 50%, #F2F2F2 100%)",
+    backgroundSize: "200% 100%",
+    animation: "quotifyShimmer 1.2s infinite linear",
+    pointerEvents: "none",
+  };
+
+  const statusText = hideStatus
+    ? ""
+    : showSkeleton
+      ? "Extracting..."
+      : isFinal && value
+        ? "Verified"
+        : value
+          ? "Draft"
+          : "";
+
+  const labelBlock = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0,
+        marginBottom: 8,
+        minHeight: 20,
+      }}
+    >
+      <label
+        style={{
+          fontSize: 16,
+          fontWeight: 500,
+          color: COLORS.black,
+          lineHeight: 1.2,
+        }}
+      >
+        {label}
+      </label>
+
+      {statusText ? <div style={statusStyle}>{statusText}</div> : null}
+    </div>
+  );
+
   if (YES_NO_FIELDS.has(fieldKey)) {
     const normalized = String(value).trim().toLowerCase();
     const selectValue =
@@ -797,32 +1075,28 @@ function FieldControl({ fieldKey, label, value, onChange }) {
 
     return (
       <div>
-        <label
-          style={{
-            display: "block",
-            fontSize: 16,
-            fontWeight: 500,
-            marginBottom: 8,
-            color: COLORS.black,
-          }}
-        >
-          {label}
-        </label>
-        <select
-          value={selectValue}
-          onChange={(e) => onChange(fieldKey, e.target.value)}
-          style={{
-            ...commonInputStyle,
-            height: 52,
-            padding: "0 14px",
-            appearance: "auto",
-            cursor: "pointer",
-          }}
-        >
-          <option value="Yes">Yes</option>
-          <option value="No">No</option>
-          <option value=""></option>
-        </select>
+        {labelBlock}
+
+        <div style={wrapperStyle}>
+          <select
+            value={selectValue}
+            onChange={(e) => onChange(fieldKey, e.target.value)}
+            style={{
+              ...commonInputStyle,
+              height: 52,
+              padding: "0 14px",
+              appearance: "auto",
+              cursor: "pointer",
+              opacity: showSkeleton ? 0.35 : 1,
+            }}
+          >
+            <option value=""></option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+
+          {showSkeleton ? <div style={skeletonStyle} /> : null}
+        </div>
       </div>
     );
   }
@@ -830,55 +1104,47 @@ function FieldControl({ fieldKey, label, value, onChange }) {
   if (TEXTAREA_FIELDS.has(fieldKey)) {
     return (
       <div>
-        <label
-          style={{
-            display: "block",
-            fontSize: 16,
-            fontWeight: 500,
-            marginBottom: 8,
-            color: COLORS.black,
-          }}
-        >
-          {label}
-        </label>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(fieldKey, e.target.value)}
-          rows={3}
-          style={{
-            ...commonInputStyle,
-            padding: "14px",
-            minHeight: 96,
-            resize: "vertical",
-          }}
-        />
+        {labelBlock}
+
+        <div style={wrapperStyle}>
+          <textarea
+            value={value}
+            onChange={(e) => onChange(fieldKey, e.target.value)}
+            rows={3}
+            style={{
+              ...commonInputStyle,
+              padding: "14px",
+              minHeight: 96,
+              resize: "vertical",
+              opacity: showSkeleton ? 0.35 : 1,
+            }}
+          />
+
+          {showSkeleton ? <div style={skeletonStyle} /> : null}
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      <label
-        style={{
-          display: "block",
-          fontSize: 16,
-          fontWeight: 500,
-          marginBottom: 8,
-          color: COLORS.black,
-        }}
-      >
-        {label}
-      </label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(fieldKey, e.target.value)}
-        style={{
-          ...commonInputStyle,
-          height: 52,
-          padding: "0 14px",
-        }}
-      />
+      {labelBlock}
+
+      <div style={wrapperStyle}>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(fieldKey, e.target.value)}
+          style={{
+            ...commonInputStyle,
+            height: 52,
+            padding: "0 14px",
+            opacity: showSkeleton ? 0.35 : 1,
+          }}
+        />
+
+        {showSkeleton ? <div style={skeletonStyle} /> : null}
+      </div>
     </div>
   );
 }
