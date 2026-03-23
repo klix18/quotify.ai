@@ -3,23 +3,17 @@ import COLORS from "./colors";
 import { INSURANCE_OPTIONS, INSURANCE_HEADER_MAP } from "./insuranceOptions";
 import {
   HOMEOWNERS_FIELDS,
-  HOMEOWNERS_YES_NO_FIELDS,
-  HOMEOWNERS_AGENT_FIELDS,
-  HOMEOWNERS_CLIENT_FIELDS,
-  HOMEOWNERS_LABEL_MAP,
-  HOMEOWNERS_ROWS,
   EMPTY_HOMEOWNERS_FORM,
 } from "./homeownersConfig";
 import {
   AUTO_POLICY_HEADER_FIELDS,
-  AUTO_POLICY_LABEL_MAP,
-  AUTO_PREMIUM_SUMMARY_FIELDS,
-  AUTO_PREMIUM_LABEL_MAP,
   EMPTY_AUTO_FORM,
   emptyDriver,
   emptyCoverage,
   emptyVehicle,
 } from "./autoConfig";
+import HomeownersPanel from "./HomeownersPanel";
+import AutoPanel from "./AutoPanel";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -496,7 +490,10 @@ export default function QuotifyHome() {
             setParseStatus(message.message || "Parsing...");
           }
 
-          if ((message.type === "draft_patch" || message.type === "final_patch") && message.data) {
+          if (
+            (message.type === "draft_patch" || message.type === "final_patch") &&
+            message.data
+          ) {
             setAutoForm((prev) => ({
               ...prev,
               ...message.data,
@@ -525,7 +522,9 @@ export default function QuotifyHome() {
         try {
           const message = JSON.parse(buffer);
           if (message.type === "result") finalData = message.data;
-          if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
+          if (message.type === "error") {
+            throw new Error(message.error || "Streaming parse failed.");
+          }
         } catch (_) {}
       }
 
@@ -786,12 +785,16 @@ export default function QuotifyHome() {
                       gap: 12,
                       padding: "10px 12px",
                       borderRadius: 14,
-                      border: `1px solid ${isSelected ? COLORS.blue : COLORS.borderGrey}`,
+                      border: `1px solid ${
+                        isSelected ? COLORS.blue : COLORS.borderGrey
+                      }`,
                       background: isSelected ? COLORS.blueSoft : COLORS.white,
                       cursor: item.enabled ? "pointer" : "not-allowed",
                       opacity: item.enabled ? 1 : 0.55,
                       transition: "all 200ms ease",
-                      boxShadow: isHovered ? `0 0 24px ${COLORS.hoverShadow}` : "0 0 0 rgba(0,0,0,0)",
+                      boxShadow: isHovered
+                        ? `0 0 24px ${COLORS.hoverShadow}`
+                        : "0 0 0 rgba(0,0,0,0)",
                       textAlign: "left",
                     }}
                   >
@@ -842,7 +845,9 @@ export default function QuotifyHome() {
                   width: "100%",
                   height: 44,
                   borderRadius: 12,
-                  border: `1px solid ${isAdvisorDropdownOpen ? COLORS.blue : COLORS.borderGrey}`,
+                  border: `1px solid ${
+                    isAdvisorDropdownOpen ? COLORS.blue : COLORS.borderGrey
+                  }`,
                   background: COLORS.white,
                   padding: "0 40px 0 12px",
                   fontSize: 14,
@@ -904,14 +909,28 @@ export default function QuotifyHome() {
                               : `1px solid ${COLORS.borderGrey}`,
                         }}
                       >
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{advisor.name}</div>
-                        <div style={{ fontSize: 12, color: COLORS.mutedText, marginTop: 2 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {advisor.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: COLORS.mutedText,
+                            marginTop: 2,
+                          }}
+                        >
                           {advisor.office_address || advisor.email || ""}
                         </div>
                       </button>
                     ))
                   ) : (
-                    <div style={{ padding: 12, fontSize: 13, color: COLORS.subtextGrey }}>
+                    <div
+                      style={{
+                        padding: 12,
+                        fontSize: 13,
+                        color: COLORS.subtextGrey,
+                      }}
+                    >
                       No advisors found
                     </div>
                   )}
@@ -1017,9 +1036,15 @@ export default function QuotifyHome() {
                   width: "100%",
                   height: 42,
                   borderRadius: 12,
-                  border: `1px solid ${isBrowseHovered ? COLORS.blueDark : COLORS.borderGrey}`,
+                  border: `1px solid ${
+                    isBrowseHovered ? COLORS.blueDark : COLORS.borderGrey
+                  }`,
                   background: isBrowseHovered ? COLORS.blue : COLORS.lightGrey,
-                  color: isBrowseHovered ? COLORS.white : uploaderEnabled ? COLORS.blue : COLORS.black,
+                  color: isBrowseHovered
+                    ? COLORS.white
+                    : uploaderEnabled
+                      ? COLORS.blue
+                      : COLORS.black,
                   fontWeight: 600,
                   fontSize: 13,
                   fontFamily: "Poppins, sans-serif",
@@ -1124,7 +1149,9 @@ export default function QuotifyHome() {
                   fontFamily: "Poppins, sans-serif",
                   cursor: isGenerating ? "not-allowed" : "pointer",
                   transition: "all 200ms ease",
-                  boxShadow: isGenerateHovered ? `0 0 28px ${COLORS.hoverShadow}` : "0 0 0 rgba(0,0,0,0)",
+                  boxShadow: isGenerateHovered
+                    ? `0 0 28px ${COLORS.hoverShadow}`
+                    : "0 0 0 rgba(0,0,0,0)",
                   flexShrink: 0,
                 }}
               >
@@ -1148,6 +1175,7 @@ export default function QuotifyHome() {
                 loadingFields={homeownersLoading}
                 finalizedFields={homeownersFinalized}
                 manuallyEditedFields={homeownersManual}
+                FieldControl={FieldControl}
               />
             ) : selectedInsurance === "auto" ? (
               <AutoPanel
@@ -1166,6 +1194,13 @@ export default function QuotifyHome() {
                 onAddPolicyCoverage={addPolicyCoverage}
                 onRemovePolicyCoverage={removePolicyCoverage}
                 onDiscountListChange={updateDiscountList}
+                FieldControl={FieldControl}
+                SectionCard={SectionCard}
+                SubCard={SubCard}
+                SmallActionButton={SmallActionButton}
+                SmallGhostButton={SmallGhostButton}
+                EmptyHint={EmptyHint}
+                COLORS={COLORS}
               />
             ) : (
               <UnavailablePanel label={selectedInsurance} />
@@ -1173,518 +1208,6 @@ export default function QuotifyHome() {
           </div>
         </main>
       </div>
-    </div>
-  );
-}
-
-function HomeownersPanel({
-  form,
-  onFieldChange,
-  loadingFields,
-  finalizedFields,
-  manuallyEditedFields,
-}) {
-  return (
-    <div
-      style={{
-        background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFF 100%)",
-        border: `1px solid ${COLORS.borderGrey}`,
-        borderRadius: 24,
-        boxShadow: "0 18px 44px rgba(23,101,212,0.07)",
-        overflow: "hidden",
-      }}
-    >
-      <div style={{ padding: 22 }}>
-        <div style={{ display: "grid", gap: 18 }}>
-          {HOMEOWNERS_ROWS.map((row, rowIndex) => {
-            const rowHasAgentFields = row.every(({ key }) => HOMEOWNERS_AGENT_FIELDS.has(key));
-            const rowHasClientFields = row.every(({ key }) => HOMEOWNERS_CLIENT_FIELDS.has(key));
-
-            return (
-              <div key={rowIndex}>
-                {(rowHasClientFields || rowHasAgentFields) && (
-                  <div
-                    style={{
-                      borderTop: `1px solid ${COLORS.borderGrey}`,
-                      paddingTop: 14,
-                      marginTop: 6,
-                      marginBottom: 14,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontFamily: "SentientCustom, Georgia, serif",
-                        fontSize: 20,
-                        lineHeight: 1,
-                        letterSpacing: "-0.02em",
-                        color: COLORS.black,
-                      }}
-                    >
-                      {rowHasClientFields ? "Client Information" : "Advisor Information"}
-                    </div>
-                  </div>
-                )}
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                    gap: 14,
-                    alignItems: "start",
-                  }}
-                >
-                  {row.map(({ key }) => (
-                    <div
-                      key={key}
-                      style={{
-                        gridColumn: "span 3",
-                        minWidth: 0,
-                      }}
-                    >
-                      <FieldControl
-                        fieldKey={key}
-                        label={HOMEOWNERS_LABEL_MAP[key]}
-                        value={form[key] || ""}
-                        onChange={onFieldChange}
-                        isLoading={loadingFields[key]}
-                        isFinal={finalizedFields[key]}
-                        isAgentField={HOMEOWNERS_AGENT_FIELDS.has(key)}
-                        isManuallyEdited={manuallyEditedFields[key]}
-                        isYesNo={HOMEOWNERS_YES_NO_FIELDS.has(key)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AutoPanel({
-  form,
-  onFieldChange,
-  onPremiumFieldChange,
-  onDriverChange,
-  onAddDriver,
-  onRemoveDriver,
-  onVehicleChange,
-  onVehicleDiscountsChange,
-  onCoverageChange,
-  onAddVehicle,
-  onRemoveVehicle,
-  onPolicyCoverageChange,
-  onAddPolicyCoverage,
-  onRemovePolicyCoverage,
-  onDiscountListChange,
-}) {
-  return (
-    <div style={{ display: "grid", gap: 18 }}>
-      <SectionCard title="Policy / Header Info">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
-          {AUTO_POLICY_HEADER_FIELDS.map(([key, label]) => (
-            <div
-              key={key}
-              style={{
-                gridColumn: key === "mailing_address" ? "span 6" : "span 3",
-                minWidth: 0,
-              }}
-            >
-              <FieldControl
-                fieldKey={key}
-                label={label}
-                value={form[key] || ""}
-                onChange={onFieldChange}
-              />
-            </div>
-          ))}
-
-          <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey="agent_name"
-              label="Agent Name"
-              value={form.agent_name || ""}
-              onChange={onFieldChange}
-              isAgentField
-            />
-          </div>
-          <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey="agent_phone"
-              label="Agent Phone"
-              value={form.agent_phone || ""}
-              onChange={onFieldChange}
-              isAgentField
-            />
-          </div>
-          <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey="agent_email"
-              label="Agent Email"
-              value={form.agent_email || ""}
-              onChange={onFieldChange}
-              isAgentField
-            />
-          </div>
-          <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey="agent_address"
-              label="Agent Address"
-              value={form.agent_address || ""}
-              onChange={onFieldChange}
-              isAgentField
-            />
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title={`Drivers (${form.drivers.length})`}
-        action={
-          <SmallActionButton onClick={onAddDriver}>
-            + Add Driver
-          </SmallActionButton>
-        }
-      >
-        <div style={{ display: "grid", gap: 12 }}>
-          {form.drivers.map((driver, index) => (
-            <SubCard
-              key={index}
-              title={`Driver ${index + 1}`}
-              action={
-                form.drivers.length > 1 ? (
-                  <SmallGhostButton onClick={() => onRemoveDriver(index)}>
-                    Remove
-                  </SmallGhostButton>
-                ) : null
-              }
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                  gap: 14,
-                }}
-              >
-                <div style={{ gridColumn: "span 8" }}>
-                  <FieldControl
-                    fieldKey="driver_name"
-                    label="Driver Name"
-                    value={driver.driver_name || ""}
-                    onChange={(key, value) => onDriverChange(index, key, value)}
-                  />
-                </div>
-                <div style={{ gridColumn: "span 4" }}>
-                  <FieldControl
-                    fieldKey="license_state"
-                    label="License State"
-                    value={driver.license_state || ""}
-                    onChange={(key, value) => onDriverChange(index, key, value)}
-                  />
-                </div>
-              </div>
-            </SubCard>
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title={`Vehicles (${form.vehicles.length})`}
-        action={
-          <SmallActionButton onClick={onAddVehicle}>
-            + Add Vehicle
-          </SmallActionButton>
-        }
-      >
-        <div style={{ display: "grid", gap: 16 }}>
-          {form.vehicles.map((vehicle, vehicleIndex) => (
-            <SubCard
-              key={vehicleIndex}
-              title={`Vehicle ${vehicleIndex + 1}`}
-              action={
-                form.vehicles.length > 1 ? (
-                  <SmallGhostButton onClick={() => onRemoveVehicle(vehicleIndex)}>
-                    Remove
-                  </SmallGhostButton>
-                ) : null
-              }
-            >
-              <div style={{ display: "grid", gap: 16 }}>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                    gap: 14,
-                  }}
-                >
-                  <div style={{ gridColumn: "span 4" }}>
-                    <FieldControl
-                      fieldKey="year_make_model"
-                      label="Year / Make / Model"
-                      value={vehicle.year_make_model || ""}
-                      onChange={(key, value) => onVehicleChange(vehicleIndex, key, value)}
-                    />
-                  </div>
-                  <div style={{ gridColumn: "span 3" }}>
-                    <FieldControl
-                      fieldKey="vin"
-                      label="VIN"
-                      value={vehicle.vin || ""}
-                      onChange={(key, value) => onVehicleChange(vehicleIndex, key, value)}
-                    />
-                  </div>
-                  <div style={{ gridColumn: "span 3" }}>
-                    <FieldControl
-                      fieldKey="garaging_zip_county"
-                      label="Garaging ZIP / County"
-                      value={vehicle.garaging_zip_county || ""}
-                      onChange={(key, value) => onVehicleChange(vehicleIndex, key, value)}
-                    />
-                  </div>
-                  <div style={{ gridColumn: "span 2" }}>
-                    <FieldControl
-                      fieldKey="vehicle_subtotal"
-                      label="Vehicle Subtotal"
-                      value={vehicle.vehicle_subtotal || ""}
-                      onChange={(key, value) => onVehicleChange(vehicleIndex, key, value)}
-                    />
-                  </div>
-                  <div style={{ gridColumn: "span 12" }}>
-                    <FieldControl
-                      fieldKey="lienholder_loss_payee"
-                      label="Lienholder / Loss Payee"
-                      value={vehicle.lienholder_loss_payee || ""}
-                      onChange={(key, value) => onVehicleChange(vehicleIndex, key, value)}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: COLORS.blue,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Vehicle Coverages
-                  </div>
-
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {vehicle.coverages.map((coverage, coverageIndex) => (
-                      <div
-                        key={coverageIndex}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
-                          gap: 10,
-                          alignItems: "end",
-                          padding: 12,
-                          borderRadius: 14,
-                          background: COLORS.inputBgAlt,
-                          border: `1px solid ${COLORS.borderGrey}`,
-                        }}
-                      >
-                        <FieldControl
-                          fieldKey="coverage_name"
-                          label="Coverage"
-                          value={coverage.coverage_name || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                        <FieldControl
-                          fieldKey="limit"
-                          label="Limit"
-                          value={coverage.limit || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                        <FieldControl
-                          fieldKey="deductible"
-                          label="Deductible"
-                          value={coverage.deductible || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                        <FieldControl
-                          fieldKey="premium"
-                          label="Premium"
-                          value={coverage.premium || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                        <FieldControl
-                          fieldKey="status"
-                          label="Status"
-                          value={coverage.status || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <FieldControl
-                    fieldKey="vehicle_discounts"
-                    label="Vehicle Discounts Applied (one per line)"
-                    value={(vehicle.vehicle_discounts || []).join("\n")}
-                    onChange={(_, value) => onVehicleDiscountsChange(vehicleIndex, value)}
-                    multiline
-                    rows={3}
-                  />
-                </div>
-              </div>
-            </SubCard>
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title="Policy-Level Coverages"
-        action={
-          <SmallActionButton onClick={onAddPolicyCoverage}>
-            + Add Line Item
-          </SmallActionButton>
-        }
-      >
-        <div style={{ display: "grid", gap: 10 }}>
-          {(form.policy_level_coverages || []).length === 0 ? (
-            <EmptyHint text="No policy-level coverages added yet." />
-          ) : (
-            form.policy_level_coverages.map((coverage, index) => (
-              <div
-                key={index}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr auto",
-                  gap: 10,
-                  alignItems: "end",
-                  padding: 12,
-                  borderRadius: 14,
-                  background: COLORS.inputBgAlt,
-                  border: `1px solid ${COLORS.borderGrey}`,
-                }}
-              >
-                <FieldControl
-                  fieldKey="coverage_name"
-                  label="Coverage"
-                  value={coverage.coverage_name || ""}
-                  onChange={(key, value) => onPolicyCoverageChange(index, key, value)}
-                />
-                <FieldControl
-                  fieldKey="limit"
-                  label="Limit"
-                  value={coverage.limit || ""}
-                  onChange={(key, value) => onPolicyCoverageChange(index, key, value)}
-                />
-                <FieldControl
-                  fieldKey="deductible"
-                  label="Deductible"
-                  value={coverage.deductible || ""}
-                  onChange={(key, value) => onPolicyCoverageChange(index, key, value)}
-                />
-                <FieldControl
-                  fieldKey="premium"
-                  label="Premium"
-                  value={coverage.premium || ""}
-                  onChange={(key, value) => onPolicyCoverageChange(index, key, value)}
-                />
-                <FieldControl
-                  fieldKey="status"
-                  label="Status"
-                  value={coverage.status || ""}
-                  onChange={(key, value) => onPolicyCoverageChange(index, key, value)}
-                />
-                <div style={{ paddingBottom: 2 }}>
-                  <SmallGhostButton onClick={() => onRemovePolicyCoverage(index)}>
-                    Remove
-                  </SmallGhostButton>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Premium Summary">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
-          {AUTO_PREMIUM_SUMMARY_FIELDS.map(([key, label]) => (
-            <div key={key} style={{ gridColumn: "span 3" }}>
-              <FieldControl
-                fieldKey={key}
-                label={label}
-                value={form.premium_summary?.[key] || ""}
-                onChange={onPremiumFieldChange}
-              />
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Discounts Applied">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
-          <div style={{ gridColumn: "span 4" }}>
-            <FieldControl
-              fieldKey="policy_level"
-              label="Policy-Level Discounts"
-              value={(form.discounts?.policy_level || []).join("\n")}
-              onChange={(_, value) => onDiscountListChange("policy_level", value)}
-              multiline
-              rows={6}
-            />
-          </div>
-          <div style={{ gridColumn: "span 4" }}>
-            <FieldControl
-              fieldKey="vehicle_level"
-              label="Vehicle-Level Discounts"
-              value={(form.discounts?.vehicle_level || []).join("\n")}
-              onChange={(_, value) => onDiscountListChange("vehicle_level", value)}
-              multiline
-              rows={6}
-            />
-          </div>
-          <div style={{ gridColumn: "span 4" }}>
-            <FieldControl
-              fieldKey="available_not_applied"
-              label="Available But Not Applied"
-              value={(form.discounts?.available_not_applied || []).join("\n")}
-              onChange={(_, value) => onDiscountListChange("available_not_applied", value)}
-              multiline
-              rows={6}
-            />
-          </div>
-        </div>
-      </SectionCard>
     </div>
   );
 }
