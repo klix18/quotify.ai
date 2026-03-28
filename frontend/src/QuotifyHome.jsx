@@ -1,6 +1,6 @@
 import React from "react";
 import COLORS from "./colors";
-import { INSURANCE_OPTIONS, INSURANCE_HEADER_MAP } from "./insuranceOptions";
+import { INSURANCE_OPTIONS } from "./insuranceOptions";
 import {
   HOMEOWNERS_FIELDS,
   EMPTY_HOMEOWNERS_FORM,
@@ -55,12 +55,92 @@ export default function QuotifyHome() {
 
   const fileInputRef = React.useRef(null);
   const advisorDropdownRef = React.useRef(null);
+  const mainRef = React.useRef(null);
+  const orbPrimaryRef = React.useRef(null);
+  const orbCyanRef = React.useRef(null);
+  const orbTrailRef = React.useRef(null);
+  const mouseTarget = React.useRef({ x: 0, y: 0 });
+  const orbPrimary = React.useRef({ x: 0, y: 0 });
+  const orbCyan = React.useRef({ x: 0, y: 0 });
+  const orbTrail = React.useRef({ x: 0, y: 0 });
+  const velocity = React.useRef({ x: 0, y: 0 });
+  const prevSmooth = React.useRef({ x: 0, y: 0 });
+  const rafId = React.useRef(null);
+  const mouseInside = React.useRef(false);
+
+  React.useEffect(() => {
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+
+    const tick = () => {
+      // Lerp each orb at different speeds
+      orbPrimary.current.x = lerp(orbPrimary.current.x, mouseTarget.current.x, 0.04);
+      orbPrimary.current.y = lerp(orbPrimary.current.y, mouseTarget.current.y, 0.04);
+      orbCyan.current.x = lerp(orbCyan.current.x, mouseTarget.current.x, 0.018);
+      orbCyan.current.y = lerp(orbCyan.current.y, mouseTarget.current.y, 0.018);
+      orbTrail.current.x = lerp(orbTrail.current.x, mouseTarget.current.x, 0.007);
+      orbTrail.current.y = lerp(orbTrail.current.y, mouseTarget.current.y, 0.007);
+
+      // Velocity from primary orb movement
+      const vx = orbPrimary.current.x - prevSmooth.current.x;
+      const vy = orbPrimary.current.y - prevSmooth.current.y;
+      velocity.current.x = lerp(velocity.current.x, vx, 0.15);
+      velocity.current.y = lerp(velocity.current.y, vy, 0.15);
+      prevSmooth.current.x = orbPrimary.current.x;
+      prevSmooth.current.y = orbPrimary.current.y;
+
+      // Stretch based on speed
+      const speed = Math.sqrt(velocity.current.x ** 2 + velocity.current.y ** 2);
+      const angle = Math.atan2(velocity.current.y, velocity.current.x) * (180 / Math.PI);
+      const stretchAmt = clamp(1 + speed * 0.06, 1, 2.0);
+      const squishAmt = clamp(1 - speed * 0.015, 0.7, 1);
+
+      const opacity = mouseInside.current ? 1 : 0;
+
+      // Primary blue orb — tight follow
+      if (orbPrimaryRef.current) {
+        orbPrimaryRef.current.style.transform =
+          `translate(${orbPrimary.current.x}px, ${orbPrimary.current.y}px) translate(-50%, -50%) rotate(${angle}deg) scale(${stretchAmt}, ${squishAmt})`;
+        orbPrimaryRef.current.style.opacity = opacity;
+      }
+
+      // Cyan orb — medium lag
+      if (orbCyanRef.current) {
+        const cStretch = clamp(1 + speed * 0.04, 1, 1.6);
+        const cSquish = clamp(1 - speed * 0.01, 0.8, 1);
+        orbCyanRef.current.style.transform =
+          `translate(${orbCyan.current.x}px, ${orbCyan.current.y}px) translate(-50%, -50%) rotate(${angle}deg) scale(${cStretch}, ${cSquish})`;
+        orbCyanRef.current.style.opacity = opacity;
+      }
+
+      // Trail orb — heavy lag
+      if (orbTrailRef.current) {
+        orbTrailRef.current.style.transform =
+          `translate(${orbTrail.current.x}px, ${orbTrail.current.y}px) translate(-50%, -50%)`;
+        orbTrailRef.current.style.opacity = opacity;
+      }
+
+      rafId.current = requestAnimationFrame(tick);
+    };
+    rafId.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId.current);
+  }, []);
+
+  const handleMainMouseMove = React.useCallback((e) => {
+    const el = mainRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    mouseTarget.current.x = e.clientX - rect.left;
+    mouseTarget.current.y = e.clientY - rect.top;
+    if (!mouseInside.current) mouseInside.current = true;
+  }, []);
+
+  const handleMainMouseLeave = React.useCallback(() => {
+    mouseInside.current = false;
+  }, []);
 
   const uploaderEnabled = selectedInsurance === "homeowners" || selectedInsurance === "auto";
   const uploaderActive = uploaderEnabled && isDragging;
-  const informationHeader =
-    INSURANCE_HEADER_MAP[selectedInsurance] || "Insurance Information";
-
   const selectedAdvisorName =
     selectedInsurance === "homeowners"
       ? homeownersForm.agent_name || ""
@@ -725,11 +805,13 @@ export default function QuotifyHome() {
       style={{
         height: "100vh",
         overflow: "hidden",
-        background: COLORS.pageBg,
+        background: "#EFF2F7",
         fontFamily: "Poppins, sans-serif",
         color: COLORS.black,
       }}
     >
+
+
       <style>
         {`
           @keyframes quotifyShimmer {
@@ -754,27 +836,51 @@ export default function QuotifyHome() {
       </style>
 
       <div
+        ref={mainRef}
+        onMouseMove={handleMainMouseMove}
+        onMouseLeave={handleMainMouseLeave}
         style={{
           display: "grid",
           gridTemplateColumns: "320px minmax(0, 1fr)",
           height: "100vh",
+          position: "relative",
         }}
       >
+        {/* Orbs at grid level — behind both panels */}
+        <div ref={orbPrimaryRef} style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "rgba(23,101,212,0.14)", filter: "blur(80px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.4s ease" }} />
+        <div ref={orbCyanRef} style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "rgba(201,242,255,0.22)", filter: "blur(100px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.6s ease" }} />
+        <div ref={orbTrailRef} style={{ position: "absolute", width: 700, height: 700, borderRadius: "50%", background: "rgba(11,145,230,0.08)", filter: "blur(120px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 1s ease" }} />
+
         <aside
           style={{
-            background: "#F7FAFF",
-            borderRight: `1px solid ${COLORS.borderGrey}`,
-            padding: "18px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
+            position: "relative",
+            borderRight: "1px solid rgba(180,200,230,0.3)",
             height: "100vh",
             boxSizing: "border-box",
             minHeight: 0,
             overflow: "hidden",
-            paddingBottom: 36,
           }}
         >
+          {/* Sidebar glass layers */}
+          <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.70)", backdropFilter: "blur(48px) saturate(2.0) brightness(1.05)", WebkitBackdropFilter: "blur(48px) saturate(2.0) brightness(1.05)", zIndex: 0 }} />
+          <div style={{ position: "absolute", inset: 0, boxShadow: "inset -1px 0 0 0 rgba(255,255,255,0.5), inset 1px 0 0 0 rgba(255,255,255,0.2)", zIndex: 3, pointerEvents: "none" }} />
+          {/* Rainbow refraction — right edge */}
+          <div style={{ position: "absolute", top: "10%", bottom: "10%", right: 0, width: 1, background: "linear-gradient(180deg, transparent, rgba(255,100,100,0.12), rgba(255,255,100,0.08), rgba(100,200,255,0.12), transparent)", zIndex: 4, pointerEvents: "none" }} />
+          {/* Sidebar content */}
+          <div
+            style={{
+              position: "relative",
+              zIndex: 5,
+              padding: "18px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+              height: "100%",
+              boxSizing: "border-box",
+              paddingBottom: 36,
+              overflow: "hidden",
+            }}
+          >
           <div style={{ padding: "6px 4px 10px 4px" }}>
             <img
               src="/Combination_Blue_Medium.png"
@@ -823,7 +929,7 @@ export default function QuotifyHome() {
                 overflowY: "auto",
                 flex: 1,
                 minHeight: 0,
-                paddingRight: 2,
+                paddingRight: 10,
               }}
             >
               {INSURANCE_OPTIONS.map((item) => {
@@ -891,7 +997,7 @@ export default function QuotifyHome() {
             </div>
           </SidebarBlock>
 
-          <SidebarBlock title="Advisor" status={advisorReady}>
+          <SidebarBlock title="Advisor" status={advisorReady} style={{ position: "relative", zIndex: 10 }}>
             <div ref={advisorDropdownRef} style={{ position: "relative" }}>
               <input
                 type="text"
@@ -1142,6 +1248,7 @@ export default function QuotifyHome() {
           ) : (
             <div style={{ marginTop: "auto" }} />
           )}
+          </div>
         </aside>
 
         <main
@@ -1150,49 +1257,48 @@ export default function QuotifyHome() {
             height: "100vh",
             display: "flex",
             flexDirection: "column",
-            background:
-              "radial-gradient(circle at top, rgba(23,101,212,0.06) 0%, rgba(23,101,212,0.015) 20%, #FFFFFF 56%)",
+            position: "relative",
+            overflow: "hidden",
           }}
         >
-          <div
-            style={{
-              flex: "0 0 auto",
-              padding: "22px 28px 18px 28px",
-              borderBottom: `1px solid ${COLORS.borderGrey}`,
-              background: "rgba(255,255,255,0.78)",
-              backdropFilter: "blur(10px)",
-            }}
-          >
+          <GlassPanel borderRadius={0} style={{ flex: "0 0 auto", zIndex: 1, borderBottom: `1px solid rgba(23,101,212,0.06)` }}>
+            <div style={{ padding: "22px 28px 18px 28px" }}>
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "flex-start",
+                alignItems: "center",
                 gap: 20,
               }}
             >
               <div>
                 <div
                   style={{
-                    fontFamily: "SentientCustom, Georgia, serif",
-                    fontSize: 34,
-                    lineHeight: 0.95,
-                    letterSpacing: "-0.04em",
-                    color: COLORS.blue,
-                    marginBottom: 8,
+                    fontFamily: "Poppins, sans-serif",
+                    fontSize: 20,
+                    fontWeight: 600,
+                    lineHeight: 1.2,
+                    letterSpacing: "0",
+                    color: COLORS.black,
+                    marginBottom: 4,
                   }}
                 >
-                  {informationHeader}
+                  {selectedInsurance === "homeowners"
+                    ? "Homeowners Insurance Quote"
+                    : selectedInsurance === "auto"
+                      ? "Auto Insurance Quote"
+                      : "Insurance Quote"}
                 </div>
 
                 <div
                   style={{
-                    fontSize: 14,
+                    fontSize: 13,
                     color: COLORS.mutedText,
-                    fontWeight: 500,
+                    fontWeight: 400,
+                    lineHeight: 1.35,
                   }}
                 >
-                  Review the extracted information and edit anything that needs correction.
+                  The Sizemore Snapshot is an AI and can make mistakes. Please verify fields yourself, especially when marked "Double Check".
                 </div>
               </div>
 
@@ -1225,7 +1331,8 @@ export default function QuotifyHome() {
                 {isGenerating ? "GENERATING..." : "Generate + Download Quote"}
               </button>
             </div>
-          </div>
+            </div>
+          </GlassPanel>
 
           <div
             style={{
@@ -1233,6 +1340,8 @@ export default function QuotifyHome() {
               minHeight: 0,
               overflowY: "auto",
               padding: "22px 28px 24px 28px",
+              position: "relative",
+              zIndex: 1,
             }}
           >
             {selectedInsurance === "homeowners" ? (
@@ -1284,10 +1393,10 @@ function UnavailablePanel({ label }) {
   return (
     <div
       style={{
-        background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFF 100%)",
+        background: COLORS.white,
         border: `1px solid ${COLORS.borderGrey}`,
         borderRadius: 24,
-        boxShadow: "0 18px 44px rgba(23,101,212,0.07)",
+        boxShadow: "none",
         padding: 28,
       }}
     >
@@ -1317,10 +1426,13 @@ function SidebarBlock({ title, status, children, style = {} }) {
   return (
     <div
       style={{
-        background: "#FFFFFF",
-        border: `1px solid ${COLORS.borderGrey}`,
+        background: "rgba(255,255,255,0.65)",
+        backdropFilter: "blur(20px) saturate(1.6)",
+        WebkitBackdropFilter: "blur(20px) saturate(1.6)",
+        border: "1px solid rgba(180,200,230,0.3)",
         borderRadius: 18,
         padding: 14,
+        boxShadow: "inset 0 1.5px 0 0 rgba(255,255,255,0.9)",
         ...style,
       }}
     >
@@ -1358,17 +1470,64 @@ function SidebarBlock({ title, status, children, style = {} }) {
   );
 }
 
-function SectionCard({ title, children, action = null }) {
+function GlassPanel({ children, borderRadius = 24, style = {} }) {
   return (
     <div
       style={{
-        background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFF 100%)",
-        border: `1px solid ${COLORS.borderGrey}`,
-        borderRadius: 24,
-        boxShadow: "0 18px 44px rgba(23,101,212,0.07)",
+        position: "relative",
+        borderRadius,
         overflow: "hidden",
+        border: "none",
+        ...style,
       }}
     >
+      {/* Glass base — heavy blur + saturation */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "rgba(255,255,255,0.70)",
+          backdropFilter: "blur(48px) saturate(2.0) brightness(1.05)",
+          WebkitBackdropFilter: "blur(48px) saturate(2.0) brightness(1.05)",
+          zIndex: 0,
+        }}
+      />
+      {/* Refraction highlights — top bright, bottom dim */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius,
+          boxShadow:
+            "inset 0 2px 0 0 rgba(255,255,255,1), inset 0 -1px 0 0 rgba(255,255,255,0.2), inset 1px 0 0 0 rgba(255,255,255,0.4), inset -1px 0 0 0 rgba(255,255,255,0.4)",
+          zIndex: 3,
+          pointerEvents: "none",
+        }}
+      />
+      {/* Rainbow refraction shimmer — top edge */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: "10%",
+          right: "10%",
+          height: 1,
+          background: "linear-gradient(90deg, transparent, rgba(255,100,100,0.15), rgba(255,255,100,0.1), rgba(100,200,255,0.15), transparent)",
+          zIndex: 4,
+          pointerEvents: "none",
+        }}
+      />
+      {/* Content */}
+      <div style={{ position: "relative", zIndex: 5 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({ title, children, action = null }) {
+  return (
+    <GlassPanel>
       <div style={{ padding: 22 }}>
         <div
           style={{
@@ -1394,7 +1553,7 @@ function SectionCard({ title, children, action = null }) {
         </div>
         {children}
       </div>
-    </div>
+    </GlassPanel>
   );
 }
 
@@ -1521,7 +1680,7 @@ function FieldControl({
   const commonInputStyle = {
     width: "100%",
     boxSizing: "border-box",
-    background: isAgentField ? COLORS.inputBgAlt : COLORS.inputBg,
+    background: COLORS.white,
     border: `1px solid ${
       !hasValue && !showSkeleton && !isNotFound
         ? COLORS.dangerBorder
