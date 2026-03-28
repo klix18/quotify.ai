@@ -1,25 +1,29 @@
-import React from "react";
 import {
-  AUTO_POLICY_HEADER_FIELDS,
+  AUTO_POLICY_TERM_OPTIONS,
+  AUTO_AGENT_FIELDS,
+  DRIVER_GENDER_OPTIONS,
+  AUTO_COVERAGE_FIELDS,
+  PAYMENT_PLANS,
+  PAYMENT_PLAN_FIELDS,
+  PAID_IN_FULL_DISCOUNT_FIELDS,
   AUTO_PREMIUM_SUMMARY_FIELDS,
 } from "./autoConfig";
 
 export default function AutoPanel({
   form,
+  isLoading,
+  isParsed,
+  manualFields,
+  confidenceMap,
   onFieldChange,
-  onPremiumFieldChange,
   onDriverChange,
   onAddDriver,
   onRemoveDriver,
   onVehicleChange,
-  onVehicleDiscountsChange,
-  onCoverageChange,
   onAddVehicle,
   onRemoveVehicle,
-  onPolicyCoverageChange,
-  onAddPolicyCoverage,
-  onRemovePolicyCoverage,
-  onDiscountListChange,
+  onTogglePaidInFullDiscount,
+  onVehicleSubtotalChange,
   FieldControl,
   SectionCard,
   SubCard,
@@ -28,82 +32,151 @@ export default function AutoPanel({
   EmptyHint,
   COLORS,
 }) {
-  return (
-    <div style={{ display: "grid", gap: 18 }}>
-      <SectionCard title="Policy / Header Info">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
-          {AUTO_POLICY_HEADER_FIELDS.map(([key, label]) => (
-            <div
-              key={key}
-              style={{
-                gridColumn: key === "mailing_address" ? "span 6" : "span 3",
-                minWidth: 0,
-              }}
-            >
-              <FieldControl
-                fieldKey={key}
-                label={label}
-                value={form[key] || ""}
-                onChange={onFieldChange}
-              />
-            </div>
-          ))}
+  /* ── helpers for field status props ─────────────────────────── */
+  const fp = (path) => ({
+    isLoading,
+    isFinal: isParsed && !manualFields[path],
+    isManuallyEdited: !!manualFields[path],
+    confidence: confidenceMap?.[path] ?? null,
+  });
 
-          <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey="agent_name"
-              label="Agent Name"
-              value={form.agent_name || ""}
-              onChange={onFieldChange}
-              isAgentField
-            />
-          </div>
-          <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey="agent_phone"
-              label="Agent Phone"
-              value={form.agent_phone || ""}
-              onChange={onFieldChange}
-              isAgentField
-            />
-          </div>
-          <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey="agent_email"
-              label="Agent Email"
-              value={form.agent_email || ""}
-              onChange={onFieldChange}
-              isAgentField
-            />
-          </div>
-          <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey="agent_address"
-              label="Agent Address"
-              value={form.agent_address || ""}
-              onChange={onFieldChange}
-              isAgentField
-            />
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title={`Drivers (${form.drivers.length})`}
-        action={
-          <SmallActionButton onClick={onAddDriver}>
-            + Add Driver
-          </SmallActionButton>
-        }
+  /* ============================================================
+     SECTION 1 — Auto Policy
+     ============================================================ */
+  const policySection = (
+    <SectionCard title="Auto Policy">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+          gap: 14,
+        }}
       >
-        <div style={{ display: "grid", gap: 12 }}>
-          {form.drivers.map((driver, index) => (
+        {/* Row 1 */}
+        <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="client_name"
+            label="Client Name"
+            value={form.client_name || ""}
+            onChange={onFieldChange}
+            {...fp("client_name")}
+          />
+        </div>
+        <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="client_address"
+            label="Client Address"
+            value={form.client_address || ""}
+            onChange={onFieldChange}
+            {...fp("client_address")}
+          />
+        </div>
+        <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="client_phone"
+            label="Client Phone"
+            value={form.client_phone || ""}
+            onChange={onFieldChange}
+            {...fp("client_phone")}
+          />
+        </div>
+        <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="quote_date"
+            label="Quote Date / Print Date"
+            value={form.quote_date || ""}
+            onChange={onFieldChange}
+            {...fp("quote_date")}
+          />
+        </div>
+
+        {/* Row 2 */}
+        <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="quote_effective_date"
+            label="Quote Effective Date"
+            value={form.quote_effective_date || ""}
+            onChange={onFieldChange}
+            {...fp("quote_effective_date")}
+          />
+        </div>
+        <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="quote_expiration_date"
+            label="Quote Expiration Date"
+            value={form.quote_expiration_date || ""}
+            onChange={onFieldChange}
+            {...fp("quote_expiration_date")}
+          />
+        </div>
+        <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="policy_term"
+            label="Policy Term"
+            value={form.policy_term || ""}
+            onChange={onFieldChange}
+            selectOptions={AUTO_POLICY_TERM_OPTIONS}
+            {...fp("policy_term")}
+          />
+        </div>
+        <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="program"
+            label="Program"
+            value={form.program || ""}
+            onChange={onFieldChange}
+            {...fp("program")}
+          />
+        </div>
+      </div>
+    </SectionCard>
+  );
+
+  /* ============================================================
+     SECTION 2 — Agent Information
+     ============================================================ */
+  const agentSection = (
+    <SectionCard title="Agent Information">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+          gap: 14,
+        }}
+      >
+        {AUTO_AGENT_FIELDS.map(([key, label]) => (
+          <div key={key} style={{ gridColumn: "span 3", minWidth: 0 }}>
+            <FieldControl
+              fieldKey={key}
+              label={label}
+              value={form[key] || ""}
+              onChange={onFieldChange}
+              isAgentField
+              {...fp(key)}
+            />
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+
+  /* ============================================================
+     SECTION 3 — Drivers
+     ============================================================ */
+  const driversSection = (
+    <SectionCard
+      title={`Drivers (${form.drivers.length})`}
+      action={
+        <SmallActionButton onClick={onAddDriver}>
+          + Add Driver
+        </SmallActionButton>
+      }
+    >
+      <div style={{ display: "grid", gap: 12 }}>
+        {form.drivers.length === 0 ? (
+          <EmptyHint text="No drivers added yet." />
+        ) : (
+          form.drivers.map((driver, index) => (
             <SubCard
               key={index}
               title={`Driver ${index + 1}`}
@@ -122,278 +195,191 @@ export default function AutoPanel({
                   gap: 14,
                 }}
               >
-                <div style={{ gridColumn: "span 8" }}>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="driver_name"
                     label="Driver Name"
                     value={driver.driver_name || ""}
-                    onChange={(key, value) => onDriverChange(index, key, value)}
+                    onChange={(k, v) => onDriverChange(index, k, v)}
+                    {...fp(`drivers.${index}.driver_name`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 4" }}>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                  <FieldControl
+                    fieldKey="gender"
+                    label="Gender"
+                    value={driver.gender || ""}
+                    onChange={(k, v) => onDriverChange(index, k, v)}
+                    selectOptions={DRIVER_GENDER_OPTIONS}
+                    {...fp(`drivers.${index}.gender`)}
+                  />
+                </div>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                  <FieldControl
+                    fieldKey="marital_status"
+                    label="Marital Status"
+                    value={driver.marital_status || ""}
+                    onChange={(k, v) => onDriverChange(index, k, v)}
+                    {...fp(`drivers.${index}.marital_status`)}
+                  />
+                </div>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="license_state"
                     label="License State"
                     value={driver.license_state || ""}
-                    onChange={(key, value) => onDriverChange(index, key, value)}
+                    onChange={(k, v) => onDriverChange(index, k, v)}
+                    {...fp(`drivers.${index}.license_state`)}
                   />
                 </div>
               </div>
             </SubCard>
-          ))}
-        </div>
-      </SectionCard>
+          ))
+        )}
+      </div>
+    </SectionCard>
+  );
 
-      <SectionCard
-        title={`Vehicles (${form.vehicles.length})`}
-        action={
-          <SmallActionButton onClick={onAddVehicle}>
-            + Add Vehicle
-          </SmallActionButton>
-        }
-      >
-        <div style={{ display: "grid", gap: 16 }}>
-          {form.vehicles.map((vehicle, vehicleIndex) => (
+  /* ============================================================
+     SECTION 4 — Vehicles
+     ============================================================ */
+  const vehiclesSection = (
+    <SectionCard
+      title={`Vehicles (${form.vehicles.length})`}
+      action={
+        <SmallActionButton onClick={onAddVehicle}>
+          + Add Vehicle
+        </SmallActionButton>
+      }
+    >
+      <div style={{ display: "grid", gap: 16 }}>
+        {form.vehicles.length === 0 ? (
+          <EmptyHint text="No vehicles added yet." />
+        ) : (
+          form.vehicles.map((vehicle, vi) => (
             <SubCard
-              key={vehicleIndex}
-              title={`Vehicle ${vehicleIndex + 1}`}
+              key={vi}
+              title={`Vehicle ${vi + 1}`}
               action={
                 form.vehicles.length > 1 ? (
-                  <SmallGhostButton onClick={() => onRemoveVehicle(vehicleIndex)}>
+                  <SmallGhostButton onClick={() => onRemoveVehicle(vi)}>
                     Remove
                   </SmallGhostButton>
                 ) : null
               }
             >
-              <div style={{ display: "grid", gap: 16 }}>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                    gap: 14,
-                  }}
-                >
-                  <div style={{ gridColumn: "span 4" }}>
-                    <FieldControl
-                      fieldKey="year_make_model"
-                      label="Year / Make / Model"
-                      value={vehicle.year_make_model || ""}
-                      onChange={(key, value) =>
-                        onVehicleChange(vehicleIndex, key, value)
-                      }
-                    />
-                  </div>
-                  <div style={{ gridColumn: "span 3" }}>
-                    <FieldControl
-                      fieldKey="vin"
-                      label="VIN"
-                      value={vehicle.vin || ""}
-                      onChange={(key, value) =>
-                        onVehicleChange(vehicleIndex, key, value)
-                      }
-                    />
-                  </div>
-                  <div style={{ gridColumn: "span 3" }}>
-                    <FieldControl
-                      fieldKey="garaging_zip_county"
-                      label="Garaging ZIP / County"
-                      value={vehicle.garaging_zip_county || ""}
-                      onChange={(key, value) =>
-                        onVehicleChange(vehicleIndex, key, value)
-                      }
-                    />
-                  </div>
-                  <div style={{ gridColumn: "span 2" }}>
-                    <FieldControl
-                      fieldKey="vehicle_subtotal"
-                      label="Vehicle Subtotal"
-                      value={vehicle.vehicle_subtotal || ""}
-                      onChange={(key, value) =>
-                        onVehicleChange(vehicleIndex, key, value)
-                      }
-                    />
-                  </div>
-                  <div style={{ gridColumn: "span 12" }}>
-                    <FieldControl
-                      fieldKey="lienholder_loss_payee"
-                      label="Lienholder / Loss Payee"
-                      value={vehicle.lienholder_loss_payee || ""}
-                      onChange={(key, value) =>
-                        onVehicleChange(vehicleIndex, key, value)
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: COLORS.blue,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    Vehicle Coverages
-                  </div>
-
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {vehicle.coverages.map((coverage, coverageIndex) => (
-                      <div
-                        key={coverageIndex}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
-                          gap: 10,
-                          alignItems: "end",
-                          padding: 12,
-                          borderRadius: 14,
-                          background: COLORS.inputBgAlt,
-                          border: `1px solid ${COLORS.borderGrey}`,
-                        }}
-                      >
-                        <FieldControl
-                          fieldKey="coverage_name"
-                          label="Coverage"
-                          value={coverage.coverage_name || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                        <FieldControl
-                          fieldKey="limit"
-                          label="Limit"
-                          value={coverage.limit || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                        <FieldControl
-                          fieldKey="deductible"
-                          label="Deductible"
-                          value={coverage.deductible || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                        <FieldControl
-                          fieldKey="premium"
-                          label="Premium"
-                          value={coverage.premium || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                        <FieldControl
-                          fieldKey="status"
-                          label="Status"
-                          value={coverage.status || ""}
-                          onChange={(key, value) =>
-                            onCoverageChange(vehicleIndex, coverageIndex, key, value)
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+                  gap: 14,
+                }}
+              >
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
                   <FieldControl
-                    fieldKey="vehicle_discounts"
-                    label="Vehicle Discounts Applied (one per line)"
-                    value={(vehicle.vehicle_discounts || []).join("\n")}
-                    onChange={(_, value) =>
-                      onVehicleDiscountsChange(vehicleIndex, value)
-                    }
-                    multiline
-                    rows={3}
+                    fieldKey="year_make_model_trim"
+                    label="Year / Make / Model / Trim"
+                    value={vehicle.year_make_model_trim || ""}
+                    onChange={(k, v) => onVehicleChange(vi, k, v)}
+                    {...fp(`vehicles.${vi}.year_make_model_trim`)}
+                  />
+                </div>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                  <FieldControl
+                    fieldKey="vin"
+                    label="VIN"
+                    value={vehicle.vin || ""}
+                    onChange={(k, v) => onVehicleChange(vi, k, v)}
+                    {...fp(`vehicles.${vi}.vin`)}
+                  />
+                </div>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                  <FieldControl
+                    fieldKey="vehicle_use"
+                    label="Vehicle Use"
+                    value={vehicle.vehicle_use || ""}
+                    onChange={(k, v) => onVehicleChange(vi, k, v)}
+                    {...fp(`vehicles.${vi}.vehicle_use`)}
+                  />
+                </div>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                  <FieldControl
+                    fieldKey="garaging_zip_county"
+                    label="Garaging ZIP / County"
+                    value={vehicle.garaging_zip_county || ""}
+                    onChange={(k, v) => onVehicleChange(vi, k, v)}
+                    {...fp(`vehicles.${vi}.garaging_zip_county`)}
                   />
                 </div>
               </div>
             </SubCard>
-          ))}
-        </div>
-      </SectionCard>
+          ))
+        )}
+      </div>
+    </SectionCard>
+  );
 
-      <SectionCard
-        title="Policy-Level Coverages"
-        action={
-          <SmallActionButton onClick={onAddPolicyCoverage}>
-            + Add Line Item
-          </SmallActionButton>
-        }
+  /* ============================================================
+     SECTION 5 — Coverages
+     ============================================================ */
+  const coveragesSection = (
+    <SectionCard title="Coverages">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+          gap: 14,
+        }}
       >
-        <div style={{ display: "grid", gap: 10 }}>
-          {(form.policy_level_coverages || []).length === 0 ? (
-            <EmptyHint text="No policy-level coverages added yet." />
-          ) : (
-            form.policy_level_coverages.map((coverage, index) => (
-              <div
-                key={index}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr auto",
-                  gap: 10,
-                  alignItems: "end",
-                  padding: 12,
-                  borderRadius: 14,
-                  background: COLORS.inputBgAlt,
-                  border: `1px solid ${COLORS.borderGrey}`,
-                }}
-              >
-                <FieldControl
-                  fieldKey="coverage_name"
-                  label="Coverage"
-                  value={coverage.coverage_name || ""}
-                  onChange={(key, value) =>
-                    onPolicyCoverageChange(index, key, value)
-                  }
-                />
-                <FieldControl
-                  fieldKey="limit"
-                  label="Limit"
-                  value={coverage.limit || ""}
-                  onChange={(key, value) =>
-                    onPolicyCoverageChange(index, key, value)
-                  }
-                />
-                <FieldControl
-                  fieldKey="deductible"
-                  label="Deductible"
-                  value={coverage.deductible || ""}
-                  onChange={(key, value) =>
-                    onPolicyCoverageChange(index, key, value)
-                  }
-                />
-                <FieldControl
-                  fieldKey="premium"
-                  label="Premium"
-                  value={coverage.premium || ""}
-                  onChange={(key, value) =>
-                    onPolicyCoverageChange(index, key, value)
-                  }
-                />
-                <FieldControl
-                  fieldKey="status"
-                  label="Status"
-                  value={coverage.status || ""}
-                  onChange={(key, value) =>
-                    onPolicyCoverageChange(index, key, value)
-                  }
-                />
-                <div style={{ paddingBottom: 2 }}>
-                  <SmallGhostButton onClick={() => onRemovePolicyCoverage(index)}>
-                    Remove
-                  </SmallGhostButton>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </SectionCard>
+        {/* Row 1: BI, PD, MedPay, UM/UIM BI */}
+        {AUTO_COVERAGE_FIELDS.slice(0, 4).map(([key, label]) => (
+          <div key={key} style={{ gridColumn: "span 3", minWidth: 0 }}>
+            <FieldControl
+              fieldKey={`coverages.${key}`}
+              label={label}
+              value={form.coverages?.[key] || ""}
+              onChange={onFieldChange}
+              {...fp(`coverages.${key}`)}
+            />
+          </div>
+        ))}
 
-      <SectionCard title="Premium Summary">
+        {/* Row 2: UMPD Limit, UMPD Deductible, Comprehensive, Collision */}
+        {AUTO_COVERAGE_FIELDS.slice(4, 8).map(([key, label]) => (
+          <div key={key} style={{ gridColumn: "span 3", minWidth: 0 }}>
+            <FieldControl
+              fieldKey={`coverages.${key}`}
+              label={label}
+              value={form.coverages?.[key] || ""}
+              onChange={onFieldChange}
+              {...fp(`coverages.${key}`)}
+            />
+          </div>
+        ))}
+
+        {/* Row 3: Rental, Towing */}
+        {AUTO_COVERAGE_FIELDS.slice(8).map(([key, label]) => (
+          <div key={key} style={{ gridColumn: "span 6", minWidth: 0 }}>
+            <FieldControl
+              fieldKey={`coverages.${key}`}
+              label={label}
+              value={form.coverages?.[key] || ""}
+              onChange={onFieldChange}
+              {...fp(`coverages.${key}`)}
+            />
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+
+  /* ============================================================
+     SECTION 6 — Payment Options
+     ============================================================ */
+  const paymentPlansBlock = PAYMENT_PLANS.map(([planKey, planLabel]) => {
+    const plan = form.payment_options?.[planKey] || {};
+    return (
+      <SubCard key={planKey} title={planLabel}>
         <div
           style={{
             display: "grid",
@@ -401,61 +387,141 @@ export default function AutoPanel({
             gap: 14,
           }}
         >
-          {AUTO_PREMIUM_SUMMARY_FIELDS.map(([key, label]) => (
-            <div key={key} style={{ gridColumn: "span 3" }}>
+          {PAYMENT_PLAN_FIELDS.map(([fk, fl]) => (
+            <div key={fk} style={{ gridColumn: "span 4", minWidth: 0 }}>
               <FieldControl
-                fieldKey={key}
-                label={label}
-                value={form.premium_summary?.[key] || ""}
-                onChange={onPremiumFieldChange}
+                fieldKey={`payment_options.${planKey}.${fk}`}
+                label={fl}
+                value={plan[fk] || ""}
+                onChange={onFieldChange}
+                {...fp(`payment_options.${planKey}.${fk}`)}
               />
             </div>
           ))}
         </div>
-      </SectionCard>
+      </SubCard>
+    );
+  });
 
-      <SectionCard title="Discounts Applied">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
-          <div style={{ gridColumn: "span 4" }}>
+  const showPIF = form.payment_options?.show_paid_in_full_discount;
+  const pifData = form.payment_options?.paid_in_full_discount || {};
+
+  const paidInFullBlock = showPIF ? (
+    <SubCard
+      title="Paid-in-Full Discount"
+      action={
+        <SmallGhostButton onClick={onTogglePaidInFullDiscount}>
+          Remove
+        </SmallGhostButton>
+      }
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+          gap: 14,
+        }}
+      >
+        {PAID_IN_FULL_DISCOUNT_FIELDS.map(([fk, fl]) => (
+          <div key={fk} style={{ gridColumn: "span 4", minWidth: 0 }}>
             <FieldControl
-              fieldKey="policy_level"
-              label="Policy-Level Discounts"
-              value={(form.discounts?.policy_level || []).join("\n")}
-              onChange={(_, value) => onDiscountListChange("policy_level", value)}
-              multiline
-              rows={6}
+              fieldKey={`payment_options.paid_in_full_discount.${fk}`}
+              label={fl}
+              value={pifData[fk] || ""}
+              onChange={onFieldChange}
+              {...fp(`payment_options.paid_in_full_discount.${fk}`)}
             />
           </div>
-          <div style={{ gridColumn: "span 4" }}>
+        ))}
+      </div>
+    </SubCard>
+  ) : null;
+
+  const paymentSection = (
+    <SectionCard
+      title="Payment Options"
+      action={
+        !showPIF ? (
+          <SmallActionButton onClick={onTogglePaidInFullDiscount}>
+            + Add Paid-in-Full Discount
+          </SmallActionButton>
+        ) : null
+      }
+    >
+      <div style={{ display: "grid", gap: 14 }}>
+        {paymentPlansBlock}
+        {paidInFullBlock}
+      </div>
+    </SectionCard>
+  );
+
+  /* ============================================================
+     SECTION 7 — Premium Summary
+     ============================================================ */
+  const vehicleSubtotals = form.premium_summary?.vehicle_subtotals || [];
+  const premSummary = form.premium_summary || {};
+
+  const premiumSection = (
+    <SectionCard title="Premium Summary">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+          gap: 14,
+        }}
+      >
+        {/* Per-vehicle subtotals */}
+        {vehicleSubtotals.map((val, i) => (
+          <div key={`vsub-${i}`} style={{ gridColumn: "span 3", minWidth: 0 }}>
             <FieldControl
-              fieldKey="vehicle_level"
-              label="Vehicle-Level Discounts"
-              value={(form.discounts?.vehicle_level || []).join("\n")}
-              onChange={(_, value) => onDiscountListChange("vehicle_level", value)}
-              multiline
-              rows={6}
+              fieldKey={`premium_summary.vehicle_subtotals.${i}`}
+              label={`Vehicle ${i + 1} Subtotal`}
+              value={val || ""}
+              onChange={(_, v) => onVehicleSubtotalChange(i, v)}
+              {...fp(`premium_summary.vehicle_subtotals.${i}`)}
             />
           </div>
-          <div style={{ gridColumn: "span 4" }}>
-            <FieldControl
-              fieldKey="available_not_applied"
-              label="Available But Not Applied"
-              value={(form.discounts?.available_not_applied || []).join("\n")}
-              onChange={(_, value) =>
-                onDiscountListChange("available_not_applied", value)
-              }
-              multiline
-              rows={6}
+        ))}
+
+        {vehicleSubtotals.length > 0 && (
+          <div style={{ gridColumn: "span 12" }}>
+            <div
+              style={{
+                borderTop: `1px solid ${COLORS.borderGrey}`,
+                marginTop: 2,
+              }}
             />
           </div>
-        </div>
-      </SectionCard>
+        )}
+
+        {/* Fixed summary fields */}
+        {AUTO_PREMIUM_SUMMARY_FIELDS.map(([key, label]) => (
+          <div key={key} style={{ gridColumn: "span 4", minWidth: 0 }}>
+            <FieldControl
+              fieldKey={`premium_summary.${key}`}
+              label={label}
+              value={premSummary[key] || ""}
+              onChange={onFieldChange}
+              {...fp(`premium_summary.${key}`)}
+            />
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+
+  /* ============================================================
+     RENDER
+     ============================================================ */
+  return (
+    <div style={{ display: "grid", gap: 18 }}>
+      {policySection}
+      {agentSection}
+      {driversSection}
+      {vehiclesSection}
+      {coveragesSection}
+      {paymentSection}
+      {premiumSection}
     </div>
   );
 }

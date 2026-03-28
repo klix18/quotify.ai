@@ -6,10 +6,8 @@ import {
   EMPTY_HOMEOWNERS_FORM,
 } from "./homeownersConfig";
 import {
-  AUTO_POLICY_HEADER_FIELDS,
   EMPTY_AUTO_FORM,
   emptyDriver,
-  emptyCoverage,
   emptyVehicle,
 } from "./autoConfig";
 import HomeownersPanel from "./HomeownersPanel";
@@ -39,6 +37,11 @@ export default function QuotifyHome() {
   const [errorMessage, setErrorMessage] = React.useState("");
   const [parseStatus, setParseStatus] = React.useState("");
 
+  const [autoIsLoading, setAutoIsLoading] = React.useState(false);
+  const [autoIsParsed, setAutoIsParsed] = React.useState(false);
+  const [autoManual, setAutoManual] = React.useState({});
+  const [autoConfidence, setAutoConfidence] = React.useState({});
+
   const [homeownersManual, setHomeownersManual] = React.useState(
     () => Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false]))
   );
@@ -48,6 +51,7 @@ export default function QuotifyHome() {
   const [homeownersFinalized, setHomeownersFinalized] = React.useState(
     () => Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false]))
   );
+  const [homeownersConfidence, setHomeownersConfidence] = React.useState({});
 
   const fileInputRef = React.useRef(null);
   const advisorDropdownRef = React.useRef(null);
@@ -68,6 +72,7 @@ export default function QuotifyHome() {
     setHomeownersLoading(Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false])));
     setHomeownersFinalized(Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false])));
     setHomeownersManual(Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false])));
+    setHomeownersConfidence({});
   };
 
   const startHomeownersFieldState = () => {
@@ -76,6 +81,7 @@ export default function QuotifyHome() {
     );
     setHomeownersFinalized(Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false])));
     setHomeownersManual(Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false])));
+    setHomeownersConfidence({});
   };
 
   const onBrowseClick = () => fileInputRef.current?.click();
@@ -85,21 +91,42 @@ export default function QuotifyHome() {
     setHomeownersManual((prev) => ({ ...prev, [key]: true }));
   };
 
-  const updateAutoField = (key, value) => {
-    setAutoForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const updateAutoPremiumField = (key, value) => {
-    setAutoForm((prev) => ({
-      ...prev,
-      premium_summary: {
-        ...prev.premium_summary,
-        [key]: value,
-      },
-    }));
+  const updateAutoField = (path, value) => {
+    setAutoManual((prev) => ({ ...prev, [path]: true }));
+    setAutoForm((prev) => {
+      const parts = path.split(".");
+      if (parts.length === 1) {
+        return { ...prev, [path]: value };
+      }
+      if (parts[0] === "coverages") {
+        return { ...prev, coverages: { ...prev.coverages, [parts[1]]: value } };
+      }
+      if (parts[0] === "payment_options") {
+        if (parts.length === 3) {
+          return {
+            ...prev,
+            payment_options: {
+              ...prev.payment_options,
+              [parts[1]]: {
+                ...(prev.payment_options[parts[1]] || {}),
+                [parts[2]]: value,
+              },
+            },
+          };
+        }
+      }
+      if (parts[0] === "premium_summary") {
+        return {
+          ...prev,
+          premium_summary: { ...prev.premium_summary, [parts[1]]: value },
+        };
+      }
+      return prev;
+    });
   };
 
   const updateAutoDriver = (index, key, value) => {
+    setAutoManual((prev) => ({ ...prev, [`drivers.${index}.${key}`]: true }));
     setAutoForm((prev) => {
       const nextDrivers = [...prev.drivers];
       nextDrivers[index] = { ...nextDrivers[index], [key]: value };
@@ -122,36 +149,10 @@ export default function QuotifyHome() {
   };
 
   const updateAutoVehicle = (index, key, value) => {
+    setAutoManual((prev) => ({ ...prev, [`vehicles.${index}.${key}`]: true }));
     setAutoForm((prev) => {
       const nextVehicles = [...prev.vehicles];
       nextVehicles[index] = { ...nextVehicles[index], [key]: value };
-      return { ...prev, vehicles: nextVehicles };
-    });
-  };
-
-  const updateAutoVehicleDiscounts = (index, value) => {
-    setAutoForm((prev) => {
-      const nextVehicles = [...prev.vehicles];
-      nextVehicles[index] = {
-        ...nextVehicles[index],
-        vehicle_discounts: splitLines(value),
-      };
-      return { ...prev, vehicles: nextVehicles };
-    });
-  };
-
-  const updateAutoCoverage = (vehicleIndex, coverageIndex, key, value) => {
-    setAutoForm((prev) => {
-      const nextVehicles = [...prev.vehicles];
-      const nextCoverages = [...nextVehicles[vehicleIndex].coverages];
-      nextCoverages[coverageIndex] = {
-        ...nextCoverages[coverageIndex],
-        [key]: value,
-      };
-      nextVehicles[vehicleIndex] = {
-        ...nextVehicles[vehicleIndex],
-        coverages: nextCoverages,
-      };
       return { ...prev, vehicles: nextVehicles };
     });
   };
@@ -170,34 +171,27 @@ export default function QuotifyHome() {
     }));
   };
 
-  const updatePolicyCoverage = (index, key, value) => {
+  const updateVehicleSubtotal = (index, value) => {
+    setAutoManual((prev) => ({
+      ...prev,
+      [`premium_summary.vehicle_subtotals.${index}`]: true,
+    }));
     setAutoForm((prev) => {
-      const next = [...prev.policy_level_coverages];
-      next[index] = { ...next[index], [key]: value };
-      return { ...prev, policy_level_coverages: next };
+      const nextSubs = [...(prev.premium_summary.vehicle_subtotals || [])];
+      nextSubs[index] = value;
+      return {
+        ...prev,
+        premium_summary: { ...prev.premium_summary, vehicle_subtotals: nextSubs },
+      };
     });
   };
 
-  const addPolicyCoverage = () => {
+  const togglePaidInFullDiscount = () => {
     setAutoForm((prev) => ({
       ...prev,
-      policy_level_coverages: [...prev.policy_level_coverages, emptyCoverage("")],
-    }));
-  };
-
-  const removePolicyCoverage = (index) => {
-    setAutoForm((prev) => ({
-      ...prev,
-      policy_level_coverages: prev.policy_level_coverages.filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateDiscountList = (groupKey, value) => {
-    setAutoForm((prev) => ({
-      ...prev,
-      discounts: {
-        ...prev.discounts,
-        [groupKey]: splitLines(value),
+      payment_options: {
+        ...prev.payment_options,
+        show_paid_in_full_discount: !prev.payment_options.show_paid_in_full_discount,
       },
     }));
   };
@@ -260,6 +254,14 @@ export default function QuotifyHome() {
         agent_phone: advisor.phone || "",
         agent_email: advisor.email || "",
       }));
+      setAutoManual((prev) => {
+        const next = { ...prev };
+        delete next.agent_name;
+        delete next.agent_address;
+        delete next.agent_phone;
+        delete next.agent_email;
+        return next;
+      });
     }
   };
 
@@ -304,6 +306,7 @@ export default function QuotifyHome() {
       const decoder = new TextDecoder();
       let buffer = "";
       let finalData = null;
+      let finalConfidence = {};
 
       const applyPatch = (patch, isFinal = false) => {
         const {
@@ -371,6 +374,7 @@ export default function QuotifyHome() {
 
           if (message.type === "result") {
             finalData = message.data;
+            finalConfidence = message.confidence || {};
             setParseStatus("Applying final values...");
           }
 
@@ -390,6 +394,7 @@ export default function QuotifyHome() {
             applyPatch(message.data, true);
           } else if (message.type === "result") {
             finalData = message.data;
+            finalConfidence = message.confidence || {};
           } else if (message.type === "error") {
             throw new Error(message.error || "Streaming parse failed.");
           }
@@ -425,14 +430,44 @@ export default function QuotifyHome() {
         return next;
       });
 
+      setHomeownersConfidence(finalConfidence);
       setParseStatus("Done.");
     } catch (error) {
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       resetHomeownersFieldState();
+      setHomeownersConfidence({});
     } finally {
       setIsParsing(false);
     }
+  };
+
+  const deepMergeAutoForm = (prev, patch) => {
+    const next = { ...prev };
+    for (const [key, value] of Object.entries(patch)) {
+      if (key === "drivers" || key === "vehicles") {
+        next[key] = value;
+      } else if (key === "coverages" && typeof value === "object") {
+        next.coverages = { ...prev.coverages, ...value };
+      } else if (key === "payment_options" && typeof value === "object") {
+        next.payment_options = { ...prev.payment_options };
+        for (const [pk, pv] of Object.entries(value)) {
+          if (typeof pv === "object" && pv !== null && !Array.isArray(pv)) {
+            next.payment_options[pk] = {
+              ...(prev.payment_options[pk] || {}),
+              ...pv,
+            };
+          } else {
+            next.payment_options[pk] = pv;
+          }
+        }
+      } else if (key === "premium_summary" && typeof value === "object") {
+        next.premium_summary = { ...prev.premium_summary, ...value };
+      } else {
+        next[key] = value;
+      }
+    }
+    return next;
   };
 
   const parseAutoFile = async (file) => {
@@ -440,6 +475,10 @@ export default function QuotifyHome() {
     setErrorMessage("");
     setParseStatus("Uploading PDF...");
     setIsParsing(true);
+    setAutoIsLoading(true);
+    setAutoIsParsed(false);
+    setAutoManual({});
+    setAutoConfidence({});
 
     try {
       const body = new FormData();
@@ -463,10 +502,35 @@ export default function QuotifyHome() {
         throw new Error("Streaming response body is not available.");
       }
 
+      // Reset form but preserve agent fields
+      setAutoForm((prev) => ({
+        ...EMPTY_AUTO_FORM,
+        drivers: [emptyDriver()],
+        vehicles: [emptyVehicle()],
+        agent_name: prev.agent_name || "",
+        agent_address: prev.agent_address || "",
+        agent_phone: prev.agent_phone || "",
+        agent_email: prev.agent_email || "",
+      }));
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let finalData = null;
+      let finalConfidence = {};
+
+      const applyAutoPatch = (patch) => {
+        if (!patch || Object.keys(patch).length === 0) return;
+        const {
+          agent_name,
+          agent_address,
+          agent_phone,
+          agent_email,
+          ...restPatch
+        } = patch;
+
+        setAutoForm((prev) => deepMergeAutoForm(prev, restPatch));
+      };
 
       while (true) {
         const { value, done } = await reader.read();
@@ -490,26 +554,20 @@ export default function QuotifyHome() {
             setParseStatus(message.message || "Parsing...");
           }
 
-          if (
-            (message.type === "draft_patch" || message.type === "final_patch") &&
-            message.data
-          ) {
-            setAutoForm((prev) => ({
-              ...prev,
-              ...message.data,
-              premium_summary: {
-                ...prev.premium_summary,
-                ...(message.data.premium_summary || {}),
-              },
-              discounts: {
-                ...prev.discounts,
-                ...(message.data.discounts || {}),
-              },
-            }));
+          if (message.type === "draft_patch" && message.data) {
+            setParseStatus("Filling likely fields...");
+            applyAutoPatch(message.data);
+          }
+
+          if (message.type === "final_patch" && message.data) {
+            setParseStatus("Verifying and refining fields...");
+            applyAutoPatch(message.data);
           }
 
           if (message.type === "result") {
             finalData = message.data;
+            finalConfidence = message.confidence || {};
+            setParseStatus("Applying final values...");
           }
 
           if (message.type === "error") {
@@ -521,8 +579,14 @@ export default function QuotifyHome() {
       if (buffer.trim()) {
         try {
           const message = JSON.parse(buffer);
-          if (message.type === "result") finalData = message.data;
-          if (message.type === "error") {
+          if (message.type === "draft_patch" && message.data) {
+            applyAutoPatch(message.data);
+          } else if (message.type === "final_patch" && message.data) {
+            applyAutoPatch(message.data);
+          } else if (message.type === "result") {
+            finalData = message.data;
+            finalConfidence = message.confidence || {};
+          } else if (message.type === "error") {
             throw new Error(message.error || "Streaming parse failed.");
           }
         } catch (_) {}
@@ -532,23 +596,26 @@ export default function QuotifyHome() {
         throw new Error("No final parsed result was returned.");
       }
 
-      setAutoForm((prev) => ({
-        ...prev,
-        ...finalData,
-        premium_summary: {
-          ...prev.premium_summary,
-          ...(finalData.premium_summary || {}),
-        },
-        discounts: {
-          ...prev.discounts,
-          ...(finalData.discounts || {}),
-        },
-      }));
+      const {
+        agent_name,
+        agent_address,
+        agent_phone,
+        agent_email,
+        ...restFinal
+      } = finalData || {};
 
+      setAutoForm((prev) => deepMergeAutoForm(prev, restFinal));
+      setAutoConfidence(finalConfidence);
+
+      setAutoIsLoading(false);
+      setAutoIsParsed(true);
       setParseStatus("Done.");
     } catch (error) {
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
+      setAutoIsLoading(false);
+      setAutoIsParsed(false);
+      setAutoConfidence({});
     } finally {
       setIsParsing(false);
     }
@@ -1175,25 +1242,26 @@ export default function QuotifyHome() {
                 loadingFields={homeownersLoading}
                 finalizedFields={homeownersFinalized}
                 manuallyEditedFields={homeownersManual}
+                confidenceMap={homeownersConfidence}
                 FieldControl={FieldControl}
+                SectionCard={SectionCard}
               />
             ) : selectedInsurance === "auto" ? (
               <AutoPanel
                 form={autoForm}
+                isLoading={autoIsLoading}
+                isParsed={autoIsParsed}
+                manualFields={autoManual}
+                confidenceMap={autoConfidence}
                 onFieldChange={updateAutoField}
-                onPremiumFieldChange={updateAutoPremiumField}
                 onDriverChange={updateAutoDriver}
                 onAddDriver={addDriver}
                 onRemoveDriver={removeDriver}
                 onVehicleChange={updateAutoVehicle}
-                onVehicleDiscountsChange={updateAutoVehicleDiscounts}
-                onCoverageChange={updateAutoCoverage}
                 onAddVehicle={addVehicle}
                 onRemoveVehicle={removeVehicle}
-                onPolicyCoverageChange={updatePolicyCoverage}
-                onAddPolicyCoverage={addPolicyCoverage}
-                onRemovePolicyCoverage={removePolicyCoverage}
-                onDiscountListChange={updateDiscountList}
+                onTogglePaidInFullDiscount={togglePaidInFullDiscount}
+                onVehicleSubtotalChange={updateVehicleSubtotal}
                 FieldControl={FieldControl}
                 SectionCard={SectionCard}
                 SubCard={SubCard}
@@ -1436,19 +1504,26 @@ function FieldControl({
   isAgentField = false,
   isManuallyEdited = false,
   isYesNo = false,
+  selectOptions = null,
   multiline = false,
   rows = 4,
+  confidence = null,
 }) {
+  const CONFIDENCE_THRESHOLD = 0.85;
   const [isHovered, setIsHovered] = React.useState(false);
   const showSkeleton = isLoading && !value;
   const hasValue = String(value ?? "").trim() !== "";
+
+  // "Not Found" = AI confidently confirmed field is absent from document
+  const isNotFound =
+    isFinal && !hasValue && confidence !== null && confidence >= CONFIDENCE_THRESHOLD;
 
   const commonInputStyle = {
     width: "100%",
     boxSizing: "border-box",
     background: isAgentField ? COLORS.inputBgAlt : COLORS.inputBg,
     border: `1px solid ${
-      !hasValue && !showSkeleton
+      !hasValue && !showSkeleton && !isNotFound
         ? COLORS.dangerBorder
         : isHovered
           ? COLORS.blueBorder
@@ -1478,6 +1553,20 @@ function FieldControl({
     border: COLORS.greenBorder,
   });
 
+  const doubleCheckStatus = () => ({
+    text: "Double Check",
+    bg: "#FFF8E1",
+    color: "#D97706",
+    border: "#FDE68A",
+  });
+
+  const notFoundStatus = () => ({
+    text: "Not Found",
+    bg: "#F2F4F7",
+    color: "#7E8A99",
+    border: "#E2E8F0",
+  });
+
   const getStatus = () => {
     if (showSkeleton) {
       return {
@@ -1488,6 +1577,28 @@ function FieldControl({
       };
     }
 
+    if (isAgentField && hasValue) return successStatus("Selected");
+    if (isManuallyEdited) return successStatus("Manual");
+
+    // After extraction complete (isFinal) with confidence data
+    if (isFinal && confidence !== null) {
+      if (hasValue) {
+        return confidence >= CONFIDENCE_THRESHOLD
+          ? successStatus("Verified")
+          : doubleCheckStatus();
+      } else {
+        return confidence >= CONFIDENCE_THRESHOLD
+          ? notFoundStatus()
+          : doubleCheckStatus();
+      }
+    }
+
+    // Fallback: isFinal but no confidence (legacy / missing confidence)
+    if (isFinal) {
+      return hasValue ? successStatus("Verified") : notFoundStatus();
+    }
+
+    // Not yet extracted
     if (!hasValue) {
       return {
         text: "Missing",
@@ -1496,10 +1607,6 @@ function FieldControl({
         border: COLORS.dangerBorder,
       };
     }
-
-    if (isAgentField) return successStatus("Selected");
-    if (isManuallyEdited) return successStatus("Manual");
-    if (isFinal) return successStatus("Verified");
 
     return {
       text: "Draft",
@@ -1571,6 +1678,38 @@ function FieldControl({
       </div>
     </div>
   );
+
+  if (selectOptions) {
+    return (
+      <div>
+        {labelBlock}
+        <div style={wrapperStyle}>
+          <select
+            value={value || ""}
+            onChange={(e) => onChange(fieldKey, e.target.value)}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            style={{
+              ...commonInputStyle,
+              height: 42,
+              padding: "0 12px",
+              appearance: "auto",
+              cursor: "pointer",
+              opacity: showSkeleton ? 0.35 : 1,
+            }}
+          >
+            <option value=""></option>
+            {selectOptions.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+          {showSkeleton ? <div style={skeletonStyle} /> : null}
+        </div>
+      </div>
+    );
+  }
 
   if (isYesNo) {
     const normalized = String(value).trim().toLowerCase();
@@ -1654,62 +1793,56 @@ function FieldControl({
   );
 }
 
-function splitLines(value) {
-  return String(value || "")
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
 function getAutoCompletionCount(form) {
   let count = 0;
 
+  const filled = (v) => String(v || "").trim() !== "";
+
   const topLevel = [
-    "named_insured",
-    "mailing_address",
-    "phone_number",
-    "quote_effective_date",
-    "quote_expiration_date",
-    "policy_term",
-    "agent_name",
-    "agent_address",
-    "agent_phone",
-    "agent_email",
+    "client_name", "client_address", "client_phone",
+    "quote_date", "quote_effective_date", "quote_expiration_date",
+    "policy_term", "program",
+    "agent_name", "agent_address", "agent_phone", "agent_email",
   ];
 
   topLevel.forEach((key) => {
-    if (String(form[key] || "").trim()) count += 1;
+    if (filled(form[key])) count += 1;
   });
 
   (form.drivers || []).forEach((driver) => {
-    if (String(driver.driver_name || "").trim()) count += 1;
-    if (String(driver.license_state || "").trim()) count += 1;
+    if (filled(driver.driver_name)) count += 1;
+    if (filled(driver.gender)) count += 1;
+    if (filled(driver.marital_status)) count += 1;
+    if (filled(driver.license_state)) count += 1;
   });
 
   (form.vehicles || []).forEach((vehicle) => {
-    if (String(vehicle.year_make_model || "").trim()) count += 1;
-    if (String(vehicle.vin || "").trim()) count += 1;
-    if (String(vehicle.garaging_zip_county || "").trim()) count += 1;
-    if (String(vehicle.lienholder_loss_payee || "").trim()) count += 1;
-    if (String(vehicle.vehicle_subtotal || "").trim()) count += 1;
+    if (filled(vehicle.year_make_model_trim)) count += 1;
+    if (filled(vehicle.vin)) count += 1;
+    if (filled(vehicle.vehicle_use)) count += 1;
+    if (filled(vehicle.garaging_zip_county)) count += 1;
+  });
 
-    (vehicle.coverages || []).forEach((coverage) => {
-      if (String(coverage.coverage_name || "").trim()) count += 1;
-      if (String(coverage.limit || "").trim()) count += 1;
-      if (String(coverage.deductible || "").trim()) count += 1;
-      if (String(coverage.premium || "").trim()) count += 1;
-      if (String(coverage.status || "").trim()) count += 1;
+  Object.values(form.coverages || {}).forEach((v) => {
+    if (filled(v)) count += 1;
+  });
+
+  const po = form.payment_options || {};
+  ["full_pay", "semi_annual", "quarterly", "monthly"].forEach((plan) => {
+    Object.values(po[plan] || {}).forEach((v) => {
+      if (filled(v)) count += 1;
     });
   });
-
-  Object.values(form.premium_summary || {}).forEach((value) => {
-    if (String(value || "").trim()) count += 1;
+  Object.values(po.paid_in_full_discount || {}).forEach((v) => {
+    if (filled(v)) count += 1;
   });
-
-  count += (form.policy_level_coverages || []).length;
-  count += (form.discounts?.policy_level || []).length;
-  count += (form.discounts?.vehicle_level || []).length;
-  count += (form.discounts?.available_not_applied || []).length;
+  const ps = form.premium_summary || {};
+  (ps.vehicle_subtotals || []).forEach((v) => {
+    if (filled(v)) count += 1;
+  });
+  ["total_premium", "paid_in_full_discount", "total_pay_in_full"].forEach((key) => {
+    if (filled(ps[key])) count += 1;
+  });
 
   return count;
 }

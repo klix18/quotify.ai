@@ -73,6 +73,11 @@ HOMEOWNERS_SCHEMA = {
             "type": "string",
             "enum": ["Yes", "No"],
         },
+        "confidence": {
+            "type": "object",
+            "properties": {k: {"type": "number"} for k in ALL_HOMEOWNERS_KEYS},
+            "required": ALL_HOMEOWNERS_KEYS,
+        },
     },
     "required": [
         "total_premium",
@@ -89,6 +94,7 @@ HOMEOWNERS_SCHEMA = {
         "client_address",
         "client_phone",
         "client_email",
+        "confidence",
     ],
 }
 
@@ -110,6 +116,23 @@ Rules:
 - Use the quote's actual insured / prepared-for person as client_name, not the agency.
 - If an endorsement indicates 25% extended replacement cost is included, set
   25_extended_replacement_cost to "Yes".
+
+CONFIDENCE SCORING:
+For EVERY field, provide a confidence score (0.0 to 1.0) in the "confidence"
+object. The keys in "confidence" must match the data field keys exactly.
+
+Scoring guide:
+- 0.95-1.0  = value clearly printed / unambiguous on the document
+- 0.85-0.94 = high confidence, minor ambiguity (e.g., slightly blurry)
+- 0.60-0.84 = moderate confidence, inferred or partially visible
+- 0.30-0.59 = low confidence, best guess from context
+- 0.0-0.29  = very uncertain, field might not exist in document
+
+For fields you set to "" (not found), rate how certain you are that
+the field is genuinely ABSENT from the document:
+- 0.90+  = thoroughly searched, field is definitely not present
+- 0.50-0.89 = searched but could have missed it
+- <0.50  = uncertain whether the document contains this field
 """
 
 
@@ -143,15 +166,28 @@ Rules:
 - Prefer speed over perfection
 - replacement_cost_on_contents must be Yes or No if known
 - 25_extended_replacement_cost must be Yes or No if known
+- For names, always format as "First Last", never "Last, First"
 """
 
 
-def normalize_homeowners_result(parsed: dict) -> dict:
+def normalize_homeowners_result(parsed: dict) -> tuple:
+    """Ensure every expected key exists. Returns (data_dict, flat_confidence_dict)."""
+    # Extract confidence before normalizing data fields
+    raw_confidence = parsed.pop("confidence", {})
+
     for key in ALL_HOMEOWNERS_KEYS:
         parsed.setdefault(key, "")
         if parsed[key] is None:
             parsed[key] = ""
-    return parsed
+
+    # Flatten confidence (already flat for homeowners, but ensure float values)
+    flat_confidence = {}
+    if isinstance(raw_confidence, dict):
+        for k, v in raw_confidence.items():
+            if isinstance(v, (int, float)):
+                flat_confidence[k] = float(v)
+
+    return parsed, flat_confidence
 
 
 def extract_partial_json_fields(streamed_json: str) -> dict:
@@ -303,10 +339,10 @@ def stream_homeowners_quote_with_gemini(
                 }) + "\n"
 
         parsed = json.loads(full_text)
-        parsed = normalize_homeowners_result(parsed)
+        data, confidence = normalize_homeowners_result(parsed)
 
         final_patch = {}
-        for key, value in parsed.items():
+        for key, value in data.items():
             if sent_final.get(key) != value:
                 final_patch[key] = value
 
@@ -316,7 +352,11 @@ def stream_homeowners_quote_with_gemini(
                 "data": final_patch,
             }) + "\n"
 
-        yield json.dumps({"type": "result", "data": parsed}) + "\n"
+        yield json.dumps({
+            "type": "result",
+            "data": data,
+            "confidence": confidence,
+        }) + "\n"
 
     except Exception as exc:
         yield json.dumps({"type": "error", "error": str(exc)}) + "\n"

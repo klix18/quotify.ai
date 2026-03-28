@@ -1,5 +1,3 @@
-import React from "react";
-import COLORS from "./colors";
 import {
   HOMEOWNERS_YES_NO_FIELDS,
   HOMEOWNERS_AGENT_FIELDS,
@@ -14,90 +12,89 @@ export default function HomeownersPanel({
   loadingFields,
   finalizedFields,
   manuallyEditedFields,
+  confidenceMap,
   FieldControl,
+  SectionCard,
 }) {
-  return (
+  /* ── helpers ───────────────────────────────────────────────────── */
+  const renderRow = (row) => (
     <div
       style={{
-        background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFF 100%)",
-        border: `1px solid ${COLORS.borderGrey}`,
-        borderRadius: 24,
-        boxShadow: "0 18px 44px rgba(23,101,212,0.07)",
-        overflow: "hidden",
+        display: "grid",
+        gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+        gap: 14,
+        alignItems: "start",
       }}
     >
-      <div style={{ padding: 22 }}>
-        <div style={{ display: "grid", gap: 18 }}>
-          {HOMEOWNERS_ROWS.map((row, rowIndex) => {
-            const rowHasAgentFields = row.every(({ key }) =>
-              HOMEOWNERS_AGENT_FIELDS.has(key)
-            );
-            const rowHasClientFields = row.every(({ key }) =>
-              HOMEOWNERS_CLIENT_FIELDS.has(key)
-            );
-
-            return (
-              <div key={rowIndex}>
-                {(rowHasClientFields || rowHasAgentFields) && (
-                  <div
-                    style={{
-                      borderTop: `1px solid ${COLORS.borderGrey}`,
-                      paddingTop: 14,
-                      marginTop: 6,
-                      marginBottom: 14,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontFamily: "SentientCustom, Georgia, serif",
-                        fontSize: 20,
-                        lineHeight: 1,
-                        letterSpacing: "-0.02em",
-                        color: COLORS.black,
-                      }}
-                    >
-                      {rowHasClientFields
-                        ? "Client Information"
-                        : "Advisor Information"}
-                    </div>
-                  </div>
-                )}
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                    gap: 14,
-                    alignItems: "start",
-                  }}
-                >
-                  {row.map(({ key }) => (
-                    <div
-                      key={key}
-                      style={{
-                        gridColumn: "span 3",
-                        minWidth: 0,
-                      }}
-                    >
-                      <FieldControl
-                        fieldKey={key}
-                        label={HOMEOWNERS_LABEL_MAP[key]}
-                        value={form[key] || ""}
-                        onChange={onFieldChange}
-                        isLoading={loadingFields[key]}
-                        isFinal={finalizedFields[key]}
-                        isAgentField={HOMEOWNERS_AGENT_FIELDS.has(key)}
-                        isManuallyEdited={manuallyEditedFields[key]}
-                        isYesNo={HOMEOWNERS_YES_NO_FIELDS.has(key)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+      {row.map(({ key }) => (
+        <div
+          key={key}
+          style={{
+            gridColumn: "span 3",
+            minWidth: 0,
+          }}
+        >
+          <FieldControl
+            fieldKey={key}
+            label={HOMEOWNERS_LABEL_MAP[key]}
+            value={form[key] || ""}
+            onChange={onFieldChange}
+            isLoading={loadingFields[key]}
+            isFinal={finalizedFields[key]}
+            isAgentField={HOMEOWNERS_AGENT_FIELDS.has(key)}
+            isManuallyEdited={manuallyEditedFields[key]}
+            isYesNo={HOMEOWNERS_YES_NO_FIELDS.has(key)}
+            confidence={confidenceMap?.[key] ?? null}
+          />
         </div>
-      </div>
+      ))}
+    </div>
+  );
+
+  /* ── group rows into sections ──────────────────────────────────── */
+  const policyRows = [];
+  const clientRows = [];
+  const agentRows = [];
+
+  HOMEOWNERS_ROWS.forEach((row) => {
+    const isClient = row.every(({ key }) => HOMEOWNERS_CLIENT_FIELDS.has(key));
+    const isAgent = row.every(({ key }) => HOMEOWNERS_AGENT_FIELDS.has(key));
+
+    if (isClient) clientRows.push(row);
+    else if (isAgent) agentRows.push(row);
+    else policyRows.push(row);
+  });
+
+  /* ── render ────────────────────────────────────────────────────── */
+  return (
+    <div style={{ display: "grid", gap: 18 }}>
+      <SectionCard title="Homeowners Policy">
+        <div style={{ display: "grid", gap: 14 }}>
+          {policyRows.map((row, i) => (
+            <div key={i}>{renderRow(row)}</div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {clientRows.length > 0 && (
+        <SectionCard title="Client Information">
+          <div style={{ display: "grid", gap: 14 }}>
+            {clientRows.map((row, i) => (
+              <div key={i}>{renderRow(row)}</div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {agentRows.length > 0 && (
+        <SectionCard title="Advisor Information">
+          <div style={{ display: "grid", gap: 14 }}>
+            {agentRows.map((row, i) => (
+              <div key={i}>{renderRow(row)}</div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }

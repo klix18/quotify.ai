@@ -1,93 +1,201 @@
-export const AUTO_POLICY_HEADER_FIELDS = [
-  ["named_insured", "Named Insured"],
-  ["mailing_address", "Mailing Address"],
-  ["phone_number", "Phone Number"],
+// ─── Section 1: Auto Policy ─────────────────────────────────────
+export const AUTO_POLICY_FIELDS = [
+  ["client_name", "Client Name"],
+  ["client_address", "Client Address"],
+  ["client_phone", "Client Phone"],
+  ["quote_date", "Quote Date / Print Date"],
   ["quote_effective_date", "Quote Effective Date"],
   ["quote_expiration_date", "Quote Expiration Date"],
   ["policy_term", "Policy Term"],
+  ["program", "Program"],
 ];
 
-export const AUTO_POLICY_LABEL_MAP = Object.fromEntries(AUTO_POLICY_HEADER_FIELDS);
+export const AUTO_POLICY_TERM_OPTIONS = ["6-Month", "12-Month"];
 
-export const AUTO_PREMIUM_SUMMARY_FIELDS = [
-  ["policy_level_subtotal", "Policy-Level Subtotal"],
-  ["term_premium_total", "Term Premium Total"],
-  ["policy_fees", "Policy / New Business Fees"],
-  ["total_cost", "Total Cost"],
-  ["pay_in_full_premium", "Pay-in-Full Premium"],
-  ["paid_in_full_discount_amount", "Paid-in-Full Discount Amount"],
-  ["monthly_installment_amount", "Monthly Installment Amount"],
-  ["down_payment_amount", "Down Payment Amount"],
-  ["number_of_remaining_installments", "Remaining Installments"],
-  ["installment_fee_standard", "Installment Fee Standard"],
-  ["installment_fee_eft", "Installment Fee EFT"],
+export const AUTO_CLIENT_FIELD_KEYS = new Set([
+  "client_name",
+  "client_address",
+  "client_phone",
+]);
+
+// ─── Section 2: Agent Information ────────────────────────────────
+export const AUTO_AGENT_FIELDS = [
+  ["agent_name", "Agent Name"],
+  ["agent_address", "Agent Address"],
+  ["agent_phone", "Agent Phone"],
+  ["agent_email", "Agent Email"],
 ];
 
-export const AUTO_PREMIUM_LABEL_MAP = Object.fromEntries(AUTO_PREMIUM_SUMMARY_FIELDS);
+export const AUTO_AGENT_FIELD_KEYS = new Set(
+  AUTO_AGENT_FIELDS.map(([k]) => k)
+);
+
+// ─── Section 3: Driver Info ──────────────────────────────────────
+export const AUTO_DRIVER_FIELDS = [
+  ["driver_name", "Driver Name"],
+  ["gender", "Gender"],
+  ["marital_status", "Marital Status"],
+  ["license_state", "License State"],
+];
+
+export const DRIVER_GENDER_OPTIONS = ["Male", "Female"];
 
 export const emptyDriver = () => ({
   driver_name: "",
+  gender: "",
+  marital_status: "",
   license_state: "",
 });
 
-export const emptyCoverage = (coverage_name = "") => ({
-  coverage_name,
-  limit: "",
-  deductible: "",
-  premium: "",
-  status: "",
-});
+// ─── Section 4: Vehicle Info ─────────────────────────────────────
+export const AUTO_VEHICLE_FIELDS = [
+  ["year_make_model_trim", "Year / Make / Model / Trim"],
+  ["vin", "VIN"],
+  ["vehicle_use", "Vehicle Use"],
+  ["garaging_zip_county", "Garaging ZIP / County"],
+];
+
+export const VEHICLE_COVERAGE_PREMIUM_KEYS = [
+  "bi_premium",
+  "pd_premium",
+  "medpay_premium",
+  "um_uim_bi_premium",
+  "umpd_premium",
+  "comprehensive_premium",
+  "collision_premium",
+  "rental_premium",
+  "towing_premium",
+];
 
 export const emptyVehicle = () => ({
-  year_make_model: "",
+  year_make_model_trim: "",
   vin: "",
+  vehicle_use: "",
   garaging_zip_county: "",
-  lienholder_loss_payee: "",
-  vehicle_subtotal: "",
-  vehicle_discounts: [],
-  coverages: [
-    emptyCoverage("Bodily Injury Liability"),
-    emptyCoverage("Property Damage Liability"),
-    emptyCoverage("Medical Payments"),
-    emptyCoverage("Uninsured / Underinsured Motorist BI"),
-    emptyCoverage("Uninsured Motorist Property Damage"),
-    emptyCoverage("Comprehensive / Other Than Collision"),
-    emptyCoverage("Collision"),
-    emptyCoverage("Rental / Transportation Expenses"),
-    emptyCoverage("Towing & Labor / Roadside Assistance"),
-  ],
+  coverage_premiums: Object.fromEntries(
+    VEHICLE_COVERAGE_PREMIUM_KEYS.map((k) => [k, ""])
+  ),
+  subtotal: "",
 });
 
+// ─── Section 5: Coverages (Policy-Level Limits / Deductibles) ───
+export const AUTO_COVERAGE_FIELDS = [
+  ["bi_limit", "Bodily Injury (BI) Limit"],
+  ["pd_limit", "Property Damage (PD) Limit"],
+  ["medpay_limit", "Medical Payments (MedPay) Limit"],
+  ["um_uim_bi_limit", "UM/UIM Bodily Injury Limit"],
+  ["umpd_limit", "Uninsured Motorist PD (UMPD) Limit"],
+  ["umpd_deductible", "UMPD Deductible"],
+  ["comprehensive_deductible", "Comprehensive Deductible"],
+  ["collision_deductible", "Collision Deductible"],
+  ["rental_limit", "Rental / Transportation Limit"],
+  ["towing_limit", "Towing & Labor / Roadside Limit"],
+];
+
+// Maps coverage field → per-vehicle premium key (umpd_deductible has no
+// separate premium since it is already captured by umpd_limit)
+export const AUTO_COVERAGE_PREMIUM_MAP = {
+  bi_limit: "bi_premium",
+  pd_limit: "pd_premium",
+  medpay_limit: "medpay_premium",
+  um_uim_bi_limit: "um_uim_bi_premium",
+  umpd_limit: "umpd_premium",
+  comprehensive_deductible: "comprehensive_premium",
+  collision_deductible: "collision_premium",
+  rental_limit: "rental_premium",
+  towing_limit: "towing_premium",
+};
+
+// ─── Section 6: Payment Options ──────────────────────────────────
+export const PAYMENT_PLAN_FIELDS = [
+  ["down_payment", "Required Down Payment"],
+  ["amount_per_installment", "Amount per Installment"],
+  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
+];
+
+export const PAYMENT_PLANS = [
+  ["full_pay", "Full Pay"],
+  ["semi_annual", "Semi-Annual"],
+  ["quarterly", "Quarterly"],
+  ["monthly", "Monthly"],
+];
+
+export const PAID_IN_FULL_DISCOUNT_FIELDS = [
+  ["gross_premium", "Gross Premium (Before Discount)"],
+  ["discount_amount", "Discount Amount"],
+  ["net_pay_in_full", "Net Pay-in-Full Total"],
+];
+
+const emptyPaymentPlan = () => ({
+  down_payment: "",
+  amount_per_installment: "",
+  eft_reduces_fee: "",
+});
+
+// ─── Section 7: Premium Summary ──────────────────────────────────
+export const AUTO_PREMIUM_SUMMARY_FIELDS = [
+  ["total_premium", "Total Premium"],
+  ["paid_in_full_discount", "Paid-in-Full Discount"],
+  ["total_pay_in_full", "Total Pay-in-Full (After Discount)"],
+];
+
+// ─── Complete Empty Form ─────────────────────────────────────────
 export const EMPTY_AUTO_FORM = {
-  named_insured: "",
-  mailing_address: "",
-  phone_number: "",
+  // S1: Auto Policy
+  client_name: "",
+  client_address: "",
+  client_phone: "",
+  quote_date: "",
   quote_effective_date: "",
   quote_expiration_date: "",
   policy_term: "",
-  drivers: [],
-  vehicles: [],
-  policy_level_coverages: [],
-  premium_summary: {
-    policy_level_subtotal: "",
-    term_premium_total: "",
-    policy_fees: "",
-    total_cost: "",
-    pay_in_full_premium: "",
-    paid_in_full_discount_amount: "",
-    monthly_installment_amount: "",
-    down_payment_amount: "",
-    number_of_remaining_installments: "",
-    installment_fee_standard: "",
-    installment_fee_eft: "",
-  },
-  discounts: {
-    policy_level: [],
-    vehicle_level: [],
-    available_not_applied: [],
-  },
+  program: "",
+
+  // S2: Agent Information
   agent_name: "",
   agent_address: "",
   agent_phone: "",
   agent_email: "",
+
+  // S3: Drivers
+  drivers: [],
+
+  // S4: Vehicles
+  vehicles: [],
+
+  // S5: Coverages
+  coverages: {
+    bi_limit: "",
+    pd_limit: "",
+    medpay_limit: "",
+    um_uim_bi_limit: "",
+    umpd_limit: "",
+    umpd_deductible: "",
+    comprehensive_deductible: "",
+    collision_deductible: "",
+    rental_limit: "",
+    towing_limit: "",
+  },
+
+  // S6: Payment Options
+  payment_options: {
+    full_pay: emptyPaymentPlan(),
+    semi_annual: emptyPaymentPlan(),
+    quarterly: emptyPaymentPlan(),
+    monthly: emptyPaymentPlan(),
+    show_paid_in_full_discount: false,
+    paid_in_full_discount: {
+      gross_premium: "",
+      discount_amount: "",
+      net_pay_in_full: "",
+    },
+  },
+
+  // S7: Premium Summary
+  premium_summary: {
+    vehicle_subtotals: [],
+    total_premium: "",
+    paid_in_full_discount: "",
+    total_pay_in_full: "",
+  },
 };
