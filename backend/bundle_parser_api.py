@@ -1,0 +1,698 @@
+# bundle_parser_api.py
+# Uses Gemini Flash 2.5
+# 2-pass extraction for bundle (homeowners + auto) insurance quotes:
+#   Pass 1 = fast draft with gemini-2.5-flash-lite  (key:value streaming)
+#   Pass 2 = strict structured JSON with gemini-2.5-flash
+# Field mapping matches frontend bundleConfig.js exactly.
+
+import json
+import os
+import re
+import tempfile
+from pathlib import Path
+from typing import Iterator
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from google import genai
+from google.genai import types
+
+load_dotenv()
+
+router = APIRouter()
+
+
+def get_gemini_client() -> genai.Client:
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not set. Add it to your .env file or environment.")
+    return genai.Client(api_key=api_key)
+
+
+# ── Key definitions ───────────────────────────────────────────────
+
+# Shared client/policy keys
+BUNDLE_POLICY_KEYS = [
+    "bundle_total_premium",
+    "home_premium",
+    "auto_premium",
+    "client_name",
+    "client_address",
+    "client_email",
+    "client_phone",
+]
+
+# Homeowners coverage keys
+HOMEOWNERS_COVERAGE_KEYS = [
+    "dwelling",
+    "other_structures",
+    "personal_property",
+    "loss_of_use",
+    "personal_liability",
+    "medical_payments",
+    "replacement_cost_on_contents",
+    "25_extended_replacement_cost",
+    "all_perils_deductible",
+    "wind_hail_deductible",
+    "water_and_sewer_backup",
+]
+
+# Auto policy detail keys (prefixed with auto_)
+AUTO_POLICY_KEYS = [
+    "auto_quote_date",
+    "auto_quote_effective_date",
+    "auto_quote_expiration_date",
+    "auto_policy_term",
+    "auto_program",
+    "auto_paid_in_full_discount",
+    "auto_total_pay_in_full",
+]
+
+# Auto coverage keys
+AUTO_COVERAGE_KEYS = [
+    "bi_limit",
+    "pd_limit",
+    "medpay_limit",
+    "um_uim_bi_limit",
+    "umpd_limit",
+    "umpd_deductible",
+    "comprehensive_deductible",
+    "collision_deductible",
+    "rental_limit",
+    "towing_limit",
+]
+
+VEHICLE_PREMIUM_KEYS = [
+    "bi_premium",
+    "pd_premium",
+    "medpay_premium",
+    "um_uim_bi_premium",
+    "umpd_premium",
+    "comprehensive_premium",
+    "collision_premium",
+    "rental_premium",
+    "towing_premium",
+]
+
+PAYMENT_PLAN_KEYS = ["down_payment", "amount_per_installment", "eft_reduces_fee"]
+PLAN_NAMES = ["full_pay", "semi_annual", "quarterly", "monthly"]
+PIF_DISCOUNT_KEYS = ["gross_premium", "discount_amount", "net_pay_in_full"]
+
+ALL_FLAT_KEYS = BUNDLE_POLICY_KEYS + HOMEOWNERS_COVERAGE_KEYS + AUTO_POLICY_KEYS
+
+YES_NO_FIELDS = {"replacement_cost_on_contents", "25_extended_replacement_cost"}
+
+
+# ── Gemini structured-output schema (Pass 2) ────────────────────
+
+BUNDLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        # Bundle policy premiums
+        "bundle_total_premium": {"type": "string"},
+        "home_premium": {"type": "string"},
+        "auto_premium": {"type": "string"},
+
+        # Client info
+        "client_name": {"type": "string"},
+        "client_address": {"type": "string"},
+        "client_email": {"type": "string"},
+        "client_phone": {"type": "string"},
+
+        # Homeowners coverages
+        "dwelling": {"type": "string"},
+        "other_structures": {"type": "string"},
+        "personal_property": {"type": "string"},
+        "loss_of_use": {"type": "string"},
+        "personal_liability": {"type": "string"},
+        "medical_payments": {"type": "string"},
+        "replacement_cost_on_contents": {
+            "type": "string",
+            "enum": ["Yes", "No", ""],
+        },
+        "25_extended_replacement_cost": {
+            "type": "string",
+            "enum": ["Yes", "No", ""],
+        },
+        "all_perils_deductible": {"type": "string"},
+        "wind_hail_deductible": {"type": "string"},
+        "water_and_sewer_backup": {"type": "string"},
+
+        # Auto policy details
+        "auto_quote_date": {"type": "string"},
+        "auto_quote_effective_date": {"type": "string"},
+        "auto_quote_expiration_date": {"type": "string"},
+        "auto_policy_term": {"type": "string", "enum": ["6-Month", "12-Month", "Unknown"]},
+        "auto_program": {"type": "string"},
+        "auto_paid_in_full_discount": {"type": "string"},
+        "auto_total_pay_in_full": {"type": "string"},
+
+        # Auto drivers
+        "drivers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "driver_name": {"type": "string"},
+                    "gender": {"type": "string", "enum": ["Male", "Female", "Unknown"]},
+                    "marital_status": {"type": "string"},
+                    "license_state": {"type": "string"},
+                },
+                "required": ["driver_name", "gender", "marital_status", "license_state"],
+            },
+        },
+
+        # Auto vehicles
+        "vehicles": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "year_make_model_trim": {"type": "string"},
+                    "vin": {"type": "string"},
+                    "vehicle_use": {"type": "string"},
+                    "garaging_zip_county": {"type": "string"},
+                    "coverage_premiums": {
+                        "type": "object",
+                        "properties": {k: {"type": "string"} for k in VEHICLE_PREMIUM_KEYS},
+                        "required": VEHICLE_PREMIUM_KEYS,
+                    },
+                    "subtotal": {"type": "string"},
+                },
+                "required": [
+                    "year_make_model_trim", "vin", "vehicle_use",
+                    "garaging_zip_county", "coverage_premiums", "subtotal",
+                ],
+            },
+        },
+
+        # Auto coverages (limits/deductibles)
+        "coverages": {
+            "type": "object",
+            "properties": {k: {"type": "string"} for k in AUTO_COVERAGE_KEYS},
+            "required": AUTO_COVERAGE_KEYS,
+        },
+
+        # Auto payment options
+        "payment_options": {
+            "type": "object",
+            "properties": {
+                **{
+                    plan: {
+                        "type": "object",
+                        "properties": {k: {"type": "string"} for k in PAYMENT_PLAN_KEYS},
+                        "required": PAYMENT_PLAN_KEYS,
+                    }
+                    for plan in PLAN_NAMES
+                },
+                "paid_in_full_discount": {
+                    "type": "object",
+                    "properties": {k: {"type": "string"} for k in PIF_DISCOUNT_KEYS},
+                    "required": PIF_DISCOUNT_KEYS,
+                },
+            },
+            "required": PLAN_NAMES + ["paid_in_full_discount"],
+        },
+
+        # Confidence scores
+        "confidence": {
+            "type": "object",
+            "properties": {k: {"type": "number"} for k in ALL_FLAT_KEYS + AUTO_COVERAGE_KEYS},
+            "required": ALL_FLAT_KEYS + AUTO_COVERAGE_KEYS,
+        },
+    },
+    "required": [
+        "bundle_total_premium", "home_premium", "auto_premium",
+        "client_name", "client_address", "client_email", "client_phone",
+        "dwelling", "other_structures", "personal_property", "loss_of_use",
+        "personal_liability", "medical_payments",
+        "all_perils_deductible", "wind_hail_deductible", "water_and_sewer_backup",
+        "auto_quote_date", "auto_quote_effective_date", "auto_quote_expiration_date",
+        "auto_policy_term", "auto_program",
+        "drivers", "vehicles", "coverages", "payment_options",
+        "confidence",
+    ],
+}
+
+
+# ── Prompts ──────────────────────────────────────────────────────
+
+SYSTEM_PROMPT = """\
+You are an expert insurance data extractor. You receive a BUNDLE insurance
+quote PDF that contains BOTH homeowners and auto coverage in a single document.
+Return a single JSON object matching the schema provided.
+
+─── BUNDLE POLICY PREMIUMS ──────────────────────────────────────
+• bundle_total_premium – the grand total premium for both home + auto combined.
+• home_premium         – the homeowners portion of the premium.
+• auto_premium         – the auto portion of the premium.
+
+─── CLIENT INFORMATION ──────────────────────────────────────────
+• client_name    – the insured / applicant / named insured, NOT the agency.
+• client_address – single-line mailing address.
+• client_email   – email if shown. "" if absent.
+• client_phone   – phone if shown. "" if absent.
+
+─── HOMEOWNERS COVERAGES ────────────────────────────────────────
+• dwelling, other_structures, personal_property, loss_of_use,
+  personal_liability, medical_payments – dollar amounts with $.
+• replacement_cost_on_contents – "Yes", "No", or "".
+• 25_extended_replacement_cost – "Yes", "No", or "".
+• all_perils_deductible, wind_hail_deductible – may combine % and $,
+  e.g. "2% - $3,076".
+• water_and_sewer_backup – dollar amount or "".
+
+─── AUTO POLICY DETAILS ─────────────────────────────────────────
+• auto_quote_date – print/quote date in MM/DD/YYYY.
+• auto_quote_effective_date / auto_quote_expiration_date – MM/DD/YYYY.
+• auto_policy_term – "6-Month", "12-Month", or "Unknown".
+• auto_program – program/tier name or "".
+• auto_paid_in_full_discount – discount amount if paying in full, or "".
+• auto_total_pay_in_full – total if paying in full after discount, or "".
+
+─── AUTO DRIVERS (array) ────────────────────────────────────────
+• driver_name, gender ("Male"/"Female"/"Unknown"), marital_status, license_state.
+
+─── AUTO VEHICLES (array) ───────────────────────────────────────
+• year_make_model_trim, vin, vehicle_use, garaging_zip_county.
+• coverage_premiums – per-vehicle premium amounts.
+• subtotal – total premium for this vehicle.
+
+─── AUTO COVERAGES (policy-level limits & deductibles) ──────────
+• bi_limit, pd_limit, medpay_limit, um_uim_bi_limit, umpd_limit,
+  umpd_deductible, comprehensive_deductible, collision_deductible,
+  rental_limit, towing_limit.
+
+─── AUTO PAYMENT OPTIONS ────────────────────────────────────────
+For each plan (full_pay, semi_annual, quarterly, monthly):
+  down_payment, amount_per_installment, eft_reduces_fee.
+paid_in_full_discount: gross_premium, discount_amount, net_pay_in_full.
+
+─── CONFIDENCE SCORING ──────────────────────────────────────────
+For every flat field and coverage field, provide a confidence score
+(0.0 to 1.0) in the "confidence" object.
+
+─── RULES ───────────────────────────────────────────────────────
+• Return ONLY the JSON object. No commentary.
+• If a field cannot be found, return "" for strings, [] for arrays.
+• Preserve money formatting with a leading $.
+• Split limits use " / " separator: "$X / $Y".
+• Do NOT invent data.
+• For names, format as "First Last", never "Last, First".
+"""
+
+
+QUICK_PASS_PROMPT = """\
+You are a fast insurance data extractor for a BUNDLE (homeowners + auto) quote.
+Extract fields from this PDF as quickly as possible.
+
+Output ONLY lines in this exact format (one per line):
+field_key: value
+
+Use these keys for bundle policy and homeowners:
+  bundle_total_premium, home_premium, auto_premium,
+  client_name, client_address, client_email, client_phone,
+  dwelling, other_structures, personal_property, loss_of_use,
+  personal_liability, medical_payments, replacement_cost_on_contents,
+  25_extended_replacement_cost, all_perils_deductible,
+  wind_hail_deductible, water_and_sewer_backup
+
+Use these keys for auto details:
+  auto_quote_date, auto_quote_effective_date, auto_quote_expiration_date,
+  auto_policy_term, auto_program, auto_paid_in_full_discount,
+  auto_total_pay_in_full
+
+For auto coverage limits/deductibles:
+  bi_limit, pd_limit, medpay_limit, um_uim_bi_limit, umpd_limit,
+  umpd_deductible, comprehensive_deductible, collision_deductible,
+  rental_limit, towing_limit
+
+For drivers, use numbered keys:
+  driver_1_name, driver_1_gender, driver_1_marital_status, driver_1_license_state
+  driver_2_name, ...
+
+For vehicles, use numbered keys:
+  vehicle_1_year_make_model_trim, vehicle_1_vin, vehicle_1_vehicle_use,
+  vehicle_1_garaging_zip_county, vehicle_1_subtotal
+  vehicle_2_year_make_model_trim, ...
+
+For payment plans (full_pay, semi_annual, quarterly, monthly):
+  full_pay_down_payment, full_pay_amount_per_installment, full_pay_eft_reduces_fee
+  monthly_down_payment, ...
+
+Rules:
+- Skip fields you cannot identify.
+- Do not explain anything.
+- Prefer speed over perfection.
+- auto_policy_term must be "6-Month", "12-Month", or "Unknown".
+- replacement_cost_on_contents and 25_extended_replacement_cost must be "Yes" or "No" if known.
+- For names, always format as "First Last", never "Last, First"
+"""
+
+
+# ── Helpers ──────────────────────────────────────────────────────
+
+def flatten_confidence(conf, prefix=""):
+    """Flatten nested confidence object to dot-path keys with float values."""
+    result = {}
+    if not isinstance(conf, dict):
+        return result
+    for k, v in conf.items():
+        path = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            result.update(flatten_confidence(v, path))
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                if isinstance(item, dict):
+                    result.update(flatten_confidence(item, f"{path}.{i}"))
+                elif isinstance(item, (int, float)):
+                    result[f"{path}.{i}"] = float(item)
+        elif isinstance(v, (int, float)):
+            result[path] = float(v)
+    return result
+
+
+def normalize_bundle_result(parsed: dict) -> tuple:
+    """Ensure every expected key exists. Returns (data_dict, flat_confidence_dict)."""
+    raw_confidence = parsed.pop("confidence", {})
+
+    # Flat keys
+    for k in ALL_FLAT_KEYS:
+        parsed.setdefault(k, "")
+        if parsed[k] is None:
+            parsed[k] = ""
+
+    # Yes/No normalization
+    for k in YES_NO_FIELDS:
+        val = str(parsed.get(k, "")).strip()
+        if val.lower() == "yes":
+            parsed[k] = "Yes"
+        elif val.lower() == "no":
+            parsed[k] = "No"
+        elif val:
+            parsed[k] = val
+
+    # Auto policy term normalization
+    if parsed.get("auto_policy_term") == "Unknown":
+        parsed["auto_policy_term"] = ""
+
+    # Drivers
+    drivers = parsed.get("drivers") or []
+    for d in drivers:
+        for dk in ("driver_name", "gender", "marital_status", "license_state"):
+            d.setdefault(dk, "")
+        if d.get("gender") == "Unknown":
+            d["gender"] = ""
+    parsed["drivers"] = drivers
+
+    # Vehicles
+    vehicles = parsed.get("vehicles") or []
+    for v in vehicles:
+        for vk in ("year_make_model_trim", "vin", "vehicle_use", "garaging_zip_county", "subtotal"):
+            v.setdefault(vk, "")
+        cp = v.get("coverage_premiums") or {}
+        v["coverage_premiums"] = {k: cp.get(k, "") for k in VEHICLE_PREMIUM_KEYS}
+    parsed["vehicles"] = vehicles
+
+    # Coverages
+    cov = parsed.get("coverages") or {}
+    parsed["coverages"] = {k: cov.get(k, "") for k in AUTO_COVERAGE_KEYS}
+
+    # Payment options
+    po = parsed.get("payment_options") or {}
+    for plan in PLAN_NAMES:
+        p = po.get(plan) or {}
+        po[plan] = {k: p.get(k, "") for k in PAYMENT_PLAN_KEYS}
+    pif = po.get("paid_in_full_discount") or {}
+    po["paid_in_full_discount"] = {k: pif.get(k, "") for k in PIF_DISCOUNT_KEYS}
+    has_pif = any(po["paid_in_full_discount"][k] for k in PIF_DISCOUNT_KEYS)
+    po["show_paid_in_full_discount"] = has_pif
+    parsed["payment_options"] = po
+
+    # Flatten confidence
+    flat_confidence = flatten_confidence(raw_confidence)
+
+    return parsed, flat_confidence
+
+
+def extract_quick_pass_lines(text: str) -> dict:
+    """Parse key:value lines from Pass 1 into a nested form-shaped dict."""
+    raw = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if value:
+            raw[key] = value
+
+    result = {}
+
+    # Flat fields (bundle policy + homeowners + auto policy details)
+    for k in ALL_FLAT_KEYS:
+        if k in raw:
+            val = raw[k]
+            if k in YES_NO_FIELDS:
+                if val.lower() == "yes":
+                    val = "Yes"
+                elif val.lower() == "no":
+                    val = "No"
+                else:
+                    continue
+            result[k] = val
+
+    # Auto coverages
+    coverages = {}
+    for k in AUTO_COVERAGE_KEYS:
+        if k in raw:
+            coverages[k] = raw[k]
+    if coverages:
+        result["coverages"] = coverages
+
+    # Drivers (numbered: driver_1_name, driver_2_gender, etc.)
+    driver_map = {}
+    driver_fields = {
+        "name": "driver_name", "gender": "gender",
+        "marital_status": "marital_status", "license_state": "license_state",
+    }
+    for rk, rv in raw.items():
+        m = re.match(r"driver_(\d+)_(\w+)", rk)
+        if m:
+            idx = int(m.group(1)) - 1
+            field_suffix = m.group(2)
+            mapped = driver_fields.get(field_suffix)
+            if mapped:
+                driver_map.setdefault(idx, {})
+                driver_map[idx][mapped] = rv
+    if driver_map:
+        max_idx = max(driver_map.keys())
+        drivers = []
+        for i in range(max_idx + 1):
+            d = driver_map.get(i, {})
+            drivers.append({
+                "driver_name": d.get("driver_name", ""),
+                "gender": d.get("gender", ""),
+                "marital_status": d.get("marital_status", ""),
+                "license_state": d.get("license_state", ""),
+            })
+        result["drivers"] = drivers
+
+    # Vehicles (numbered: vehicle_1_vin, etc.)
+    vehicle_map = {}
+    vehicle_fields = {
+        "year_make_model_trim": "year_make_model_trim",
+        "vin": "vin", "vehicle_use": "vehicle_use",
+        "garaging_zip_county": "garaging_zip_county",
+        "subtotal": "subtotal",
+    }
+    for rk, rv in raw.items():
+        m = re.match(r"vehicle_(\d+)_(\w+)", rk)
+        if m:
+            idx = int(m.group(1)) - 1
+            field_suffix = m.group(2)
+            mapped = vehicle_fields.get(field_suffix)
+            if mapped:
+                vehicle_map.setdefault(idx, {})
+                vehicle_map[idx][mapped] = rv
+    if vehicle_map:
+        max_idx = max(vehicle_map.keys())
+        vehicles = []
+        for i in range(max_idx + 1):
+            v = vehicle_map.get(i, {})
+            vehicles.append({
+                "year_make_model_trim": v.get("year_make_model_trim", ""),
+                "vin": v.get("vin", ""),
+                "vehicle_use": v.get("vehicle_use", ""),
+                "garaging_zip_county": v.get("garaging_zip_county", ""),
+                "coverage_premiums": {k: "" for k in VEHICLE_PREMIUM_KEYS},
+                "subtotal": v.get("subtotal", ""),
+            })
+        result["vehicles"] = vehicles
+
+    # Payment options
+    payment_options = {}
+    for plan in PLAN_NAMES:
+        plan_data = {}
+        for pk in PAYMENT_PLAN_KEYS:
+            combo_key = f"{plan}_{pk}"
+            if combo_key in raw:
+                plan_data[pk] = raw[combo_key]
+        if plan_data:
+            payment_options[plan] = plan_data
+    if payment_options:
+        result["payment_options"] = payment_options
+
+    return result
+
+
+def extract_partial_json_root(streamed_json: str) -> dict:
+    """Try to parse (possibly incomplete) JSON from Pass 2 streaming."""
+    try:
+        return json.loads(streamed_json)
+    except Exception:
+        pass
+
+    start = streamed_json.find("{")
+    end = streamed_json.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        snippet = streamed_json[start : end + 1]
+        try:
+            return json.loads(snippet)
+        except Exception:
+            return {}
+
+    return {}
+
+
+# ── Streaming pipeline ───────────────────────────────────────────
+
+def stream_bundle_quote_with_gemini(
+    pdf_path: Path,
+    model_quick: str = "gemini-2.5-flash-lite",
+    model_final: str = "gemini-2.5-flash",
+) -> Iterator[str]:
+    client = get_gemini_client()
+    uploaded_file = None
+
+    try:
+        uploaded_file = client.files.upload(
+            file=str(pdf_path),
+            config={"mime_type": "application/pdf"},
+        )
+
+        sent_draft_json = ""
+
+        yield json.dumps({"type": "status", "message": "Reading bundle quote..."}) + "\n"
+
+        # ── PASS 1: quick draft extraction (key:value lines) ─────
+        quick_text = ""
+        quick_stream = client.models.generate_content_stream(
+            model=model_quick,
+            contents=[
+                "Quickly extract likely fields from this bundle (homeowners + auto) insurance quote PDF.",
+                uploaded_file,
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=QUICK_PASS_PROMPT,
+                temperature=0,
+            ),
+        )
+
+        for chunk in quick_stream:
+            text = chunk.text or ""
+            if not text:
+                continue
+
+            quick_text += text
+            patch = extract_quick_pass_lines(quick_text)
+
+            if patch:
+                patch_json = json.dumps(patch, sort_keys=True)
+                if patch_json != sent_draft_json:
+                    sent_draft_json = patch_json
+                    yield json.dumps({
+                        "type": "draft_patch",
+                        "data": patch,
+                    }) + "\n"
+
+        yield json.dumps({"type": "status", "message": "Verifying extracted bundle fields..."}) + "\n"
+
+        # ── PASS 2: strict structured extraction ─────────────────
+        full_text = ""
+        sent_final_json = ""
+
+        final_stream = client.models.generate_content_stream(
+            model=model_final,
+            contents=[
+                "Extract the bundle (homeowners + auto) insurance quote fields from this PDF.",
+                uploaded_file,
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0,
+                response_mime_type="application/json",
+                response_schema=BUNDLE_SCHEMA,
+            ),
+        )
+
+        for chunk in final_stream:
+            text = chunk.text or ""
+            if not text:
+                continue
+
+            full_text += text
+            partial = extract_partial_json_root(full_text)
+
+            if partial:
+                partial.pop("confidence", None)
+                partial_json = json.dumps(partial, sort_keys=True)
+                if partial_json != sent_final_json:
+                    sent_final_json = partial_json
+                    yield json.dumps({
+                        "type": "final_patch",
+                        "data": partial,
+                    }) + "\n"
+
+        parsed = json.loads(full_text)
+        data, confidence = normalize_bundle_result(parsed)
+
+        yield json.dumps({
+            "type": "result",
+            "data": data,
+            "confidence": confidence,
+        }) + "\n"
+
+    except Exception as exc:
+        yield json.dumps({"type": "error", "error": str(exc)}) + "\n"
+
+    finally:
+        if uploaded_file is not None:
+            try:
+                client.files.delete(name=uploaded_file.name)
+            except Exception:
+                pass
+
+
+@router.post("/api/parse-bundle-quote")
+async def parse_bundle_quote(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Please upload a PDF file.")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+        temp_path = Path(temp_file.name)
+        temp_file.write(await file.read())
+
+    def event_stream():
+        try:
+            yield from stream_bundle_quote_with_gemini(temp_path)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink(missing_ok=True)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="application/x-ndjson",
+    )

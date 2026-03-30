@@ -1,16 +1,20 @@
 import {
-  AUTO_POLICY_FIELDS,
+  BUNDLE_POLICY_FIELDS,
+  BUNDLE_CLIENT_FIELDS,
+  BUNDLE_AGENT_FIELDS,
+  BUNDLE_HOMEOWNERS_COVERAGE_FIELDS,
+  BUNDLE_HOMEOWNERS_YES_NO_FIELDS,
+  BUNDLE_AUTO_POLICY_FIELDS,
   AUTO_POLICY_TERM_OPTIONS,
-  AUTO_CLIENT_FIELDS,
-  AUTO_AGENT_FIELDS,
+  BUNDLE_AUTO_DRIVER_FIELDS,
   DRIVER_GENDER_OPTIONS,
-  AUTO_COVERAGE_FIELDS,
-  PAYMENT_PLANS,
-  PAYMENT_PLAN_FIELDS,
-  PAID_IN_FULL_DISCOUNT_FIELDS,
-} from "./autoConfig";
+  BUNDLE_AUTO_COVERAGE_FIELDS,
+  BUNDLE_PAYMENT_PLANS,
+  BUNDLE_PAYMENT_PLAN_FIELDS,
+  BUNDLE_PAID_IN_FULL_DISCOUNT_FIELDS,
+} from "./bundleConfig";
 
-export default function AutoPanel({
+export default function BundlePanel({
   form,
   isLoading,
   isParsed,
@@ -32,7 +36,7 @@ export default function AutoPanel({
   EmptyHint,
   COLORS,
 }) {
-  /* ── helpers for field status props ─────────────────────────── */
+  /* ── helpers ───────────────────────────────────────────────────── */
   const fp = (path) => ({
     isLoading,
     isFinal: isParsed && !manualFields[path],
@@ -40,23 +44,63 @@ export default function AutoPanel({
     confidence: confidenceMap?.[path] ?? null,
   });
 
-  /* ============================================================
-     SECTION 1 — Auto Policy
-     ============================================================ */
   const gridRow = { display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: 14 };
   const cell3 = { gridColumn: "span 3", minWidth: 0 };
+  const cell4 = { gridColumn: "span 4", minWidth: 0 };
+  const cell6 = { gridColumn: "span 6", minWidth: 0 };
 
+  /* ── big section divider ───────────────────────────────────────── */
+  const BigSectionHeader = ({ title, icon }) => (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "18px 0 6px 0",
+      }}
+    >
+      {icon && (
+        <img
+          src={icon}
+          alt={title}
+          style={{ width: 28, height: 28, objectFit: "contain" }}
+        />
+      )}
+      <div
+        style={{
+          fontFamily: "SentientCustom, Georgia, serif",
+          fontSize: 26,
+          lineHeight: 1,
+          letterSpacing: "-0.03em",
+          color: COLORS.blue,
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          flex: 1,
+          height: 1,
+          background: `linear-gradient(90deg, ${COLORS.blueBorder}, transparent)`,
+          marginLeft: 8,
+        }}
+      />
+    </div>
+  );
+
+  /* ============================================================
+     SECTION 1 — Bundle Policy (premiums)
+     ============================================================ */
   const policySection = (
-    <SectionCard title="Auto Policy">
+    <SectionCard title="Bundle Policy">
       <div style={gridRow}>
-        {AUTO_POLICY_FIELDS.map(([key, label]) => (
-          <div key={key} style={cell3}>
+        {BUNDLE_POLICY_FIELDS.map(([key, label]) => (
+          <div key={key} style={cell4}>
             <FieldControl
               fieldKey={key}
               label={label}
               value={form[key] || ""}
               onChange={onFieldChange}
-              selectOptions={key === "policy_term" ? AUTO_POLICY_TERM_OPTIONS : null}
               {...fp(key)}
             />
           </div>
@@ -71,7 +115,7 @@ export default function AutoPanel({
   const clientSection = (
     <SectionCard title="Client Information">
       <div style={gridRow}>
-        {AUTO_CLIENT_FIELDS.map(([key, label]) => (
+        {BUNDLE_CLIENT_FIELDS.map(([key, label]) => (
           <div key={key} style={cell3}>
             <FieldControl
               fieldKey={key}
@@ -92,7 +136,7 @@ export default function AutoPanel({
   const agentSection = (
     <SectionCard title="Advisor Information">
       <div style={gridRow}>
-        {AUTO_AGENT_FIELDS.map(([key, label]) => (
+        {BUNDLE_AGENT_FIELDS.map(([key, label]) => (
           <div key={key} style={cell3}>
             <FieldControl
               fieldKey={key}
@@ -109,7 +153,51 @@ export default function AutoPanel({
   );
 
   /* ============================================================
-     SECTION 3 — Drivers
+     HOMEOWNERS — Coverages
+     ============================================================ */
+  const homeownersCoveragesSection = (
+    <SectionCard title="Homeowners Coverages">
+      <div style={gridRow}>
+        {BUNDLE_HOMEOWNERS_COVERAGE_FIELDS.map(([key, label]) => (
+          <div key={key} style={cell3}>
+            <FieldControl
+              fieldKey={key}
+              label={label}
+              value={form[key] || ""}
+              onChange={onFieldChange}
+              isYesNo={BUNDLE_HOMEOWNERS_YES_NO_FIELDS.has(key)}
+              {...fp(key)}
+            />
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+
+  /* ============================================================
+     AUTO — Policy Details
+     ============================================================ */
+  const autoPolicySection = (
+    <SectionCard title="Auto Policy Details">
+      <div style={gridRow}>
+        {BUNDLE_AUTO_POLICY_FIELDS.map(([key, label]) => (
+          <div key={key} style={cell3}>
+            <FieldControl
+              fieldKey={key}
+              label={label}
+              value={form[key] || ""}
+              onChange={onFieldChange}
+              selectOptions={key === "auto_policy_term" ? AUTO_POLICY_TERM_OPTIONS : null}
+              {...fp(key)}
+            />
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+
+  /* ============================================================
+     AUTO — Drivers
      ============================================================ */
   const driversSection = (
     <SectionCard
@@ -136,50 +224,19 @@ export default function AutoPanel({
                 ) : null
               }
             >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                  gap: 14,
-                }}
-              >
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-                  <FieldControl
-                    fieldKey="driver_name"
-                    label="Driver Name"
-                    value={driver.driver_name || ""}
-                    onChange={(k, v) => onDriverChange(index, k, v)}
-                    {...fp(`drivers.${index}.driver_name`)}
-                  />
-                </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-                  <FieldControl
-                    fieldKey="gender"
-                    label="Gender"
-                    value={driver.gender || ""}
-                    onChange={(k, v) => onDriverChange(index, k, v)}
-                    selectOptions={DRIVER_GENDER_OPTIONS}
-                    {...fp(`drivers.${index}.gender`)}
-                  />
-                </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-                  <FieldControl
-                    fieldKey="marital_status"
-                    label="Marital Status"
-                    value={driver.marital_status || ""}
-                    onChange={(k, v) => onDriverChange(index, k, v)}
-                    {...fp(`drivers.${index}.marital_status`)}
-                  />
-                </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
-                  <FieldControl
-                    fieldKey="license_state"
-                    label="License State"
-                    value={driver.license_state || ""}
-                    onChange={(k, v) => onDriverChange(index, k, v)}
-                    {...fp(`drivers.${index}.license_state`)}
-                  />
-                </div>
+              <div style={gridRow}>
+                {BUNDLE_AUTO_DRIVER_FIELDS.map(([fk, fl]) => (
+                  <div key={fk} style={cell3}>
+                    <FieldControl
+                      fieldKey={fk}
+                      label={fl}
+                      value={driver[fk] || ""}
+                      onChange={(k, v) => onDriverChange(index, k, v)}
+                      selectOptions={fk === "gender" ? DRIVER_GENDER_OPTIONS : null}
+                      {...fp(`drivers.${index}.${fk}`)}
+                    />
+                  </div>
+                ))}
               </div>
             </SubCard>
           ))
@@ -189,7 +246,7 @@ export default function AutoPanel({
   );
 
   /* ============================================================
-     SECTION 4 — Vehicles
+     AUTO — Vehicles
      ============================================================ */
   const vehiclesSection = (
     <SectionCard
@@ -216,14 +273,8 @@ export default function AutoPanel({
                 ) : null
               }
             >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-                  gap: 14,
-                }}
-              >
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+              <div style={gridRow}>
+                <div style={cell3}>
                   <FieldControl
                     fieldKey="year_make_model_trim"
                     label="Year / Make / Model / Trim"
@@ -232,7 +283,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.year_make_model_trim`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                <div style={cell3}>
                   <FieldControl
                     fieldKey="vin"
                     label="VIN"
@@ -241,7 +292,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.vin`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                <div style={cell3}>
                   <FieldControl
                     fieldKey="vehicle_use"
                     label="Vehicle Use"
@@ -250,7 +301,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.vehicle_use`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                <div style={cell3}>
                   <FieldControl
                     fieldKey="garaging_zip_county"
                     label="Garaging ZIP / County"
@@ -268,20 +319,14 @@ export default function AutoPanel({
   );
 
   /* ============================================================
-     SECTION 5 — Coverages
+     AUTO — Coverages
      ============================================================ */
   const coveragesSection = (
-    <SectionCard title="Coverages">
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-          gap: 14,
-        }}
-      >
+    <SectionCard title="Auto Coverages">
+      <div style={gridRow}>
         {/* Row 1: BI, PD, MedPay, UM/UIM BI */}
-        {AUTO_COVERAGE_FIELDS.slice(0, 4).map(([key, label]) => (
-          <div key={key} style={{ gridColumn: "span 3", minWidth: 0 }}>
+        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(0, 4).map(([key, label]) => (
+          <div key={key} style={cell3}>
             <FieldControl
               fieldKey={`coverages.${key}`}
               label={label}
@@ -293,8 +338,8 @@ export default function AutoPanel({
         ))}
 
         {/* Row 2: UMPD Limit, UMPD Deductible, Comprehensive, Collision */}
-        {AUTO_COVERAGE_FIELDS.slice(4, 8).map(([key, label]) => (
-          <div key={key} style={{ gridColumn: "span 3", minWidth: 0 }}>
+        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(4, 8).map(([key, label]) => (
+          <div key={key} style={cell3}>
             <FieldControl
               fieldKey={`coverages.${key}`}
               label={label}
@@ -306,8 +351,8 @@ export default function AutoPanel({
         ))}
 
         {/* Row 3: Rental, Towing */}
-        {AUTO_COVERAGE_FIELDS.slice(8).map(([key, label]) => (
-          <div key={key} style={{ gridColumn: "span 6", minWidth: 0 }}>
+        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(8).map(([key, label]) => (
+          <div key={key} style={cell6}>
             <FieldControl
               fieldKey={`coverages.${key}`}
               label={label}
@@ -322,21 +367,15 @@ export default function AutoPanel({
   );
 
   /* ============================================================
-     SECTION 6 — Payment Options
+     AUTO — Payment Options
      ============================================================ */
-  const paymentPlansBlock = PAYMENT_PLANS.map(([planKey, planLabel]) => {
+  const paymentPlansBlock = BUNDLE_PAYMENT_PLANS.map(([planKey, planLabel]) => {
     const plan = form.payment_options?.[planKey] || {};
     return (
       <SubCard key={planKey} title={planLabel}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
-          {PAYMENT_PLAN_FIELDS.map(([fk, fl]) => (
-            <div key={fk} style={{ gridColumn: "span 4", minWidth: 0 }}>
+        <div style={gridRow}>
+          {BUNDLE_PAYMENT_PLAN_FIELDS.map(([fk, fl]) => (
+            <div key={fk} style={cell4}>
               <FieldControl
                 fieldKey={`payment_options.${planKey}.${fk}`}
                 label={fl}
@@ -363,15 +402,9 @@ export default function AutoPanel({
         </SmallGhostButton>
       }
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-          gap: 14,
-        }}
-      >
-        {PAID_IN_FULL_DISCOUNT_FIELDS.map(([fk, fl]) => (
-          <div key={fk} style={{ gridColumn: "span 4", minWidth: 0 }}>
+      <div style={gridRow}>
+        {BUNDLE_PAID_IN_FULL_DISCOUNT_FIELDS.map(([fk, fl]) => (
+          <div key={fk} style={cell4}>
             <FieldControl
               fieldKey={`payment_options.paid_in_full_discount.${fk}`}
               label={fl}
@@ -387,7 +420,7 @@ export default function AutoPanel({
 
   const paymentSection = (
     <SectionCard
-      title="Payment Options"
+      title="Auto Payment Options"
       action={
         !showPIF ? (
           <SmallActionButton onClick={onTogglePaidInFullDiscount}>
@@ -403,14 +436,18 @@ export default function AutoPanel({
     </SectionCard>
   );
 
-  /* ============================================================
-     RENDER
-     ============================================================ */
+  /* ── render ────────────────────────────────────────────────────── */
   return (
     <div style={{ display: "grid", gap: 18 }}>
       {policySection}
       {clientSection}
       {agentSection}
+
+      <BigSectionHeader title="Homeowners" icon="/i-homeowners.png" />
+      {homeownersCoveragesSection}
+
+      <BigSectionHeader title="Auto" icon="/i-auto.png" />
+      {autoPolicySection}
       {driversSection}
       {vehiclesSection}
       {coveragesSection}

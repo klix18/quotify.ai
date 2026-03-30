@@ -1,29 +1,35 @@
 // ─── Section 1: Auto Policy ─────────────────────────────────────
 export const AUTO_POLICY_FIELDS = [
-  ["client_name", "Client Name"],
-  ["client_address", "Client Address"],
-  ["client_phone", "Client Phone"],
   ["quote_date", "Quote Date / Print Date"],
   ["quote_effective_date", "Quote Effective Date"],
   ["quote_expiration_date", "Quote Expiration Date"],
   ["policy_term", "Policy Term"],
   ["program", "Program"],
+  ["total_premium", "Total Premium"],
+  ["paid_in_full_discount", "Paid-in-Full Discount"],
+  ["total_pay_in_full", "Total Pay-in-Full (After Discount)"],
 ];
 
 export const AUTO_POLICY_TERM_OPTIONS = ["6-Month", "12-Month"];
 
-export const AUTO_CLIENT_FIELD_KEYS = new Set([
-  "client_name",
-  "client_address",
-  "client_phone",
-]);
+// ─── Section 1b: Client Information ─────────────────────────────
+export const AUTO_CLIENT_FIELDS = [
+  ["client_name", "Client Name"],
+  ["client_address", "Client Address"],
+  ["client_email", "Client Email"],
+  ["client_phone", "Client Phone"],
+];
 
-// ─── Section 2: Agent Information ────────────────────────────────
+export const AUTO_CLIENT_FIELD_KEYS = new Set(
+  AUTO_CLIENT_FIELDS.map(([k]) => k)
+);
+
+// ─── Section 2: Advisor Information ──────────────────────────────
 export const AUTO_AGENT_FIELDS = [
-  ["agent_name", "Agent Name"],
-  ["agent_address", "Agent Address"],
-  ["agent_phone", "Agent Phone"],
-  ["agent_email", "Agent Email"],
+  ["agent_name", "Advisor Name"],
+  ["agent_address", "Advisor Address"],
+  ["agent_phone", "Advisor Phone"],
+  ["agent_email", "Advisor Email"],
 ];
 
 export const AUTO_AGENT_FIELD_KEYS = new Set(
@@ -132,24 +138,23 @@ const emptyPaymentPlan = () => ({
   eft_reduces_fee: "",
 });
 
-// ─── Section 7: Premium Summary ──────────────────────────────────
-export const AUTO_PREMIUM_SUMMARY_FIELDS = [
-  ["total_premium", "Total Premium"],
-  ["paid_in_full_discount", "Paid-in-Full Discount"],
-  ["total_pay_in_full", "Total Pay-in-Full (After Discount)"],
-];
-
 // ─── Complete Empty Form ─────────────────────────────────────────
 export const EMPTY_AUTO_FORM = {
   // S1: Auto Policy
-  client_name: "",
-  client_address: "",
-  client_phone: "",
   quote_date: "",
   quote_effective_date: "",
   quote_expiration_date: "",
   policy_term: "",
   program: "",
+  total_premium: "",
+  paid_in_full_discount: "",
+  total_pay_in_full: "",
+
+  // S1b: Client Information
+  client_name: "",
+  client_address: "",
+  client_email: "",
+  client_phone: "",
 
   // S2: Agent Information
   agent_name: "",
@@ -191,11 +196,4 @@ export const EMPTY_AUTO_FORM = {
     },
   },
 
-  // S7: Premium Summary
-  premium_summary: {
-    vehicle_subtotals: [],
-    total_premium: "",
-    paid_in_full_discount: "",
-    total_pay_in_full: "",
-  },
 };

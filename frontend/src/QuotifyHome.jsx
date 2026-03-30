@@ -10,8 +10,24 @@ import {
   emptyDriver,
   emptyVehicle,
 } from "./autoConfig";
+import {
+  EMPTY_DWELLING_FORM,
+  emptyProperty,
+} from "./dwellingConfig";
+import {
+  EMPTY_COMMERCIAL_FORM,
+  emptyWcClassCode,
+} from "./commercialConfig";
+import {
+  EMPTY_BUNDLE_FORM,
+  emptyDriver as emptyBundleDriver,
+  emptyVehicle as emptyBundleVehicle,
+} from "./bundleConfig";
 import HomeownersPanel from "./HomeownersPanel";
 import AutoPanel from "./AutoPanel";
+import DwellingPanel from "./DwellingPanel";
+import CommercialPanel from "./CommercialPanel";
+import BundlePanel from "./BundlePanel";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -52,6 +68,31 @@ export default function QuotifyHome() {
     () => Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false]))
   );
   const [homeownersConfidence, setHomeownersConfidence] = React.useState({});
+
+  const [dwellingForm, setDwellingForm] = React.useState({
+    ...EMPTY_DWELLING_FORM,
+    properties: [emptyProperty()],
+  });
+  const [dwellingIsLoading, setDwellingIsLoading] = React.useState(false);
+  const [dwellingIsParsed, setDwellingIsParsed] = React.useState(false);
+  const [dwellingManual, setDwellingManual] = React.useState({});
+  const [dwellingConfidence, setDwellingConfidence] = React.useState({});
+
+  const [commercialForm, setCommercialForm] = React.useState(EMPTY_COMMERCIAL_FORM);
+  const [commercialIsLoading, setCommercialIsLoading] = React.useState(false);
+  const [commercialIsParsed, setCommercialIsParsed] = React.useState(false);
+  const [commercialManual, setCommercialManual] = React.useState({});
+  const [commercialConfidence, setCommercialConfidence] = React.useState({});
+
+  const [bundleForm, setBundleForm] = React.useState({
+    ...EMPTY_BUNDLE_FORM,
+    drivers: [emptyBundleDriver()],
+    vehicles: [emptyBundleVehicle()],
+  });
+  const [bundleIsLoading, setBundleIsLoading] = React.useState(false);
+  const [bundleIsParsed, setBundleIsParsed] = React.useState(false);
+  const [bundleManual, setBundleManual] = React.useState({});
+  const [bundleConfidence, setBundleConfidence] = React.useState({});
 
   const fileInputRef = React.useRef(null);
   const advisorDropdownRef = React.useRef(null);
@@ -139,12 +180,10 @@ export default function QuotifyHome() {
     mouseInside.current = false;
   }, []);
 
-  const uploaderEnabled = selectedInsurance === "homeowners" || selectedInsurance === "auto";
+  const uploaderEnabled = selectedInsurance === "homeowners" || selectedInsurance === "auto" || selectedInsurance === "dwelling" || selectedInsurance === "commercial" || selectedInsurance === "bundle";
   const uploaderActive = uploaderEnabled && isDragging;
   const selectedAdvisorName =
-    selectedInsurance === "homeowners"
-      ? homeownersForm.agent_name || ""
-      : autoForm.agent_name || "";
+    homeownersForm.agent_name || autoForm.agent_name || dwellingForm.agent_name || commercialForm.agent_name || bundleForm.agent_name || "";
 
   const advisorInputValue = isAdvisorDropdownOpen ? advisorSearch : selectedAdvisorName;
 
@@ -194,12 +233,6 @@ export default function QuotifyHome() {
             },
           };
         }
-      }
-      if (parts[0] === "premium_summary") {
-        return {
-          ...prev,
-          premium_summary: { ...prev.premium_summary, [parts[1]]: value },
-        };
       }
       return prev;
     });
@@ -251,21 +284,6 @@ export default function QuotifyHome() {
     }));
   };
 
-  const updateVehicleSubtotal = (index, value) => {
-    setAutoManual((prev) => ({
-      ...prev,
-      [`premium_summary.vehicle_subtotals.${index}`]: true,
-    }));
-    setAutoForm((prev) => {
-      const nextSubs = [...(prev.premium_summary.vehicle_subtotals || [])];
-      nextSubs[index] = value;
-      return {
-        ...prev,
-        premium_summary: { ...prev.premium_summary, vehicle_subtotals: nextSubs },
-      };
-    });
-  };
-
   const togglePaidInFullDiscount = () => {
     setAutoForm((prev) => ({
       ...prev,
@@ -311,38 +329,62 @@ export default function QuotifyHome() {
     setAdvisorSearch(advisor.name || "");
     setIsAdvisorDropdownOpen(false);
 
-    if (selectedInsurance === "homeowners") {
-      setHomeownersForm((prev) => ({
-        ...prev,
-        agent_name: advisor.name || "",
-        agent_address: advisor.office_address || "",
-        agent_phone: advisor.phone || "",
-        agent_email: advisor.email || "",
-      }));
-      setHomeownersManual((prev) => ({
-        ...prev,
-        agent_name: false,
-        agent_address: false,
-        agent_phone: false,
-        agent_email: false,
-      }));
-    } else if (selectedInsurance === "auto") {
-      setAutoForm((prev) => ({
-        ...prev,
-        agent_name: advisor.name || "",
-        agent_address: advisor.office_address || "",
-        agent_phone: advisor.phone || "",
-        agent_email: advisor.email || "",
-      }));
-      setAutoManual((prev) => {
-        const next = { ...prev };
-        delete next.agent_name;
-        delete next.agent_address;
-        delete next.agent_phone;
-        delete next.agent_email;
-        return next;
-      });
-    }
+    const agentFields = {
+      agent_name: advisor.name || "",
+      agent_address: advisor.office_address || "",
+      agent_phone: advisor.phone || "",
+      agent_email: advisor.email || "",
+    };
+
+    // Apply to all insurance forms universally
+    setHomeownersForm((prev) => ({ ...prev, ...agentFields }));
+    setHomeownersManual((prev) => ({
+      ...prev,
+      agent_name: false,
+      agent_address: false,
+      agent_phone: false,
+      agent_email: false,
+    }));
+
+    setAutoForm((prev) => ({ ...prev, ...agentFields }));
+    setAutoManual((prev) => {
+      const next = { ...prev };
+      delete next.agent_name;
+      delete next.agent_address;
+      delete next.agent_phone;
+      delete next.agent_email;
+      return next;
+    });
+
+    setDwellingForm((prev) => ({ ...prev, ...agentFields }));
+    setDwellingManual((prev) => {
+      const next = { ...prev };
+      delete next.agent_name;
+      delete next.agent_address;
+      delete next.agent_phone;
+      delete next.agent_email;
+      return next;
+    });
+
+    setCommercialForm((prev) => ({ ...prev, ...agentFields }));
+    setCommercialManual((prev) => {
+      const next = { ...prev };
+      delete next.agent_name;
+      delete next.agent_address;
+      delete next.agent_phone;
+      delete next.agent_email;
+      return next;
+    });
+
+    setBundleForm((prev) => ({ ...prev, ...agentFields }));
+    setBundleManual((prev) => {
+      const next = { ...prev };
+      delete next.agent_name;
+      delete next.agent_address;
+      delete next.agent_phone;
+      delete next.agent_email;
+      return next;
+    });
   };
 
   const parseHomeownersFile = async (file) => {
@@ -542,7 +584,10 @@ export default function QuotifyHome() {
           }
         }
       } else if (key === "premium_summary" && typeof value === "object") {
-        next.premium_summary = { ...prev.premium_summary, ...value };
+        // Map legacy premium_summary from parser to top-level fields
+        if (value.total_premium) next.total_premium = value.total_premium;
+        if (value.paid_in_full_discount) next.paid_in_full_discount = value.paid_in_full_discount;
+        if (value.total_pay_in_full) next.total_pay_in_full = value.total_pay_in_full;
       } else {
         next[key] = value;
       }
@@ -701,17 +746,614 @@ export default function QuotifyHome() {
     }
   };
 
+  /* ── Dwelling field handlers ────────────────────────────────── */
+  const updateDwellingField = (path, value) => {
+    setDwellingManual((prev) => ({ ...prev, [path]: true }));
+    setDwellingForm((prev) => ({ ...prev, [path]: value }));
+  };
+
+  const updateDwellingProperty = (index, key, value) => {
+    setDwellingManual((prev) => ({ ...prev, [`properties.${index}.${key}`]: true }));
+    setDwellingForm((prev) => {
+      const next = [...prev.properties];
+      next[index] = { ...next[index], [key]: value };
+      return { ...prev, properties: next };
+    });
+  };
+
+  const addDwellingProperty = () => {
+    setDwellingForm((prev) => ({
+      ...prev,
+      properties: [...prev.properties, emptyProperty()],
+    }));
+  };
+
+  const removeDwellingProperty = (index) => {
+    setDwellingForm((prev) => ({
+      ...prev,
+      properties: prev.properties.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateDwellingPaymentPlan = (planKey, field, value) => {
+    setDwellingManual((prev) => ({ ...prev, [`payment_plans.${planKey}.${field}`]: true }));
+    setDwellingForm((prev) => ({
+      ...prev,
+      payment_plans: {
+        ...prev.payment_plans,
+        [planKey]: { ...(prev.payment_plans[planKey] || {}), [field]: value },
+      },
+    }));
+  };
+
+  /* ── Dwelling parser ────────────────────────────────────────── */
+  const deepMergeDwellingForm = (prev, patch) => {
+    const next = { ...prev };
+    for (const [key, value] of Object.entries(patch)) {
+      if (key === "properties" && Array.isArray(value)) {
+        next.properties = value;
+      } else if (key === "premium_summary" && Array.isArray(value)) {
+        // Map legacy premium_summary array to top-level fields
+        if (value.length > 0) {
+          const ps = value[0];
+          if (ps.total_premium) next.total_premium = ps.total_premium;
+          if (ps.pay_in_full_discount) next.pay_in_full_discount = ps.pay_in_full_discount;
+          if (ps.total_if_paid_in_full) next.total_if_paid_in_full = ps.total_if_paid_in_full;
+        }
+      } else if (key === "payment_plans" && typeof value === "object") {
+        next.payment_plans = { ...prev.payment_plans };
+        for (const [pk, pv] of Object.entries(value)) {
+          if (typeof pv === "object" && pv !== null && !Array.isArray(pv)) {
+            next.payment_plans[pk] = { ...(prev.payment_plans[pk] || {}), ...pv };
+          } else {
+            next.payment_plans[pk] = pv;
+          }
+        }
+      } else {
+        next[key] = value;
+      }
+    }
+    return next;
+  };
+
+  const parseDwellingFile = async (file) => {
+    setFileName(file.name);
+    setErrorMessage("");
+    setParseStatus("Uploading PDF...");
+    setIsParsing(true);
+    setDwellingIsLoading(true);
+    setDwellingIsParsed(false);
+    setDwellingManual({});
+    setDwellingConfidence({});
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+
+      const response = await fetch(`${API_BASE_URL}/api/parse-dwelling-quote`, {
+        method: "POST",
+        body,
+      });
+
+      if (!response.ok) {
+        let detail = "Failed to parse dwelling quote.";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+      }
+
+      if (!response.body) {
+        throw new Error("Streaming response body is not available.");
+      }
+
+      // Reset form but preserve agent fields
+      setDwellingForm((prev) => ({
+        ...EMPTY_DWELLING_FORM,
+        properties: [emptyProperty()],
+        agent_name: prev.agent_name || "",
+        agent_address: prev.agent_address || "",
+        agent_phone: prev.agent_phone || "",
+        agent_email: prev.agent_email || "",
+      }));
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData = null;
+      let finalConfidence = {};
+
+      const applyDwellingPatch = (patch) => {
+        if (!patch || Object.keys(patch).length === 0) return;
+        const { agent_name, agent_address, agent_phone, agent_email, ...restPatch } = patch;
+        setDwellingForm((prev) => deepMergeDwellingForm(prev, restPatch));
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let message;
+          try { message = JSON.parse(line); } catch { continue; }
+
+          if (message.type === "status") setParseStatus(message.message || "Parsing...");
+          if (message.type === "draft_patch" && message.data) {
+            setParseStatus("Filling likely fields...");
+            applyDwellingPatch(message.data);
+          }
+          if (message.type === "final_patch" && message.data) {
+            setParseStatus("Verifying and refining fields...");
+            applyDwellingPatch(message.data);
+          }
+          if (message.type === "result") {
+            finalData = message.data;
+            finalConfidence = message.confidence || {};
+            setParseStatus("Applying final values...");
+          }
+          if (message.type === "error") {
+            throw new Error(message.error || "Streaming parse failed.");
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        try {
+          const message = JSON.parse(buffer);
+          if (message.type === "draft_patch" && message.data) applyDwellingPatch(message.data);
+          else if (message.type === "final_patch" && message.data) applyDwellingPatch(message.data);
+          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; }
+          else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
+        } catch (_) {}
+      }
+
+      if (!finalData) throw new Error("No final parsed result was returned.");
+
+      const { agent_name, agent_address, agent_phone, agent_email, ...restFinal } = finalData || {};
+      setDwellingForm((prev) => deepMergeDwellingForm(prev, restFinal));
+      setDwellingConfidence(finalConfidence);
+      setDwellingIsLoading(false);
+      setDwellingIsParsed(true);
+      setParseStatus("Done.");
+    } catch (error) {
+      setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
+      setParseStatus("");
+      setDwellingIsLoading(false);
+      setDwellingIsParsed(false);
+      setDwellingConfidence({});
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  /* ── Commercial field handlers ─────────────────────────────── */
+  const updateCommercialField = (path, value) => {
+    setCommercialManual((prev) => ({ ...prev, [path]: true }));
+    setCommercialForm((prev) => ({ ...prev, [path]: value }));
+  };
+
+  const updateCommercialWcClassCode = (index, key, value) => {
+    setCommercialManual((prev) => ({ ...prev, [`wc_class_codes.${index}.${key}`]: true }));
+    setCommercialForm((prev) => {
+      const next = [...(prev.wc_class_codes || [])];
+      next[index] = { ...next[index], [key]: value };
+      return { ...prev, wc_class_codes: next };
+    });
+  };
+
+  const addCommercialWcClassCode = () => {
+    setCommercialForm((prev) => ({
+      ...prev,
+      wc_class_codes: [...(prev.wc_class_codes || []), emptyWcClassCode()],
+    }));
+  };
+
+  const removeCommercialWcClassCode = (index) => {
+    setCommercialForm((prev) => ({
+      ...prev,
+      wc_class_codes: (prev.wc_class_codes || []).filter((_, i) => i !== index),
+    }));
+  };
+
+  /* ── Bundle field handlers ────────────────────────────────────── */
+  const updateBundleField = (path, value) => {
+    setBundleManual((prev) => ({ ...prev, [path]: true }));
+    setBundleForm((prev) => {
+      const parts = path.split(".");
+      if (parts.length === 1) {
+        return { ...prev, [path]: value };
+      }
+      if (parts[0] === "coverages") {
+        return { ...prev, coverages: { ...prev.coverages, [parts[1]]: value } };
+      }
+      if (parts[0] === "payment_options") {
+        if (parts.length === 3) {
+          return {
+            ...prev,
+            payment_options: {
+              ...prev.payment_options,
+              [parts[1]]: {
+                ...(prev.payment_options[parts[1]] || {}),
+                [parts[2]]: value,
+              },
+            },
+          };
+        }
+      }
+      return prev;
+    });
+  };
+
+  const updateBundleDriver = (index, key, value) => {
+    setBundleManual((prev) => ({ ...prev, [`drivers.${index}.${key}`]: true }));
+    setBundleForm((prev) => {
+      const nextDrivers = [...prev.drivers];
+      nextDrivers[index] = { ...nextDrivers[index], [key]: value };
+      return { ...prev, drivers: nextDrivers };
+    });
+  };
+
+  const addBundleDriver = () => {
+    setBundleForm((prev) => ({
+      ...prev,
+      drivers: [...prev.drivers, emptyBundleDriver()],
+    }));
+  };
+
+  const removeBundleDriver = (index) => {
+    setBundleForm((prev) => ({
+      ...prev,
+      drivers: prev.drivers.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateBundleVehicle = (index, key, value) => {
+    setBundleManual((prev) => ({ ...prev, [`vehicles.${index}.${key}`]: true }));
+    setBundleForm((prev) => {
+      const nextVehicles = [...prev.vehicles];
+      nextVehicles[index] = { ...nextVehicles[index], [key]: value };
+      return { ...prev, vehicles: nextVehicles };
+    });
+  };
+
+  const addBundleVehicle = () => {
+    setBundleForm((prev) => ({
+      ...prev,
+      vehicles: [...prev.vehicles, emptyBundleVehicle()],
+    }));
+  };
+
+  const removeBundleVehicle = (index) => {
+    setBundleForm((prev) => ({
+      ...prev,
+      vehicles: prev.vehicles.filter((_, i) => i !== index),
+    }));
+  };
+
+  const toggleBundlePaidInFullDiscount = () => {
+    setBundleForm((prev) => ({
+      ...prev,
+      payment_options: {
+        ...prev.payment_options,
+        show_paid_in_full_discount: !prev.payment_options.show_paid_in_full_discount,
+      },
+    }));
+  };
+
+  /* ── Bundle parser ──────────────────────────────────────────── */
+  const deepMergeBundleForm = (prev, patch) => {
+    const next = { ...prev };
+    for (const [key, value] of Object.entries(patch)) {
+      if (key === "drivers" || key === "vehicles") {
+        next[key] = value;
+      } else if (key === "coverages" && typeof value === "object") {
+        next.coverages = { ...prev.coverages, ...value };
+      } else if (key === "payment_options" && typeof value === "object") {
+        next.payment_options = { ...prev.payment_options };
+        for (const [pk, pv] of Object.entries(value)) {
+          if (typeof pv === "object" && pv !== null && !Array.isArray(pv)) {
+            next.payment_options[pk] = {
+              ...(prev.payment_options[pk] || {}),
+              ...pv,
+            };
+          } else {
+            next.payment_options[pk] = pv;
+          }
+        }
+      } else {
+        next[key] = value;
+      }
+    }
+    return next;
+  };
+
+  const parseBundleFile = async (file) => {
+    setFileName(file.name);
+    setErrorMessage("");
+    setParseStatus("Uploading PDF...");
+    setIsParsing(true);
+    setBundleIsLoading(true);
+    setBundleIsParsed(false);
+    setBundleManual({});
+    setBundleConfidence({});
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+
+      const response = await fetch(`${API_BASE_URL}/api/parse-bundle-quote`, {
+        method: "POST",
+        body,
+      });
+
+      if (!response.ok) {
+        let detail = "Failed to parse bundle quote.";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+      }
+
+      if (!response.body) {
+        throw new Error("Streaming response body is not available.");
+      }
+
+      // Reset form but preserve agent fields
+      setBundleForm((prev) => ({
+        ...EMPTY_BUNDLE_FORM,
+        drivers: [emptyBundleDriver()],
+        vehicles: [emptyBundleVehicle()],
+        agent_name: prev.agent_name || "",
+        agent_address: prev.agent_address || "",
+        agent_phone: prev.agent_phone || "",
+        agent_email: prev.agent_email || "",
+      }));
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData = null;
+      let finalConfidence = {};
+
+      const applyBundlePatch = (patch) => {
+        if (!patch || Object.keys(patch).length === 0) return;
+        const { agent_name, agent_address, agent_phone, agent_email, ...restPatch } = patch;
+        setBundleForm((prev) => deepMergeBundleForm(prev, restPatch));
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let message;
+          try { message = JSON.parse(line); } catch { continue; }
+
+          if (message.type === "status") setParseStatus(message.message || "Parsing...");
+          if (message.type === "draft_patch" && message.data) {
+            setParseStatus("Filling likely fields...");
+            applyBundlePatch(message.data);
+          }
+          if (message.type === "final_patch" && message.data) {
+            setParseStatus("Verifying and refining fields...");
+            applyBundlePatch(message.data);
+          }
+          if (message.type === "result") {
+            finalData = message.data;
+            finalConfidence = message.confidence || {};
+            setParseStatus("Applying final values...");
+          }
+          if (message.type === "error") {
+            throw new Error(message.error || "Streaming parse failed.");
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        try {
+          const message = JSON.parse(buffer);
+          if (message.type === "draft_patch" && message.data) applyBundlePatch(message.data);
+          else if (message.type === "final_patch" && message.data) applyBundlePatch(message.data);
+          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; }
+          else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
+        } catch (_) {}
+      }
+
+      if (!finalData) throw new Error("No final parsed result was returned.");
+
+      const { agent_name, agent_address, agent_phone, agent_email, ...restFinal } = finalData || {};
+      setBundleForm((prev) => deepMergeBundleForm(prev, restFinal));
+      setBundleConfidence(finalConfidence);
+      setBundleIsLoading(false);
+      setBundleIsParsed(true);
+      setParseStatus("Done.");
+    } catch (error) {
+      setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
+      setParseStatus("");
+      setBundleIsLoading(false);
+      setBundleIsParsed(false);
+      setBundleConfidence({});
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  /* ── Commercial parser ───────────────────────────────────────── */
+  // Nested section keys that Gemini Pass 2 returns as sub-objects.
+  // We flatten these into top-level keys so coverage fields populate in real-time.
+  const COMMERCIAL_SECTION_KEYS = new Set([
+    "commercial_property", "general_liability", "workers_comp",
+    "excess_liability", "cyber",
+  ]);
+
+  const deepMergeCommercialForm = (prev, patch) => {
+    const next = { ...prev };
+    for (const [key, value] of Object.entries(patch)) {
+      if (key === "wc_class_codes" && Array.isArray(value)) {
+        next.wc_class_codes = value;
+      } else if (key === "premium_lines" && Array.isArray(value)) {
+        // Ignore premium_lines from parser (no longer used in UI)
+      } else if (COMMERCIAL_SECTION_KEYS.has(key) && value && typeof value === "object" && !Array.isArray(value)) {
+        // Flatten nested section objects (e.g., commercial_property.building_limit → building_limit)
+        for (const [subKey, subValue] of Object.entries(value)) {
+          next[subKey] = subValue;
+        }
+      } else {
+        next[key] = value;
+      }
+    }
+    return next;
+  };
+
+  const parseCommercialFile = async (file) => {
+    setFileName(file.name);
+    setErrorMessage("");
+    setParseStatus("Uploading PDF...");
+    setIsParsing(true);
+    setCommercialIsLoading(true);
+    setCommercialIsParsed(false);
+    setCommercialManual({});
+    setCommercialConfidence({});
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+
+      const response = await fetch(`${API_BASE_URL}/api/parse-commercial-quote`, {
+        method: "POST",
+        body,
+      });
+
+      if (!response.ok) {
+        let detail = "Failed to parse commercial quote.";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+      }
+
+      if (!response.body) {
+        throw new Error("Streaming response body is not available.");
+      }
+
+      // Reset form but preserve agent fields
+      setCommercialForm((prev) => ({
+        ...EMPTY_COMMERCIAL_FORM,
+        agent_name: prev.agent_name || "",
+        agent_address: prev.agent_address || "",
+        agent_phone: prev.agent_phone || "",
+        agent_email: prev.agent_email || "",
+      }));
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData = null;
+      let finalConfidence = {};
+
+      const applyCommercialPatch = (patch) => {
+        if (!patch || Object.keys(patch).length === 0) return;
+        const { agent_name, agent_address, agent_phone, agent_email, ...restPatch } = patch;
+        setCommercialForm((prev) => deepMergeCommercialForm(prev, restPatch));
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let message;
+          try { message = JSON.parse(line); } catch { continue; }
+
+          if (message.type === "status") setParseStatus(message.message || "Parsing...");
+          if (message.type === "draft_patch" && message.data) {
+            setParseStatus("Filling likely fields...");
+            applyCommercialPatch(message.data);
+          }
+          if (message.type === "final_patch" && message.data) {
+            setParseStatus("Verifying and refining fields...");
+            applyCommercialPatch(message.data);
+          }
+          if (message.type === "result") {
+            finalData = message.data;
+            finalConfidence = message.confidence || {};
+            setParseStatus("Applying final values...");
+          }
+          if (message.type === "error") {
+            throw new Error(message.error || "Streaming parse failed.");
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        try {
+          const message = JSON.parse(buffer);
+          if (message.type === "draft_patch" && message.data) applyCommercialPatch(message.data);
+          else if (message.type === "final_patch" && message.data) applyCommercialPatch(message.data);
+          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; }
+          else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
+        } catch (_) {}
+      }
+
+      if (!finalData) throw new Error("No final parsed result was returned.");
+
+      const { agent_name, agent_address, agent_phone, agent_email, ...restFinal } = finalData || {};
+      setCommercialForm((prev) => deepMergeCommercialForm(prev, restFinal));
+      setCommercialConfidence(finalConfidence);
+      setCommercialIsLoading(false);
+      setCommercialIsParsed(true);
+      setParseStatus("Done.");
+    } catch (error) {
+      setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
+      setParseStatus("");
+      setCommercialIsLoading(false);
+      setCommercialIsParsed(false);
+      setCommercialConfidence({});
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
   const generateAndDownloadQuote = async () => {
     setErrorMessage("");
     setIsGenerating(true);
 
     try {
-      const endpoint =
-        selectedInsurance === "homeowners"
-          ? `${API_BASE_URL}/api/generate-homeowners-quote`
-          : `${API_BASE_URL}/api/generate-auto-quote`;
+      const endpointMap = {
+        homeowners: `${API_BASE_URL}/api/generate-homeowners-quote`,
+        auto: `${API_BASE_URL}/api/generate-auto-quote`,
+        commercial: `${API_BASE_URL}/api/generate-commercial-quote`,
+        dwelling: `${API_BASE_URL}/api/generate-dwelling-quote`,
+        bundle: `${API_BASE_URL}/api/generate-bundle-quote`,
+      };
+      const endpoint = endpointMap[selectedInsurance] || endpointMap.homeowners;
 
-      const payload = selectedInsurance === "homeowners" ? homeownersForm : autoForm;
+      const payloadMap = {
+        homeowners: homeownersForm,
+        auto: autoForm,
+        commercial: commercialForm,
+        dwelling: dwellingForm,
+        bundle: bundleForm,
+      };
+      const payload = payloadMap[selectedInsurance] || homeownersForm;
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -722,10 +1364,7 @@ export default function QuotifyHome() {
       });
 
       if (!response.ok) {
-        let detail =
-          selectedInsurance === "homeowners"
-            ? "Failed to generate homeowners quote."
-            : "Failed to generate auto quote.";
+        let detail = `Failed to generate ${selectedInsurance} quote.`;
         try {
           const json = await response.json();
           detail = json?.detail || detail;
@@ -735,10 +1374,7 @@ export default function QuotifyHome() {
 
       const blob = await response.blob();
       const contentDisposition = response.headers.get("content-disposition") || "";
-      let outFileName =
-        selectedInsurance === "homeowners"
-          ? "homeowners_quote_filled.pdf"
-          : "auto_quote_filled.pdf";
+      let outFileName = `${selectedInsurance}_quote_filled.pdf`;
 
       const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
       const plainMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
@@ -772,6 +1408,12 @@ export default function QuotifyHome() {
       await parseHomeownersFile(file);
     } else if (selectedInsurance === "auto") {
       await parseAutoFile(file);
+    } else if (selectedInsurance === "dwelling") {
+      await parseDwellingFile(file);
+    } else if (selectedInsurance === "commercial") {
+      await parseCommercialFile(file);
+    } else if (selectedInsurance === "bundle") {
+      await parseBundleFile(file);
     }
   };
 
@@ -1287,7 +1929,13 @@ export default function QuotifyHome() {
                     ? "Homeowners Insurance Quote"
                     : selectedInsurance === "auto"
                       ? "Auto Insurance Quote"
-                      : "Insurance Quote"}
+                      : selectedInsurance === "dwelling"
+                        ? "Dwelling Insurance Quote"
+                        : selectedInsurance === "commercial"
+                          ? "Commercial Insurance Quote"
+                          : selectedInsurance === "bundle"
+                            ? "Bundle Insurance Quote"
+                            : "Insurance Quote"}
                 </div>
 
                 <div
@@ -1370,7 +2018,68 @@ export default function QuotifyHome() {
                 onAddVehicle={addVehicle}
                 onRemoveVehicle={removeVehicle}
                 onTogglePaidInFullDiscount={togglePaidInFullDiscount}
-                onVehicleSubtotalChange={updateVehicleSubtotal}
+                FieldControl={FieldControl}
+                SectionCard={SectionCard}
+                SubCard={SubCard}
+                SmallActionButton={SmallActionButton}
+                SmallGhostButton={SmallGhostButton}
+                EmptyHint={EmptyHint}
+                COLORS={COLORS}
+              />
+            ) : selectedInsurance === "dwelling" ? (
+              <DwellingPanel
+                form={dwellingForm}
+                isLoading={dwellingIsLoading}
+                isParsed={dwellingIsParsed}
+                manualFields={dwellingManual}
+                confidenceMap={dwellingConfidence}
+                onFieldChange={updateDwellingField}
+                onPropertyChange={updateDwellingProperty}
+                onAddProperty={addDwellingProperty}
+                onRemoveProperty={removeDwellingProperty}
+                onPaymentPlanChange={updateDwellingPaymentPlan}
+                FieldControl={FieldControl}
+                SectionCard={SectionCard}
+                SubCard={SubCard}
+                SmallActionButton={SmallActionButton}
+                SmallGhostButton={SmallGhostButton}
+                EmptyHint={EmptyHint}
+                COLORS={COLORS}
+              />
+            ) : selectedInsurance === "commercial" ? (
+              <CommercialPanel
+                form={commercialForm}
+                isLoading={commercialIsLoading}
+                isParsed={commercialIsParsed}
+                manualFields={commercialManual}
+                confidenceMap={commercialConfidence}
+                onFieldChange={updateCommercialField}
+                onWcClassCodeChange={updateCommercialWcClassCode}
+                onAddWcClassCode={addCommercialWcClassCode}
+                onRemoveWcClassCode={removeCommercialWcClassCode}
+                FieldControl={FieldControl}
+                SectionCard={SectionCard}
+                SubCard={SubCard}
+                SmallActionButton={SmallActionButton}
+                SmallGhostButton={SmallGhostButton}
+                EmptyHint={EmptyHint}
+                COLORS={COLORS}
+              />
+            ) : selectedInsurance === "bundle" ? (
+              <BundlePanel
+                form={bundleForm}
+                isLoading={bundleIsLoading}
+                isParsed={bundleIsParsed}
+                manualFields={bundleManual}
+                confidenceMap={bundleConfidence}
+                onFieldChange={updateBundleField}
+                onDriverChange={updateBundleDriver}
+                onAddDriver={addBundleDriver}
+                onRemoveDriver={removeBundleDriver}
+                onVehicleChange={updateBundleVehicle}
+                onAddVehicle={addBundleVehicle}
+                onRemoveVehicle={removeBundleVehicle}
+                onTogglePaidInFullDiscount={toggleBundlePaidInFullDiscount}
                 FieldControl={FieldControl}
                 SectionCard={SectionCard}
                 SubCard={SubCard}
@@ -1958,9 +2667,10 @@ function getAutoCompletionCount(form) {
   const filled = (v) => String(v || "").trim() !== "";
 
   const topLevel = [
-    "client_name", "client_address", "client_phone",
+    "client_name", "client_address", "client_email", "client_phone",
     "quote_date", "quote_effective_date", "quote_expiration_date",
     "policy_term", "program",
+    "total_premium", "paid_in_full_discount", "total_pay_in_full",
     "agent_name", "agent_address", "agent_phone", "agent_email",
   ];
 
@@ -1995,13 +2705,5 @@ function getAutoCompletionCount(form) {
   Object.values(po.paid_in_full_discount || {}).forEach((v) => {
     if (filled(v)) count += 1;
   });
-  const ps = form.premium_summary || {};
-  (ps.vehicle_subtotals || []).forEach((v) => {
-    if (filled(v)) count += 1;
-  });
-  ["total_premium", "paid_in_full_discount", "total_pay_in_full"].forEach((key) => {
-    if (filled(ps[key])) count += 1;
-  });
-
   return count;
 }

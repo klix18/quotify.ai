@@ -7,6 +7,9 @@ from homeowners_parser_api import router as homeowners_parser_router
 from homeowners_filler_api import router as filler_router
 
 from auto_parser_api import router as auto_parser_router
+from dwelling_parser_api import router as dwelling_parser_router
+from commercial_parser_api import router as commercial_parser_router
+from bundle_parser_api import router as bundle_parser_router
 
 app = FastAPI()
 
@@ -26,3 +29,6 @@ app.include_router(homeowners_parser_router)
 app.include_router(filler_router)
 app.include_router(advisor_router)
 app.include_router(auto_parser_router)
+app.include_router(dwelling_parser_router)
+app.include_router(commercial_parser_router)
+app.include_router(bundle_parser_router)
