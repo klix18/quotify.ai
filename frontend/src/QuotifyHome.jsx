@@ -42,6 +42,7 @@ export default function QuotifyHome() {
   const [isAdvisorDropdownOpen, setIsAdvisorDropdownOpen] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
   const [fileName, setFileName] = React.useState("");
+  const [bundleFileNames, setBundleFileNames] = React.useState([]);
   const [homeownersForm, setHomeownersForm] = React.useState(EMPTY_HOMEOWNERS_FORM);
   const [autoForm, setAutoForm] = React.useState({
     ...EMPTY_AUTO_FORM,
@@ -83,6 +84,9 @@ export default function QuotifyHome() {
   const [commercialIsParsed, setCommercialIsParsed] = React.useState(false);
   const [commercialManual, setCommercialManual] = React.useState({});
   const [commercialConfidence, setCommercialConfidence] = React.useState({});
+  const [windParsing, setWindParsing] = React.useState(false);
+  const [windParseStatus, setWindParseStatus] = React.useState("");
+  const [windFileName, setWindFileName] = React.useState("");
 
   const [bundleForm, setBundleForm] = React.useState({
     ...EMPTY_BUNDLE_FORM,
@@ -94,6 +98,7 @@ export default function QuotifyHome() {
   const [bundleManual, setBundleManual] = React.useState({});
   const [bundleConfidence, setBundleConfidence] = React.useState({});
 
+  const abortControllerRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
   const advisorDropdownRef = React.useRef(null);
   const mainRef = React.useRef(null);
@@ -204,6 +209,22 @@ export default function QuotifyHome() {
   };
 
   const onBrowseClick = () => fileInputRef.current?.click();
+
+  const cancelParsing = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsParsing(false);
+    setParseStatus("");
+    setErrorMessage("Operation cancelled.");
+    // Reset per-type loading flags
+    setAutoIsLoading(false);
+    setDwellingIsLoading(false);
+    setCommercialIsLoading(false);
+    setBundleIsLoading(false);
+    resetHomeownersFieldState();
+  };
 
   const updateHomeownersField = (key, value) => {
     setHomeownersForm((prev) => ({ ...prev, [key]: value }));
@@ -394,6 +415,9 @@ export default function QuotifyHome() {
     setIsParsing(true);
     startHomeownersFieldState();
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const body = new FormData();
       body.append("file", file);
@@ -401,6 +425,7 @@ export default function QuotifyHome() {
       const response = await fetch(`${API_BASE_URL}/api/parse-homeowners-quote`, {
         method: "POST",
         body,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -555,6 +580,7 @@ export default function QuotifyHome() {
       setHomeownersConfidence(finalConfidence);
       setParseStatus("Done.");
     } catch (error) {
+      if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       resetHomeownersFieldState();
@@ -605,6 +631,9 @@ export default function QuotifyHome() {
     setAutoManual({});
     setAutoConfidence({});
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const body = new FormData();
       body.append("file", file);
@@ -612,6 +641,7 @@ export default function QuotifyHome() {
       const response = await fetch(`${API_BASE_URL}/api/parse-auto-quote`, {
         method: "POST",
         body,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -736,6 +766,7 @@ export default function QuotifyHome() {
       setAutoIsParsed(true);
       setParseStatus("Done.");
     } catch (error) {
+      if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       setAutoIsLoading(false);
@@ -826,6 +857,9 @@ export default function QuotifyHome() {
     setDwellingManual({});
     setDwellingConfidence({});
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const body = new FormData();
       body.append("file", file);
@@ -833,6 +867,7 @@ export default function QuotifyHome() {
       const response = await fetch(`${API_BASE_URL}/api/parse-dwelling-quote`, {
         method: "POST",
         body,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -922,6 +957,7 @@ export default function QuotifyHome() {
       setDwellingIsParsed(true);
       setParseStatus("Done.");
     } catch (error) {
+      if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       setDwellingIsLoading(false);
@@ -1073,23 +1109,32 @@ export default function QuotifyHome() {
     return next;
   };
 
-  const parseBundleFile = async (file) => {
-    setFileName(file.name);
+  const parseBundleFiles = async (files) => {
+    const fileArr = Array.isArray(files) ? files : [files];
+    const names = fileArr.map((f) => f.name);
+    setBundleFileNames(names);
+    setFileName(names.join(", "));
     setErrorMessage("");
-    setParseStatus("Uploading PDF...");
+    setParseStatus("Uploading PDF" + (fileArr.length > 1 ? "s" : "") + "...");
     setIsParsing(true);
     setBundleIsLoading(true);
     setBundleIsParsed(false);
     setBundleManual({});
     setBundleConfidence({});
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const body = new FormData();
-      body.append("file", file);
+      for (const f of fileArr) {
+        body.append("files", f);
+      }
 
       const response = await fetch(`${API_BASE_URL}/api/parse-bundle-quote`, {
         method: "POST",
         body,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -1180,6 +1225,7 @@ export default function QuotifyHome() {
       setBundleIsParsed(true);
       setParseStatus("Done.");
     } catch (error) {
+      if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       setBundleIsLoading(false);
@@ -1195,7 +1241,7 @@ export default function QuotifyHome() {
   // We flatten these into top-level keys so coverage fields populate in real-time.
   const COMMERCIAL_SECTION_KEYS = new Set([
     "commercial_property", "general_liability", "workers_comp",
-    "excess_liability", "cyber",
+    "excess_liability", "cyber", "wind_insurance",
   ]);
 
   const deepMergeCommercialForm = (prev, patch) => {
@@ -1227,6 +1273,9 @@ export default function QuotifyHome() {
     setCommercialManual({});
     setCommercialConfidence({});
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const body = new FormData();
       body.append("file", file);
@@ -1234,6 +1283,7 @@ export default function QuotifyHome() {
       const response = await fetch(`${API_BASE_URL}/api/parse-commercial-quote`, {
         method: "POST",
         body,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -1322,6 +1372,7 @@ export default function QuotifyHome() {
       setCommercialIsParsed(true);
       setParseStatus("Done.");
     } catch (error) {
+      if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       setCommercialIsLoading(false);
@@ -1329,6 +1380,89 @@ export default function QuotifyHome() {
       setCommercialConfidence({});
     } finally {
       setIsParsing(false);
+    }
+  };
+
+  /* ── Wind parser (inline, commercial sub-section) ───────────── */
+  const parseWindFile = async (file) => {
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
+    setWindFileName(file.name);
+    setWindParseStatus("Uploading wind PDF...");
+    setWindParsing(true);
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+
+      const response = await fetch(`${API_BASE_URL}/api/parse-wind-quote`, {
+        method: "POST",
+        body,
+      });
+
+      if (!response.ok) {
+        let detail = "Failed to parse wind quote.";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+      }
+
+      if (!response.body) throw new Error("Streaming not available.");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData = null;
+      let finalConfidence = {};
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let message;
+          try { message = JSON.parse(line); } catch { continue; }
+
+          if (message.type === "status") setWindParseStatus(message.message || "Parsing...");
+          if ((message.type === "draft_patch" || message.type === "final_patch") && message.data) {
+            setCommercialForm((prev) => ({ ...prev, ...message.data }));
+          }
+          if (message.type === "result") {
+            finalData = message.data;
+            finalConfidence = message.confidence || {};
+          }
+          if (message.type === "error") throw new Error(message.error || "Wind parse failed.");
+        }
+      }
+
+      if (buffer.trim()) {
+        try {
+          const message = JSON.parse(buffer);
+          if ((message.type === "draft_patch" || message.type === "final_patch") && message.data) {
+            setCommercialForm((prev) => ({ ...prev, ...message.data }));
+          } else if (message.type === "result") {
+            finalData = message.data;
+            finalConfidence = message.confidence || {};
+          } else if (message.type === "error") throw new Error(message.error || "Wind parse failed.");
+        } catch (_) {}
+      }
+
+      if (finalData) {
+        setCommercialForm((prev) => ({ ...prev, ...finalData }));
+        setCommercialConfidence((prev) => ({ ...prev, ...finalConfidence }));
+      }
+      setWindParseStatus("Done.");
+    } catch (error) {
+      setWindParseStatus("");
+      setWindFileName("");
+      setErrorMessage(error.message || "Wind parse failed.");
+    } finally {
+      setWindParsing(false);
     }
   };
 
@@ -1413,15 +1547,32 @@ export default function QuotifyHome() {
     } else if (selectedInsurance === "commercial") {
       await parseCommercialFile(file);
     } else if (selectedInsurance === "bundle") {
-      await parseBundleFile(file);
+      await parseBundleFiles([file]);
     }
+  };
+
+  const handleBundleFiles = async (fileList) => {
+    if (!fileList || fileList.length === 0 || !uploaderEnabled) return;
+    const pdfs = Array.from(fileList).filter((f) =>
+      f.name.toLowerCase().endsWith(".pdf")
+    );
+    if (pdfs.length === 0) return;
+    if (pdfs.length > 2) {
+      setErrorMessage("Bundle accepts at most 2 PDFs (one homeowners, one auto).");
+      return;
+    }
+    await parseBundleFiles(pdfs);
   };
 
   const handleDrop = async (e) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    await handleFile(file);
+    if (selectedInsurance === "bundle") {
+      await handleBundleFiles(e.dataTransfer.files);
+    } else {
+      const file = e.dataTransfer.files?.[0];
+      await handleFile(file);
+    }
   };
 
   const filteredAdvisors = [...advisors]
@@ -1519,8 +1670,9 @@ export default function QuotifyHome() {
               gap: 14,
               height: "100%",
               boxSizing: "border-box",
-              paddingBottom: 36,
-              overflow: "hidden",
+              paddingBottom: 18,
+              overflowY: "auto",
+              justifyContent: "flex-start",
             }}
           >
           <div style={{ padding: "6px 4px 10px 4px" }}>
@@ -1558,19 +1710,19 @@ export default function QuotifyHome() {
             status={insuranceReady}
             style={{
               flex: 1,
-              minHeight: 220,
+              minHeight: 0,
               display: "flex",
               flexDirection: "column",
-              minWidth: 0,
+              overflow: "hidden",
             }}
           >
             <div
               style={{
                 display: "grid",
-                gap: 8,
+                gap: 6,
                 overflowY: "auto",
-                flex: 1,
                 minHeight: 0,
+                flex: 1,
                 paddingRight: 10,
               }}
             >
@@ -1590,6 +1742,7 @@ export default function QuotifyHome() {
                       setParseStatus("");
                       setIsDragging(false);
                       setFileName("");
+                      setBundleFileNames([]);
                     }}
                     onMouseEnter={() => setHoveredInsurance(item.key)}
                     onMouseLeave={() => setHoveredInsurance("")}
@@ -1597,9 +1750,9 @@ export default function QuotifyHome() {
                       width: "100%",
                       display: "flex",
                       alignItems: "center",
-                      gap: 12,
-                      padding: "10px 12px",
-                      borderRadius: 14,
+                      gap: 10,
+                      padding: "8px 12px",
+                      borderRadius: 12,
                       border: `1px solid ${
                         isSelected ? COLORS.blue : COLORS.borderGrey
                       }`,
@@ -1754,7 +1907,7 @@ export default function QuotifyHome() {
             </div>
           </SidebarBlock>
 
-          <SidebarBlock title="Upload Quote" status={uploadReady}>
+          <SidebarBlock title="Upload Quote" status={uploadReady} style={{ flexShrink: 0 }}>
             <div
               onDragEnter={(e) => {
                 if (!uploaderEnabled) return;
@@ -1776,6 +1929,7 @@ export default function QuotifyHome() {
                 handleDrop(e);
               }}
               style={{
+                minHeight: 200,
                 borderRadius: 16,
                 border: `1.5px dashed ${
                   uploaderEnabled
@@ -1785,7 +1939,7 @@ export default function QuotifyHome() {
                     : COLORS.borderGrey
                 }`,
                 background: uploaderActive ? COLORS.blueSoft : COLORS.white,
-                padding: 14,
+                padding: "18px 14px",
                 transition: "all 200ms ease",
                 opacity: uploaderEnabled ? 1 : 0.5,
                 pointerEvents: uploaderEnabled ? "auto" : "none",
@@ -1800,7 +1954,7 @@ export default function QuotifyHome() {
                   marginBottom: 6,
                 }}
               >
-                {fileName || "Drag & drop PDF"}
+                {fileName || (selectedInsurance === "bundle" ? "Drag & drop 1 or 2 PDFs" : "Drag & drop PDF")}
               </div>
 
               <div
@@ -1811,7 +1965,7 @@ export default function QuotifyHome() {
                   marginBottom: 12,
                 }}
               >
-                PDF only · up to 200MB
+                {selectedInsurance === "bundle" ? "PDF only · 1 combined or 2 separate · up to 200MB each" : "PDF only · up to 200MB"}
               </div>
 
               {isParsing && parseStatus ? (
@@ -1831,8 +1985,15 @@ export default function QuotifyHome() {
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf"
+                multiple={selectedInsurance === "bundle"}
                 style={{ display: "none" }}
-                onChange={(e) => handleFile(e.target.files?.[0])}
+                onChange={(e) => {
+                  if (selectedInsurance === "bundle") {
+                    handleBundleFiles(e.target.files);
+                  } else {
+                    handleFile(e.target.files?.[0]);
+                  }
+                }}
               />
 
               <button
@@ -1869,27 +2030,48 @@ export default function QuotifyHome() {
               >
                 {isParsing ? "PARSING..." : "Browse Files"}
               </button>
+
+              {isParsing && (
+                <button
+                  type="button"
+                  onClick={cancelParsing}
+                  style={{
+                    width: "100%",
+                    height: 36,
+                    marginTop: 8,
+                    borderRadius: 12,
+                    border: `1px solid ${COLORS.danger}`,
+                    background: COLORS.dangerSoft,
+                    color: COLORS.danger,
+                    fontWeight: 600,
+                    fontSize: 12,
+                    fontFamily: "Poppins, sans-serif",
+                    cursor: "pointer",
+                    transition: "all 200ms ease",
+                  }}
+                >
+                  Cancel Operation
+                </button>
+              )}
+
+              {errorMessage && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    borderRadius: 10,
+                    border: `1px solid ${COLORS.dangerBorder}`,
+                    background: COLORS.dangerSoft,
+                    color: COLORS.danger,
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {errorMessage}
+                </div>
+              )}
             </div>
           </SidebarBlock>
-
-          {errorMessage ? (
-            <div
-              style={{
-                marginTop: "auto",
-                borderRadius: 14,
-                border: `1px solid ${COLORS.dangerBorder}`,
-                background: COLORS.dangerSoft,
-                color: COLORS.danger,
-                padding: 12,
-                fontSize: 12,
-                lineHeight: 1.45,
-              }}
-            >
-              {errorMessage}
-            </div>
-          ) : (
-            <div style={{ marginTop: "auto" }} />
-          )}
           </div>
         </aside>
 
@@ -2064,6 +2246,10 @@ export default function QuotifyHome() {
                 SmallGhostButton={SmallGhostButton}
                 EmptyHint={EmptyHint}
                 COLORS={COLORS}
+                onWindFile={parseWindFile}
+                windParsing={windParsing}
+                windParseStatus={windParseStatus}
+                windFileName={windFileName}
               />
             ) : selectedInsurance === "bundle" ? (
               <BundlePanel

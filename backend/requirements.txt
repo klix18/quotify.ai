@@ -42,3 +42,5 @@ uvicorn==0.32.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
+Jinja2>=3.0
+playwright>=1.40.0

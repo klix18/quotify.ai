@@ -1,0 +1,81 @@
+from pathlib import Path
+from uuid import uuid4
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+from jinja2 import Environment, FileSystemLoader
+from browser_manager import get_browser
+
+router = APIRouter()
+
+BASE_DIR = Path(__file__).resolve().parent
+TEMPLATES_ROOT = BASE_DIR / "templates"
+TEMPLATE_DIR = TEMPLATES_ROOT / "dwelling"
+GENERATED_DIR = BASE_DIR / "generated_quotes"
+GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+
+jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_ROOT)))
+
+
+async def render_dwelling_pdf(output_path: Path, data: dict):
+    """Render the dwelling HTML template with data and convert to PDF."""
+    template = jinja_env.get_template("dwelling/dwelling_quote.html")
+
+    context = {
+        # Policy
+        "total_premium": data.get("total_premium", ""),
+        # Client / Agent
+        "named_insured": data.get("named_insured", ""),
+        "client_address": data.get("client_address", ""),
+        "client_phone": data.get("client_phone", ""),
+        "client_email": data.get("client_email", ""),
+        "agent_name": data.get("agent_name", ""),
+        "agent_address": data.get("agent_address", ""),
+        "agent_phone": data.get("agent_phone", ""),
+        "agent_email": data.get("agent_email", ""),
+        # Properties (array — passed through for Jinja loop)
+        "properties": data.get("properties", []),
+        # Payment plans (nested dict passed through)
+        "payment_plans": data.get("payment_plans", {}),
+    }
+
+    html_string = template.render(**context)
+
+    tmp_html = TEMPLATE_DIR / f"_tmp_render_{uuid4().hex}.html"
+    tmp_html.write_text(html_string, encoding="utf-8")
+
+    browser = await get_browser()
+    page = await browser.new_page()
+    try:
+        await page.goto(tmp_html.resolve().as_uri(), wait_until="networkidle")
+        await page.pdf(
+            path=str(output_path),
+            prefer_css_page_size=True,
+            print_background=True,
+            margin={"top": "0", "right": "0", "bottom": "0", "left": "0"},
+        )
+    finally:
+        await page.close()
+        tmp_html.unlink(missing_ok=True)
+
+
+@router.post("/api/generate-dwelling-quote")
+async def generate_dwelling_quote(payload: dict):
+    try:
+        output_path = GENERATED_DIR / f"dwelling_quote_{uuid4().hex}.pdf"
+
+        await render_dwelling_pdf(output_path=output_path, data=payload)
+
+        client_name = str(payload.get("named_insured", "")).strip()
+        date_str = datetime.now().strftime("%m-%d-%Y")
+        safe_client = "-".join(client_name.split()) if client_name else "Unknown"
+        download_name = f"dwelling_quote_{date_str}_{safe_client}.pdf"
+
+        return FileResponse(
+            path=output_path,
+            media_type="application/pdf",
+            filename=download_name,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

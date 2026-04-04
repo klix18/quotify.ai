@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap">
+  <style>
+    /* ── Sentient Variable (local) ───────────────────────── */
+    @font-face {
+      font-family: 'Sentient';
+      src: url('../../../fonts/WEB/fonts/Sentient-Regular.woff2') format('woff2'),
+           url('../../../fonts/WEB/fonts/Sentient-Regular.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Sentient';
+      src: url('../../../fonts/WEB/fonts/Sentient-Bold.woff2') format('woff2'),
+           url('../../../fonts/WEB/fonts/Sentient-Bold.ttf') format('truetype');
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    /* ── Reset ───────────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    @page {
+      size: 816px 1056px;   /* 8.5 × 11 in at 96dpi (Chromium's CSS px) */
+      margin: 0;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       7 FONT STYLES — strict type system
+       ═══════════════════════════════════════════════════════
+       1. HEADER        — Sentient Bold 50px  #0451BD
+       2. SUBHEADER     — Poppins 500   16px  #4F4E4F
+       3. SECTION HEADER— Sentient 400  28px  #20272D
+       4. BODY          — Poppins 400   11px  #20272D
+       5. SECTION DESC  — Poppins 400   13px  #4F4E4F
+       6. FOOTER        — Poppins 500i  7.5px #4F4E4F
+       7a. POLICY NAME  — Poppins 600   15px  #0451BD
+       7b. POLICY VALUE — Poppins 400   15px  #0451BD
+       ═══════════════════════════════════════════════════════ */
+
+    /* ── Page frame ──────────────────────────────────────── */
+    .page {
+      width: 816px;
+      height: 1056px;
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      background: #fff;
+    }
+    .page:last-child { page-break-after: auto; }
+
+    .page-inner {
+      padding: 36px 44px 40px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Shared ──────────────────────────────────────────── */
+    .sentient { font-family: 'Sentient', serif; line-height: 1.10; letter-spacing: -0.06em; }
+    .r8 { border-radius: 16px; }
+
+    /* ── 6. FOOTER ───────────────────────────────────────── */
+    .disclaimer {
+      position: absolute;
+      bottom: 16px;
+      left: 44px;
+      right: 44px;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 500;
+      font-size: 7.5px;
+      color: #4F4E4F;
+      text-align: center;
+      font-style: italic;
+    }
+
+
+    /* ═════════════════════════════════════════════════════
+       PAGE 1 — COVER
+       ═════════════════════════════════════════════════════ */
+
+    .logo-wrap { text-align: center; margin-bottom: 4px; }
+    .logo-wrap img { height: 50px; }
+
+    /* 1. HEADER */
+    .cover-title {
+      text-align: center;
+      font-weight: 700;
+      font-size: 50px;
+      color: #0451BD;
+      margin-bottom: 4px;
+    }
+
+    /* 2. SUBHEADER */
+    .cover-subtitle {
+      text-align: center;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 500;
+      font-size: 16px;
+      color: #4F4E4F;
+      margin-bottom: 24px;
+    }
+
+    /* Hero image + premium banner */
+    .hero-banner-wrap {
+      width: 100%;
+      margin-bottom: 20px;
+    }
+
+    .hero-wrap {
+      position: relative;
+      width: 100%;
+      height: 280px;
+      border-radius: 16px 16px 0 0;
+      overflow: hidden;
+    }
+    .hero-wrap img.hero-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 60%;
+      display: block;
+    }
+    .hero-icon {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      width: 52px;
+      height: auto;
+      opacity: 1;
+    }
+
+    .premium-banner {
+      background: #fff;
+      border: 8px solid #3DD990;
+      border-radius: 0 0 16px 16px;
+      text-align: center;
+      padding: 30px 32px 34px;
+    }
+    /* 3. SECTION HEADER — used for "Recommended Protection Plan" */
+    .premium-label {
+      font-weight: 400;
+      font-size: 28px;
+      color: #20272D;
+      margin-bottom: 2px;
+    }
+    /* 1. HEADER variant — premium amount */
+    .premium-amount {
+      font-weight: 700;
+      font-size: 42px;
+      color: #20272D;
+    }
+
+    /* Premium breakdown row (bundle home + auto) */
+    .premium-breakdown {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      margin-top: 8px;
+    }
+    .premium-sub {
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      color: #4F4E4F;
+    }
+    .premium-sub strong {
+      font-weight: 600;
+      color: #0451BD;
+    }
+
+    /* "Why This Plan Was Selected" */
+    .why-section {
+      display: flex;
+      align-items: flex-start;
+      gap: 36px;
+      margin-bottom: 32px;
+    }
+    /* 3. SECTION HEADER */
+    .why-title {
+      font-weight: 400;
+      font-size: 28px;
+      color: #20272D;
+      min-width: 160px;
+    }
+    /* 5. SECTION DESC */
+    .why-bullets {
+      list-style: disc;
+      padding-left: 16px;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 13px;
+      color: #4F4E4F;
+      line-height: 1.75;
+    }
+    .why-bullets li { margin-bottom: 2px; }
+
+    /* Client / Agent info cards */
+    .info-row {
+      display: flex;
+      gap: 18px;
+      margin-top: auto;
+    }
+    .info-card {
+      flex: 1;
+      background: #F2F2F2;
+      padding: 20px 24px;
+    }
+    /* Client card: inside gradient stroke */
+    .info-card-client {
+      position: relative;
+      border-radius: 16px;
+    }
+    .info-card-client::before {
+      content: '';
+      position: absolute;
+      top: 10%;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border-radius: 0 0 16px 16px;
+      padding: 4px;
+      background: linear-gradient(to bottom, rgba(162, 222, 247, 0), rgba(162, 222, 247, 0.6) 40%, rgba(23, 101, 212, 1));
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+    /* 3. SECTION HEADER */
+    .info-card h3 {
+      font-weight: 400;
+      font-size: 28px;
+      color: #20272D;
+      margin-bottom: 14px;
+    }
+    /* 4. BODY */
+    .info-field {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      display: flex;
+      margin-bottom: 4px;
+      line-height: 1.45;
+    }
+    .info-label {
+      font-weight: 500;
+      min-width: 62px;
+    }
+    .info-gap { margin-bottom: 8px; }
+    .info-address { margin-bottom: 14px; min-height: 28px; }
+
+
+    /* ═════════════════════════════════════════════════════
+       DETAIL PAGES — SHARED STYLES
+       ═════════════════════════════════════════════════════ */
+
+    /* 3. SECTION HEADER */
+    .section-heading {
+      font-weight: 400;
+      font-size: 28px;
+      color: #20272D;
+    }
+
+    /* 5. SECTION DESC */
+    .section-sub {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 13px;
+      color: #4F4E4F;
+      margin-bottom: 12px;
+    }
+
+    /* 2×2 coverage grid */
+    .coverage-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .cov-card {
+      width: calc(50% - 7px);
+      background: #F2F2F2;
+      padding: 16px 20px;
+    }
+    .cov-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    /* 7a. POLICY NAME */
+    .cov-name {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 7b. POLICY VALUE */
+    .cov-value {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 4. BODY */
+    .cov-desc {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      line-height: 1.5;
+    }
+
+    /* Liability cards */
+    .liab-card {
+      background: #F2F2F2;
+      padding: 14px 20px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+    }
+    .liab-left { min-width: 155px; }
+    /* 7a. POLICY NAME */
+    .liab-name {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 7b. POLICY VALUE */
+    .liab-val {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 15px;
+      color: #0451BD;
+      margin-top: 2px;
+    }
+    /* 4. BODY */
+    .liab-desc {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      line-height: 1.5;
+      flex: 1;
+    }
+
+    /* Other — single container */
+    .other-container {
+      background: #F2F2F2;
+      padding: 20px 24px;
+    }
+    .other-entry { margin-bottom: 12px; }
+    .other-entry:last-child { margin-bottom: 0; }
+    .other-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+    /* 7a. POLICY NAME */
+    .other-name {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 7b. POLICY VALUE */
+    .other-val {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 4. BODY */
+    .other-desc {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      line-height: 1.45;
+    }
+
+    /* Data tables (drivers, vehicles, class codes) */
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+    .detail-table th {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 11px;
+      color: #0451BD;
+      text-align: left;
+      padding: 8px 12px;
+      background: #E8EFF8;
+      border-bottom: 2px solid #C4D8F3;
+    }
+    .detail-table td {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      padding: 8px 12px;
+      border-bottom: 1px solid #E8EFF8;
+    }
+    .detail-table tr:last-child td { border-bottom: none; }
+
+    /* Payment plan grid */
+    .payment-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .payment-card {
+      width: calc(50% - 7px);
+      background: #F2F2F2;
+      padding: 16px 20px;
+    }
+    .payment-card-title {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: #0451BD;
+      margin-bottom: 8px;
+    }
+    .payment-row {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+      color: #20272D;
+      margin-bottom: 4px;
+    }
+    .payment-row-label { font-weight: 500; }
+    .payment-row-value { font-weight: 400; }
+
+    /* Vehicle premium breakdown */
+    .vehicle-premium-card {
+      background: #F2F2F2;
+      padding: 16px 20px;
+      margin-bottom: 10px;
+    }
+    .vehicle-premium-title {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      color: #0451BD;
+      margin-bottom: 8px;
+    }
+    .premium-row {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+      color: #20272D;
+      margin-bottom: 3px;
+    }
+    .premium-row-label { font-weight: 400; }
+    .premium-row-value { font-weight: 500; }
+    .premium-row-total {
+      border-top: 1px solid #C4D8F3;
+      padding-top: 6px;
+      margin-top: 4px;
+      font-weight: 600;
+    }
+
+    /* Property info banner (dwelling) */
+    .property-banner {
+      background: #E8EFF8;
+      padding: 14px 20px;
+      margin-bottom: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 32px;
+    }
+    .property-banner-item {
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+      color: #20272D;
+    }
+    .property-banner-item strong {
+      font-weight: 600;
+      color: #0451BD;
+    }
+
+    
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════  PAGE 1 — COVER  ════════════════════════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="bundle/assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="cover-title sentient">Bundle Insurance</div>
+    <div class="cover-subtitle">Insurance made just for you</div>
+
+    <div class="hero-banner-wrap">
+      <div class="hero-wrap">
+        
+<img class="hero-img" src="bundle/assets/bundle-image-1.jpg" alt="">
+<img class="hero-icon" src="bundle/assets/white-bundle-icon.png" alt="">
+
+      </div>
+      <div class="premium-banner">
+        <div class="premium-label sentient">Recommended Protection Plan</div>
+        
+<div class="premium-amount sentient">$4,203/yr</div>
+<div class="premium-breakdown">
+  <span class="premium-sub">Homeowners: <strong>$2,847</strong></span>
+  <span class="premium-sub">Auto: <strong>$1,356</strong></span>
+</div>
+
+      </div>
+    </div>
+
+    <div class="why-section">
+      <div class="why-title sentient">Why This Plan<br>Was Selected</div>
+      <ul class="why-bullets">
+        
+<li>Bundles your home and auto coverage for maximum multi-policy savings.</li>
+<li>Protects the full cost to rebuild your home and covers your vehicles comprehensively.</li>
+<li>Provides strong liability protection across both policies to safeguard your assets.</li>
+<li>Keeps deductibles at a level that is realistic if a loss occurs.</li>
+
+      </ul>
+    </div>
+
+    <div class="info-row">
+      <div class="info-card info-card-client">
+        <h3 class="sentient">Client Information</h3>
+        <div class="info-field info-gap">
+          <span class="info-label">Name:</span>
+          <span>Sarah Johnson</span>
+        </div>
+        <div class="info-field info-address">
+          <span class="info-label">Address:</span>
+          <span>4521 Coral Way, Miami FL 33145</span>
+        </div>
+        <div class="info-field">
+          <span class="info-label">Phone:</span>
+          <span>(305) 555-0187</span>
+        </div>
+        <div class="info-field">
+          <span class="info-label">Email:</span>
+          <span>sarah.johnson@email.com</span>
+        </div>
+      </div>
+
+      <div class="info-card r8">
+        <h3 class="sentient">Agent Information</h3>
+        <div class="info-field info-gap">
+          <span class="info-label">Name:</span>
+          <span>Michael Torres</span>
+        </div>
+        <div class="info-field info-address">
+          <span class="info-label">Address:</span>
+          <span>8900 SW 72nd St, Miami FL 33173</span>
+        </div>
+        <div class="info-field">
+          <span class="info-label">Phone:</span>
+          <span>(305) 555-0234</span>
+        </div>
+        <div class="info-field">
+          <span class="info-label">Email:</span>
+          <span>mtorres@sizemoreins.com</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+
+<!-- ════════════════════  PAGE 2 — HOMEOWNERS DETAILS  ══════════════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="bundle/assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 14px;">Homeowners Protection Details</div>
+
+    <div class="coverage-grid">
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Dwelling</span>
+          <span class="cov-value">$425,000</span>
+        </div>
+        <div class="cov-desc">Protects the cost to repair or fully rebuild your home.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Other Structures</span>
+          <span class="cov-value">$42,500</span>
+        </div>
+        <div class="cov-desc">Covers detached structures such as garages, fences, or sheds on your property.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Personal Property</span>
+          <span class="cov-value">$212,500</span>
+        </div>
+        <div class="cov-desc">Protects belongings inside your home including furniture, electronics, clothing, and household items.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Loss of Use</span>
+          <span class="cov-value">$85,000</span>
+        </div>
+        <div class="cov-desc">Helps pay for temporary living expenses if your home becomes uninhabitable due to a covered loss.</div>
+      </div>
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Liability Protection</div>
+    <div class="section-sub">These coverages work together to restore home and daily life after a covered loss.</div>
+
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Personal Liability</div>
+        <div class="liab-val">$300,000</div>
+      </div>
+      <div class="liab-desc">Provides coverage if someone is injured on your property, such as at a child's birthday party or if a guest trips and falls while visiting, and you are found legally responsible.</div>
+    </div>
+
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Medical Payments</div>
+        <div class="liab-val">$5,000</div>
+      </div>
+      <div class="liab-desc">Helps cover minor medical expenses for a guest injured on your property regardless of fault.</div>
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 14px;">Other</div>
+
+    <div class="other-container r8">
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">All-Perils Deductible</span>
+          <span class="other-val">$2,500</span>
+        </div>
+        <div class="other-desc">The amount you pay out of pocket before your homeowners coverage kicks in for most types of claims.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Wind/Hail Deductible</span>
+          <span class="other-val">2%</span>
+        </div>
+        <div class="other-desc">The percentage of the dwelling coverage amount you pay for damage specifically caused by wind or hail.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Water and Sewer Backup</span>
+          <span class="other-val">$25,000</span>
+        </div>
+        <div class="other-desc">Provides coverage for damage caused by water backup through sewers or drains.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Replacement Cost</span>
+          <span class="other-val">Yes</span>
+        </div>
+        <div class="other-desc">Ensures you receive the full cost to replace damaged personal property without depreciation.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">25% Extended Replacement Cost</span>
+          <span class="other-val">Yes</span>
+        </div>
+        <div class="other-desc">Provides an additional 25% of coverage beyond the policy's limit to help rebuild your home in case construction costs exceed the original amount insured.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+<!-- ════════════════════  PAGE 3 — AUTO COVERAGE DETAILS  ══════════════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="bundle/assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 14px;">Auto Coverage Details</div>
+
+    <div class="section-heading sentient" style="font-size: 22px; margin-bottom: 4px;">Liability Limits</div>
+    <div class="section-sub">These limits define the maximum your policy will pay for injuries or damage you cause to others.</div>
+
+    <div class="coverage-grid">
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Bodily Injury</span>
+          <span class="cov-value">$100,000 / $300,000</span>
+        </div>
+        <div class="cov-desc">Covers medical expenses and legal costs if you injure someone in an accident you caused.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Property Damage</span>
+          <span class="cov-value">$100,000</span>
+        </div>
+        <div class="cov-desc">Pays to repair or replace another person's property that you damage in an at-fault accident.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Medical Payments</span>
+          <span class="cov-value">$5,000</span>
+        </div>
+        <div class="cov-desc">Covers medical expenses for you and your passengers regardless of who is at fault.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">UM/UIM Bodily Injury</span>
+          <span class="cov-value">$100,000 / $300,000</span>
+        </div>
+        <div class="cov-desc">Protects you if you're injured by a driver who has no insurance or insufficient coverage.</div>
+      </div>
+    </div>
+
+    <div class="section-heading sentient" style="font-size: 22px; margin-top: 8px; margin-bottom: 4px;">Additional Coverages</div>
+    <div class="section-sub">Extra protections that round out your auto policy for broader peace of mind.</div>
+
+    
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">UMPD Limit</div>
+        <div class="liab-val">$25,000</div>
+      </div>
+      <div class="liab-desc">Covers damage to your vehicle caused by an uninsured or hit-and-run driver.</div>
+    </div>
+    
+
+    
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Rental Reimbursement</div>
+        <div class="liab-val">$50/day</div>
+      </div>
+      <div class="liab-desc">Pays for a rental car while your vehicle is being repaired after a covered claim.</div>
+    </div>
+    
+
+    
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Towing &amp; Roadside</div>
+        <div class="liab-val">$100</div>
+      </div>
+      <div class="liab-desc">Covers towing costs and roadside assistance such as jump-starts, lockouts, and flat tire changes.</div>
+    </div>
+    
+
+    <div class="section-heading sentient" style="font-size: 22px; margin-top: 14px; margin-bottom: 14px;">Deductibles</div>
+
+    <div class="other-container r8">
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Comprehensive Deductible</span>
+          <span class="other-val">$500</span>
+        </div>
+        <div class="other-desc">Your out-of-pocket cost before coverage applies for non-collision events like theft, vandalism, or weather damage.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Collision Deductible</span>
+          <span class="other-val">$500</span>
+        </div>
+        <div class="other-desc">The amount you pay before coverage kicks in when your vehicle collides with another object or vehicle.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+<!-- ════════════════════  PAGE 4 — DRIVERS, VEHICLES & PAYMENTS  ══════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="bundle/assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Listed Drivers</div>
+    <div class="section-sub">All drivers listed on the policy and their basic information.</div>
+
+    <table class="detail-table r8">
+      <thead>
+        <tr><th>Driver Name</th><th>Gender</th><th>Marital Status</th><th>License State</th></tr>
+      </thead>
+      <tbody>
+        
+        <tr><td>Sarah Johnson</td><td>Female</td><td>Married</td><td>FL</td></tr>
+        
+      </tbody>
+    </table>
+    
+
+    
+    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Insured Vehicles</div>
+    <div class="section-sub">Vehicles covered under this policy along with their premium breakdowns.</div>
+
+    <table class="detail-table r8">
+      <thead>
+        <tr><th>Year / Make / Model / Trim</th><th>VIN</th><th>Use</th><th>Garaging ZIP</th></tr>
+      </thead>
+      <tbody>
+        
+        <tr><td>2023 Toyota Camry XSE</td><td>4T1G11AK3PU...</td><td>Commute</td><td>33145</td></tr>
+        
+      </tbody>
+    </table>
+
+    
+    
+    <div class="vehicle-premium-card r8">
+      <div class="vehicle-premium-title">2023 Toyota Camry XSE — Premium Breakdown</div>
+      <div class="premium-row"><span class="premium-row-label">Bodily Injury</span><span class="premium-row-value">$245</span></div>
+      <div class="premium-row"><span class="premium-row-label">Property Damage</span><span class="premium-row-value">$189</span></div>
+      <div class="premium-row"><span class="premium-row-label">Medical Payments</span><span class="premium-row-value">$32</span></div>
+      <div class="premium-row"><span class="premium-row-label">UM/UIM Bodily Injury</span><span class="premium-row-value">$67</span></div>
+      <div class="premium-row"><span class="premium-row-label">Comprehensive</span><span class="premium-row-value">$156</span></div>
+      <div class="premium-row"><span class="premium-row-label">Collision</span><span class="premium-row-value">$234</span></div>
+      <div class="premium-row"><span class="premium-row-label">Rental Reimbursement</span><span class="premium-row-value">$28</span></div>
+      <div class="premium-row"><span class="premium-row-label">Towing &amp; Roadside</span><span class="premium-row-value">$12</span></div>
+      <div class="premium-row premium-row-total"><span class="premium-row-label">Vehicle Subtotal</span><span class="premium-row-value">$963</span></div>
+    </div>
+    
+    
+    
+
+    
+    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Payment Options</div>
+    <div class="section-sub">Available payment plans for the auto portion of this bundle.</div>
+
+    <div class="payment-grid">
+      
+      <div class="payment-card r8">
+        <div class="payment-card-title">Full Pay</div>
+        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">$1,356</span></div>
+      </div>
+      
+      
+      
+      
+      <div class="payment-card r8">
+        <div class="payment-card-title">Monthly</div>
+        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">$200</span></div>
+        <div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">$115</span></div>
+      </div>
+      
+    </div>
+    
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+</body>
+</html>

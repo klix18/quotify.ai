@@ -1,3 +1,4 @@
+import React from "react";
 import {
   COMMERCIAL_POLICY_FIELDS,
   COMMERCIAL_CLIENT_FIELDS,
@@ -8,6 +9,8 @@ import {
   WC_CLASS_CODE_FIELDS,
   EXCESS_COVERAGE_FIELDS,
   CYBER_COVERAGE_FIELDS,
+  WIND_COVERAGE_FIELDS,
+  WIND_BUYDOWN_FIELDS,
 } from "./commercialConfig";
 
 export default function CommercialPanel({
@@ -27,6 +30,10 @@ export default function CommercialPanel({
   SmallGhostButton,
   EmptyHint,
   COLORS,
+  onWindFile,
+  windParsing,
+  windParseStatus,
+  windFileName,
 }) {
   /* ── helpers ─────────────────────────────────────────────────── */
   const fp = (path) => ({
@@ -42,23 +49,33 @@ export default function CommercialPanel({
 
   const cell6 = { gridColumn: "span 6", minWidth: 0 };
 
-  /* helper: render a coverage section with rows of N (4 per row default, remainder fills wider) */
+  /* helper: render a coverage section where every row fills full 12-col width */
   const renderCoverageSection = (title, coverageFields, { perRow = 4 } = {}) => {
-    const span = perRow === 2 ? cell6 : cell3;
+    const defaultSpan = 12 / perRow; // 3 for perRow=4, 6 for perRow=2
+    const total = coverageFields.length;
+    const remainder = total % perRow;
+
     return (
       <SectionCard title={title}>
         <div style={gridRow}>
-          {coverageFields.map(([key, label]) => (
-            <div key={key} style={span}>
-              <FieldControl
-                fieldKey={key}
-                label={label}
-                value={form[key] || ""}
-                onChange={onFieldChange}
-                {...fp(key)}
-              />
-            </div>
-          ))}
+          {coverageFields.map(([key, label], i) => {
+            // For last-row fields when they don't fill a complete row, expand them
+            let span = defaultSpan;
+            if (remainder > 0 && i >= total - remainder) {
+              span = 12 / remainder;
+            }
+            return (
+              <div key={key} style={{ gridColumn: `span ${span}`, minWidth: 0 }}>
+                <FieldControl
+                  fieldKey={key}
+                  label={label}
+                  value={form[key] || ""}
+                  onChange={onFieldChange}
+                  {...fp(key)}
+                />
+              </div>
+            );
+          })}
         </div>
       </SectionCard>
     );
@@ -232,6 +249,191 @@ export default function CommercialPanel({
     CYBER_COVERAGE_FIELDS,
   );
 
+  /* ============================================================
+     SECTION 8 — Wind Insurance (toggle sub-sections)
+     ============================================================ */
+  const [showWindCoverage, setShowWindCoverage] = React.useState(
+    () => WIND_COVERAGE_FIELDS.some(([k]) => !!form[k])
+  );
+  const [showWindBuydown, setShowWindBuydown] = React.useState(
+    () => WIND_BUYDOWN_FIELDS.some(([k]) => !!form[k])
+  );
+
+  const windFileRef = React.useRef(null);
+
+  const windSection = (
+    <SectionCard title="Wind Insurance">
+      {/* Toggle buttons */}
+      <div style={{ display: "flex", gap: 10, marginBottom: showWindCoverage || showWindBuydown ? 14 : 0 }}>
+        <button
+          type="button"
+          onClick={() => setShowWindCoverage(true)}
+          disabled={showWindCoverage}
+          style={{
+            border: `1px solid ${COLORS.blue}`,
+            background: showWindCoverage ? COLORS.blue : COLORS.blueSoft,
+            color: showWindCoverage ? "#fff" : COLORS.blue,
+            borderRadius: 999,
+            padding: "8px 12px",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: showWindCoverage ? "default" : "pointer",
+            fontFamily: "Poppins, sans-serif",
+            transition: "all 200ms ease",
+          }}
+        >
+          {showWindCoverage ? "✓ Wind Coverage" : "+ Wind Coverage"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowWindBuydown(true)}
+          disabled={showWindBuydown}
+          style={{
+            border: `1px solid ${COLORS.blue}`,
+            background: showWindBuydown ? COLORS.blue : COLORS.blueSoft,
+            color: showWindBuydown ? "#fff" : COLORS.blue,
+            borderRadius: 999,
+            padding: "8px 12px",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: showWindBuydown ? "default" : "pointer",
+            fontFamily: "Poppins, sans-serif",
+            transition: "all 200ms ease",
+          }}
+        >
+          {showWindBuydown ? "✓ Wind Buydown" : "+ Wind Buydown"}
+        </button>
+      </div>
+
+      {/* Compact inline wind PDF dropbox */}
+      {(showWindCoverage || showWindBuydown) && (
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files?.[0];
+            if (file && file.type === "application/pdf") onWindFile?.(file);
+          }}
+          style={{
+            borderRadius: 10,
+            border: `1.5px dashed ${COLORS.borderStrong}`,
+            background: COLORS.white,
+            padding: "10px 14px",
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.blue, lineHeight: 1.3 }}>
+              {windParsing
+                ? (windParseStatus || "Parsing...")
+                : windFileName
+                  ? windFileName
+                  : "Upload wind PDF (optional)"}
+            </div>
+            <div style={{ fontSize: 11, color: COLORS.mutedText, lineHeight: 1.3, marginTop: 2 }}>
+              Drag & drop or browse to parse wind fields
+            </div>
+          </div>
+          <input
+            ref={windFileRef}
+            type="file"
+            accept="application/pdf"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onWindFile?.(file);
+            }}
+          />
+          <button
+            type="button"
+            disabled={windParsing}
+            onClick={() => windFileRef.current?.click()}
+            style={{
+              flexShrink: 0,
+              border: `1px solid ${COLORS.borderGrey}`,
+              background: COLORS.lightGrey,
+              color: COLORS.blue,
+              borderRadius: 8,
+              padding: "6px 14px",
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: "Poppins, sans-serif",
+              cursor: windParsing ? "not-allowed" : "pointer",
+              transition: "all 150ms ease",
+            }}
+          >
+            {windParsing ? "Parsing..." : "Browse"}
+          </button>
+        </div>
+      )}
+
+      {/* Wind Coverage fields */}
+      {showWindCoverage && (
+        <div style={{ marginBottom: showWindBuydown ? 18 : 0 }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 12,
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: COLORS.black }}>
+              Wind Coverage
+            </div>
+            <SmallGhostButton onClick={() => setShowWindCoverage(false)}>
+              Remove
+            </SmallGhostButton>
+          </div>
+          <div style={gridRow}>
+            {WIND_COVERAGE_FIELDS.map(([key, label]) => (
+              <div key={key} style={cell3}>
+                <FieldControl
+                  fieldKey={key}
+                  label={label}
+                  value={form[key] || ""}
+                  onChange={onFieldChange}
+                  {...fp(key)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Wind Buydown fields */}
+      {showWindBuydown && (
+        <div>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 12,
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: COLORS.black }}>
+              Wind Buydown
+            </div>
+            <SmallGhostButton onClick={() => setShowWindBuydown(false)}>
+              Remove
+            </SmallGhostButton>
+          </div>
+          <div style={gridRow}>
+            {WIND_BUYDOWN_FIELDS.map(([key, label]) => (
+              <div key={key} style={cell4}>
+                <FieldControl
+                  fieldKey={key}
+                  label={label}
+                  value={form[key] || ""}
+                  onChange={onFieldChange}
+                  {...fp(key)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+
   /* ── render ──────────────────────────────────────────────────── */
   return (
     <div style={{ display: "grid", gap: 18 }}>
@@ -243,6 +445,7 @@ export default function CommercialPanel({
       {workersCompSection}
       {excessLiabilitySection}
       {cyberSection}
+      {windSection}
     </div>
   );
 }

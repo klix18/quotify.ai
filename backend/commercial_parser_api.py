@@ -102,9 +102,25 @@ CYBER_KEYS = [
     "cyber_media_tech_liability",
 ]
 
+# Wind Insurance
+WIND_COVERAGE_KEYS = [
+    "wind_coverage",
+    "wind_deductible",
+    "wind_percent_deductible",
+    "wind_coverage_premium",
+]
+
+WIND_BUYDOWN_KEYS = [
+    "wind_buydown",
+    "wind_buydown_amount",
+    "wind_buydown_premium",
+]
+
+WIND_KEYS = WIND_COVERAGE_KEYS + WIND_BUYDOWN_KEYS
+
 ALL_FLAT_KEYS = (
     POLICY_KEYS + AGENT_KEYS + CP_KEYS + GL_KEYS +
-    WC_FLAT_KEYS + EXCESS_KEYS + CYBER_KEYS
+    WC_FLAT_KEYS + EXCESS_KEYS + CYBER_KEYS + WIND_KEYS
 )
 
 
@@ -146,6 +162,7 @@ SECTION_MAP = {
     "general_liability": GL_KEYS,
     "excess_liability": EXCESS_KEYS,
     "cyber": CYBER_KEYS,
+    "wind_insurance": WIND_KEYS,
 }
 
 COMMERCIAL_SCHEMA = {
@@ -275,6 +292,25 @@ CYBER LIABILITY
 • cyber_media_tech_liability – Media, Tech, Data & Network Liability limit.
     ALIASES: "Media, Tech, Data & Network Liability", "Tech & Professional Services"
 
+WIND INSURANCE
+Wind Coverage (only populate if wind coverage is present in the document):
+• wind_coverage – Wind coverage limit or description.
+    ALIASES: "Wind", "Wind Coverage", "Named Storm"
+• wind_deductible – Wind deductible (dollar amount).
+    ALIASES: "Wind Deductible", "Named Storm Deductible"
+• wind_percent_deductible – Wind percentage deductible (e.g., "2%", "5%").
+    ALIASES: "Wind % Deductible", "Wind Percentage Deductible"
+• wind_coverage_premium – Premium for wind coverage.
+    ALIASES: "Wind Premium", "Named Storm Premium"
+
+Wind Buydown (only populate if wind buydown is present in the document):
+• wind_buydown – Wind buydown description or limit.
+    ALIASES: "Wind Buydown", "Wind Deductible Buydown"
+• wind_buydown_amount – Buydown amount.
+    ALIASES: "Buydown Amount"
+• wind_buydown_premium – Premium for wind buydown.
+    ALIASES: "Wind Buydown Premium", "Buydown Premium"
+
 ─── RULES ────────────────────────────────────────────────────────
 • Return ONLY the JSON object. No commentary.
 • If a field cannot be found, return "" for strings, [] for arrays.
@@ -333,6 +369,10 @@ For cyber:
   cyber_aggregate_limit, cyber_deductible, cyber_breach_response,
   cyber_business_interruption, cyber_cyber_extortion,
   cyber_funds_transfer_fraud, cyber_regulatory_defense, cyber_media_tech_liability
+
+For wind insurance (only if wind coverage is present in document):
+  wind_coverage, wind_deductible, wind_percent_deductible, wind_coverage_premium,
+  wind_buydown, wind_buydown_amount, wind_buydown_premium
 
 Field aliases to look for:
 - building_limit: "Building", "Building Limit"

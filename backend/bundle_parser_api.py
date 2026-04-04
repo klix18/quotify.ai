@@ -12,6 +12,8 @@ import tempfile
 from pathlib import Path
 from typing import Iterator
 
+from typing import List
+
 from dotenv import load_dotenv
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -129,11 +131,11 @@ BUNDLE_SCHEMA = {
         "medical_payments": {"type": "string"},
         "replacement_cost_on_contents": {
             "type": "string",
-            "enum": ["Yes", "No", ""],
+            "enum": ["Yes", "No"],
         },
         "25_extended_replacement_cost": {
             "type": "string",
-            "enum": ["Yes", "No", ""],
+            "enum": ["Yes", "No"],
         },
         "all_perils_deductible": {"type": "string"},
         "wind_hail_deductible": {"type": "string"},
@@ -676,23 +678,246 @@ def stream_bundle_quote_with_gemini(
                 pass
 
 
+def classify_pdf(client, uploaded_file) -> str:
+    """Ask Gemini to classify a PDF as 'homeowners' or 'auto'."""
+    resp = client.models.generate_content(
+        model="gemini-2.5-flash-lite",
+        contents=[
+            "What type of insurance quote is this PDF? Reply with ONLY one word: 'homeowners' or 'auto'.",
+            uploaded_file,
+        ],
+        config=types.GenerateContentConfig(temperature=0),
+    )
+    text = (resp.text or "").strip().lower()
+    if "home" in text:
+        return "homeowners"
+    return "auto"
+
+
+def stream_two_file_bundle(home_path: Path, auto_path: Path) -> Iterator[str]:
+    """Parse 2 separate PDFs (homeowners + auto) and merge into bundle schema."""
+    from homeowners_parser_api import stream_homeowners_quote_with_gemini
+    from auto_parser_api import stream_auto_quote_with_gemini
+
+    yield json.dumps({"type": "status", "message": "Parsing homeowners quote..."}) + "\n"
+
+    # Collect homeowners result
+    home_data = None
+    home_confidence = {}
+    for line in stream_homeowners_quote_with_gemini(home_path):
+        msg = json.loads(line.strip()) if line.strip() else None
+        if not msg:
+            continue
+        if msg.get("type") == "status":
+            yield json.dumps({"type": "status", "message": f"[Home] {msg.get('message', '')}"}) + "\n"
+        elif msg.get("type") == "draft_patch" and msg.get("data"):
+            yield json.dumps({"type": "draft_patch", "data": msg["data"]}) + "\n"
+        elif msg.get("type") == "final_patch" and msg.get("data"):
+            yield json.dumps({"type": "final_patch", "data": msg["data"]}) + "\n"
+        elif msg.get("type") == "result":
+            home_data = msg.get("data", {})
+            home_confidence = msg.get("confidence", {})
+        elif msg.get("type") == "error":
+            yield line
+            return
+
+    yield json.dumps({"type": "status", "message": "Parsing auto quote..."}) + "\n"
+
+    # Collect auto result
+    auto_data = None
+    auto_confidence = {}
+    for line in stream_auto_quote_with_gemini(auto_path):
+        msg = json.loads(line.strip()) if line.strip() else None
+        if not msg:
+            continue
+        if msg.get("type") == "status":
+            yield json.dumps({"type": "status", "message": f"[Auto] {msg.get('message', '')}"}) + "\n"
+        elif msg.get("type") == "draft_patch" and msg.get("data"):
+            # Remap auto flat fields to bundle prefixed keys
+            remapped = _remap_auto_to_bundle(msg["data"])
+            yield json.dumps({"type": "draft_patch", "data": remapped}) + "\n"
+        elif msg.get("type") == "final_patch" and msg.get("data"):
+            remapped = _remap_auto_to_bundle(msg["data"])
+            yield json.dumps({"type": "final_patch", "data": remapped}) + "\n"
+        elif msg.get("type") == "result":
+            auto_data = msg.get("data", {})
+            auto_confidence = msg.get("confidence", {})
+        elif msg.get("type") == "error":
+            yield line
+            return
+
+    if not home_data or not auto_data:
+        yield json.dumps({"type": "error", "error": "Failed to parse one or both PDFs."}) + "\n"
+        return
+
+    # Merge into bundle format
+    merged = _merge_home_auto_to_bundle(home_data, auto_data)
+    merged_confidence = {**home_confidence, **auto_confidence}
+
+    yield json.dumps({"type": "result", "data": merged, "confidence": merged_confidence}) + "\n"
+
+
+def _remap_auto_to_bundle(data: dict) -> dict:
+    """Remap auto parser flat fields to bundle auto_ prefixed keys."""
+    remapped = {}
+    auto_remap = {
+        "quote_date": "auto_quote_date",
+        "quote_effective_date": "auto_quote_effective_date",
+        "quote_expiration_date": "auto_quote_expiration_date",
+        "policy_term": "auto_policy_term",
+        "program": "auto_program",
+    }
+    for k, v in data.items():
+        if k in auto_remap:
+            remapped[auto_remap[k]] = v
+        elif k in ("drivers", "vehicles", "coverages", "payment_options"):
+            remapped[k] = v
+        elif k in ("total_premium",):
+            remapped["auto_premium"] = v
+        elif k in ("paid_in_full_discount",) and isinstance(v, str):
+            remapped["auto_paid_in_full_discount"] = v
+        elif k in ("total_pay_in_full",) and isinstance(v, str):
+            remapped["auto_total_pay_in_full"] = v
+        elif k == "premium_summary" and isinstance(v, dict):
+            if v.get("total_premium"):
+                remapped["auto_premium"] = v["total_premium"]
+            if v.get("paid_in_full_discount"):
+                remapped["auto_paid_in_full_discount"] = v["paid_in_full_discount"]
+            if v.get("total_pay_in_full"):
+                remapped["auto_total_pay_in_full"] = v["total_pay_in_full"]
+        elif k not in ("client_name", "client_address", "client_phone", "client_email",
+                        "agent_name", "agent_address", "agent_phone", "agent_email"):
+            remapped[k] = v
+    return remapped
+
+
+def _merge_home_auto_to_bundle(home: dict, auto: dict) -> dict:
+    """Merge separate homeowners and auto results into one bundle form."""
+    merged = {}
+
+    # Client info from homeowners (primary) with auto fallback
+    for k in ("client_name", "client_address", "client_email", "client_phone"):
+        merged[k] = home.get(k, "") or auto.get(k, "")
+
+    # Homeowners coverages
+    home_cov_keys = [
+        "dwelling", "other_structures", "personal_property", "loss_of_use",
+        "personal_liability", "medical_payments", "replacement_cost_on_contents",
+        "25_extended_replacement_cost", "all_perils_deductible",
+        "wind_hail_deductible", "water_and_sewer_backup",
+    ]
+    for k in home_cov_keys:
+        merged[k] = home.get(k, "")
+
+    # Home premium
+    merged["home_premium"] = home.get("total_premium", "")
+
+    # Auto fields (remapped to bundle prefixed)
+    auto_remap = {
+        "quote_date": "auto_quote_date",
+        "quote_effective_date": "auto_quote_effective_date",
+        "quote_expiration_date": "auto_quote_expiration_date",
+        "policy_term": "auto_policy_term",
+        "program": "auto_program",
+    }
+    for src, dst in auto_remap.items():
+        merged[dst] = auto.get(src, "")
+
+    # Auto premium from premium_summary or top-level
+    ps = auto.get("premium_summary", {})
+    merged["auto_premium"] = ps.get("total_premium", "") or auto.get("total_premium", "")
+    merged["auto_paid_in_full_discount"] = ps.get("paid_in_full_discount", "") or auto.get("paid_in_full_discount", "")
+    merged["auto_total_pay_in_full"] = ps.get("total_pay_in_full", "") or auto.get("total_pay_in_full", "")
+
+    # Bundle total = try to compute if both are parseable dollar amounts
+    merged["bundle_total_premium"] = ""  # Could auto-compute, left for user
+
+    # Auto arrays and objects
+    merged["drivers"] = auto.get("drivers", [])
+    merged["vehicles"] = auto.get("vehicles", [])
+    merged["coverages"] = auto.get("coverages", {})
+    merged["payment_options"] = auto.get("payment_options", {})
+
+    return merged
+
+
 @router.post("/api/parse-bundle-quote")
-async def parse_bundle_quote(file: UploadFile = File(...)):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Please upload a PDF file.")
+async def parse_bundle_quote(files: List[UploadFile] = File(...)):
+    # Validate all files are PDFs
+    for f in files:
+        if not f.filename or not f.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Please upload PDF files only.")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-        temp_path = Path(temp_file.name)
-        temp_file.write(await file.read())
+    if len(files) > 2:
+        raise HTTPException(status_code=400, detail="Bundle accepts at most 2 PDFs.")
 
-    def event_stream():
+    if len(files) == 1:
+        # Single combined bundle PDF — use bundle parser
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            temp_path = Path(temp_file.name)
+            temp_file.write(await files[0].read())
+
+        def event_stream_single():
+            try:
+                yield from stream_bundle_quote_with_gemini(temp_path)
+            finally:
+                if temp_path.exists():
+                    temp_path.unlink(missing_ok=True)
+
+        return StreamingResponse(
+            event_stream_single(),
+            media_type="application/x-ndjson",
+        )
+
+    # Two files — classify and parse separately, then merge
+    temp_paths = []
+    for f in files:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tf:
+            tf.write(await f.read())
+            temp_paths.append(Path(tf.name))
+
+    def event_stream_dual():
         try:
-            yield from stream_bundle_quote_with_gemini(temp_path)
+            client = get_gemini_client()
+
+            # Upload both for classification
+            uploaded_a = client.files.upload(file=str(temp_paths[0]), config={"mime_type": "application/pdf"})
+            uploaded_b = client.files.upload(file=str(temp_paths[1]), config={"mime_type": "application/pdf"})
+
+            yield json.dumps({"type": "status", "message": "Identifying PDF types..."}) + "\n"
+
+            type_a = classify_pdf(client, uploaded_a)
+            type_b = classify_pdf(client, uploaded_b)
+
+            # Clean up classification uploads
+            try:
+                client.files.delete(name=uploaded_a.name)
+                client.files.delete(name=uploaded_b.name)
+            except Exception:
+                pass
+
+            # Determine which is homeowners and which is auto
+            if type_a == "homeowners" and type_b == "auto":
+                home_path, auto_path = temp_paths[0], temp_paths[1]
+            elif type_a == "auto" and type_b == "homeowners":
+                home_path, auto_path = temp_paths[1], temp_paths[0]
+            elif type_a == "homeowners":
+                # Both classified as homeowners — assume second is auto
+                home_path, auto_path = temp_paths[0], temp_paths[1]
+            else:
+                # Both classified as auto — assume first is homeowners
+                home_path, auto_path = temp_paths[0], temp_paths[1]
+
+            yield from stream_two_file_bundle(home_path, auto_path)
+
+        except Exception as exc:
+            yield json.dumps({"type": "error", "error": str(exc)}) + "\n"
         finally:
-            if temp_path.exists():
-                temp_path.unlink(missing_ok=True)
+            for p in temp_paths:
+                if p.exists():
+                    p.unlink(missing_ok=True)
 
     return StreamingResponse(
-        event_stream(),
+        event_stream_dual(),
         media_type="application/x-ndjson",
     )

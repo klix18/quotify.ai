@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block cover_title %}Auto Insurance{% endblock %}
+
+{% block hero_images %}
+<img class="hero-img" src="assets/auto-image-1.jpg" alt="">
+<img class="hero-icon" src="assets/white-auto-icon.png" alt="">
+{% endblock %}
+
+{% block premium_content %}
+<div class="premium-amount sentient">{{ total_premium }}</div>
+{% endblock %}
+
+{% block why_bullets %}
+<li>Provides strong liability coverage to protect your assets and future income.</li>
+<li>Balances comprehensive and collision deductibles for manageable out-of-pocket costs.</li>
+<li>Includes uninsured motorist protection for added peace of mind on the road.</li>
+<li>Offers flexible payment options to fit your budget and preferences.</li>
+{% endblock %}
+
+
+{% block detail_pages %}
+<!-- ════════════════════  PAGE 2 — COVERAGE DETAILS  ══════════════════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 14px;">Auto Coverage Details</div>
+
+    <!-- Liability Limits — 2×2 grid -->
+    <div class="section-heading sentient" style="font-size: 22px; margin-bottom: 4px;">Liability Limits</div>
+    <div class="section-sub">These limits define the maximum your policy will pay for injuries or damage you cause to others.</div>
+
+    <div class="coverage-grid">
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Bodily Injury</span>
+          <span class="cov-value">{{ bi_limit }}</span>
+        </div>
+        <div class="cov-desc">Covers medical expenses and legal costs if you injure someone in an accident you caused.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Property Damage</span>
+          <span class="cov-value">{{ pd_limit }}</span>
+        </div>
+        <div class="cov-desc">Pays to repair or replace another person's property that you damage in an at-fault accident.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Medical Payments</span>
+          <span class="cov-value">{{ medpay_limit }}</span>
+        </div>
+        <div class="cov-desc">Covers medical expenses for you and your passengers regardless of who is at fault.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">UM/UIM Bodily Injury</span>
+          <span class="cov-value">{{ um_uim_bi_limit }}</span>
+        </div>
+        <div class="cov-desc">Protects you if you're injured by a driver who has no insurance or insufficient coverage.</div>
+      </div>
+    </div>
+
+    <!-- Additional Coverages -->
+    <div class="section-heading sentient" style="font-size: 22px; margin-top: 8px; margin-bottom: 4px;">Additional Coverages</div>
+    <div class="section-sub">Extra protections that round out your auto policy for broader peace of mind.</div>
+
+    {% if umpd_limit %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">UMPD Limit</div>
+        <div class="liab-val">{{ umpd_limit }}</div>
+      </div>
+      <div class="liab-desc">Covers damage to your vehicle caused by an uninsured or hit-and-run driver.</div>
+    </div>
+    {% endif %}
+
+    {% if umpd_deductible %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">UMPD Deductible</div>
+        <div class="liab-val">{{ umpd_deductible }}</div>
+      </div>
+      <div class="liab-desc">The amount you pay out of pocket before your uninsured motorist property damage coverage begins.</div>
+    </div>
+    {% endif %}
+
+    {% if rental_limit %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Rental Reimbursement</div>
+        <div class="liab-val">{{ rental_limit }}</div>
+      </div>
+      <div class="liab-desc">Pays for a rental car while your vehicle is being repaired after a covered claim.</div>
+    </div>
+    {% endif %}
+
+    {% if towing_limit %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Towing &amp; Roadside</div>
+        <div class="liab-val">{{ towing_limit }}</div>
+      </div>
+      <div class="liab-desc">Covers towing costs and roadside assistance such as jump-starts, lockouts, and flat tire changes.</div>
+    </div>
+    {% endif %}
+
+    <!-- Deductibles -->
+    <div class="section-heading sentient" style="font-size: 22px; margin-top: 14px; margin-bottom: 14px;">Deductibles</div>
+
+    <div class="other-container r8">
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Comprehensive Deductible</span>
+          <span class="other-val">{{ comprehensive_deductible }}</span>
+        </div>
+        <div class="other-desc">Your out-of-pocket cost before coverage applies for non-collision events like theft, vandalism, or weather damage.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Collision Deductible</span>
+          <span class="other-val">{{ collision_deductible }}</span>
+        </div>
+        <div class="other-desc">The amount you pay before coverage kicks in when your vehicle collides with another object or vehicle.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+<!-- ════════════════════  PAGE 3 — DRIVERS, VEHICLES & PAYMENTS  ══════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <!-- Drivers -->
+    {% if drivers and drivers|length > 0 %}
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Listed Drivers</div>
+    <div class="section-sub">All drivers listed on the policy and their basic information.</div>
+
+    <table class="detail-table r8">
+      <thead>
+        <tr>
+          <th>Driver Name</th>
+          <th>Gender</th>
+          <th>Marital Status</th>
+          <th>License State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for driver in drivers %}
+        <tr>
+          <td>{{ driver.driver_name }}</td>
+          <td>{{ driver.gender }}</td>
+          <td>{{ driver.marital_status }}</td>
+          <td>{{ driver.license_state }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Vehicles -->
+    {% if vehicles and vehicles|length > 0 %}
+    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Insured Vehicles</div>
+    <div class="section-sub">Vehicles covered under this policy along with their premium breakdowns.</div>
+
+    <table class="detail-table r8">
+      <thead>
+        <tr>
+          <th>Year / Make / Model / Trim</th>
+          <th>VIN</th>
+          <th>Use</th>
+          <th>Garaging ZIP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vehicle in vehicles %}
+        <tr>
+          <td>{{ vehicle.year_make_model_trim }}</td>
+          <td>{{ vehicle.vin }}</td>
+          <td>{{ vehicle.vehicle_use }}</td>
+          <td>{{ vehicle.garaging_zip_county }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Per-vehicle premium breakdowns -->
+    {% for vehicle in vehicles %}
+    {% if vehicle.coverage_premiums %}
+    <div class="vehicle-premium-card r8">
+      <div class="vehicle-premium-title">{{ vehicle.year_make_model_trim }} — Premium Breakdown</div>
+      {% if vehicle.coverage_premiums.bi_premium %}
+      <div class="premium-row"><span class="premium-row-label">Bodily Injury</span><span class="premium-row-value">{{ vehicle.coverage_premiums.bi_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.coverage_premiums.pd_premium %}
+      <div class="premium-row"><span class="premium-row-label">Property Damage</span><span class="premium-row-value">{{ vehicle.coverage_premiums.pd_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.coverage_premiums.medpay_premium %}
+      <div class="premium-row"><span class="premium-row-label">Medical Payments</span><span class="premium-row-value">{{ vehicle.coverage_premiums.medpay_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.coverage_premiums.um_uim_bi_premium %}
+      <div class="premium-row"><span class="premium-row-label">UM/UIM Bodily Injury</span><span class="premium-row-value">{{ vehicle.coverage_premiums.um_uim_bi_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.coverage_premiums.umpd_premium %}
+      <div class="premium-row"><span class="premium-row-label">UMPD</span><span class="premium-row-value">{{ vehicle.coverage_premiums.umpd_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.coverage_premiums.comprehensive_premium %}
+      <div class="premium-row"><span class="premium-row-label">Comprehensive</span><span class="premium-row-value">{{ vehicle.coverage_premiums.comprehensive_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.coverage_premiums.collision_premium %}
+      <div class="premium-row"><span class="premium-row-label">Collision</span><span class="premium-row-value">{{ vehicle.coverage_premiums.collision_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.coverage_premiums.rental_premium %}
+      <div class="premium-row"><span class="premium-row-label">Rental Reimbursement</span><span class="premium-row-value">{{ vehicle.coverage_premiums.rental_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.coverage_premiums.towing_premium %}
+      <div class="premium-row"><span class="premium-row-label">Towing &amp; Roadside</span><span class="premium-row-value">{{ vehicle.coverage_premiums.towing_premium }}</span></div>
+      {% endif %}
+      {% if vehicle.subtotal %}
+      <div class="premium-row premium-row-total"><span class="premium-row-label">Vehicle Subtotal</span><span class="premium-row-value">{{ vehicle.subtotal }}</span></div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    <!-- Payment Options -->
+    {% if payment_options %}
+    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Payment Options</div>
+    <div class="section-sub">Available payment plans for this policy.</div>
+
+    <div class="payment-grid">
+      {% if payment_options.full_pay and payment_options.full_pay.down_payment %}
+      <div class="payment-card r8">
+        <div class="payment-card-title">Full Pay</div>
+        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.full_pay.down_payment }}</span></div>
+      </div>
+      {% endif %}
+
+      {% if payment_options.semi_annual and payment_options.semi_annual.down_payment %}
+      <div class="payment-card r8">
+        <div class="payment-card-title">Semi-Annual</div>
+        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.semi_annual.down_payment }}</span></div>
+        {% if payment_options.semi_annual.amount_per_installment %}
+        <div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.semi_annual.amount_per_installment }}</span></div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if payment_options.quarterly and payment_options.quarterly.down_payment %}
+      <div class="payment-card r8">
+        <div class="payment-card-title">Quarterly</div>
+        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.quarterly.down_payment }}</span></div>
+        {% if payment_options.quarterly.amount_per_installment %}
+        <div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.quarterly.amount_per_installment }}</span></div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if payment_options.monthly and payment_options.monthly.down_payment %}
+      <div class="payment-card r8">
+        <div class="payment-card-title">Monthly</div>
+        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.monthly.down_payment }}</span></div>
+        {% if payment_options.monthly.amount_per_installment %}
+        <div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.monthly.amount_per_installment }}</span></div>
+        {% endif %}
+        {% if payment_options.monthly.eft_reduces_fee %}
+        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay</span><span class="payment-row-value">{{ payment_options.monthly.eft_reduces_fee }}</span></div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    {% if payment_options.show_paid_in_full_discount and payment_options.paid_in_full_discount %}
+    <div class="other-container r8" style="margin-bottom: 16px;">
+      <div class="other-entry">
+        <div class="other-header"><span class="other-name">Paid-in-Full Discount</span></div>
+      </div>
+      {% if payment_options.paid_in_full_discount.gross_premium %}
+      <div class="other-entry">
+        <div class="other-header"><span class="other-name" style="font-weight: 400;">Gross Premium</span><span class="other-val">{{ payment_options.paid_in_full_discount.gross_premium }}</span></div>
+      </div>
+      {% endif %}
+      {% if payment_options.paid_in_full_discount.discount_amount %}
+      <div class="other-entry">
+        <div class="other-header"><span class="other-name" style="font-weight: 400;">Discount Amount</span><span class="other-val">{{ payment_options.paid_in_full_discount.discount_amount }}</span></div>
+      </div>
+      {% endif %}
+      {% if payment_options.paid_in_full_discount.net_pay_in_full %}
+      <div class="other-entry">
+        <div class="other-header"><span class="other-name" style="font-weight: 400;">Net Pay-in-Full</span><span class="other-val">{{ payment_options.paid_in_full_discount.net_pay_in_full }}</span></div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+{% endblock %}

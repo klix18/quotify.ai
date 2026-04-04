@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block cover_title %}Commercial Insurance{% endblock %}
+
+{% block hero_images %}
+<img class="hero-img" src="assets/commercial-image-1.jpg" alt="">
+<img class="hero-icon" src="assets/white-commercial-icon.png" alt="">
+{% endblock %}
+
+{% block premium_content %}
+<div class="premium-amount sentient">{{ total_premium }}</div>
+{% endblock %}
+
+{% block why_bullets %}
+<li>Protects your business property and equipment against covered losses and downtime.</li>
+<li>Provides comprehensive general liability coverage to shield against third-party claims.</li>
+<li>Includes workers' compensation to meet legal requirements and protect your employees.</li>
+<li>Adds cyber liability coverage to guard against data breaches and digital threats.</li>
+{% endblock %}
+
+{% block extra_styles %}
+.liab-left { min-width: 175px; }
+{% endblock %}
+
+
+{% block detail_pages %}
+<!-- ════════════════════  PAGE 2 — COMMERCIAL PROPERTY  ═══════════════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 14px;">Commercial Property</div>
+
+    <div class="coverage-grid">
+      {% if building_limit %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Building Limit</span>
+          <span class="cov-value">{{ building_limit }}</span>
+        </div>
+        <div class="cov-desc">Covers the cost to repair or rebuild your commercial building after a covered loss.</div>
+      </div>
+      {% endif %}
+
+      {% if bpp_limit %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Business Personal Property</span>
+          <span class="cov-value">{{ bpp_limit }}</span>
+        </div>
+        <div class="cov-desc">Protects equipment, inventory, furniture, and other business property you own inside the building.</div>
+      </div>
+      {% endif %}
+
+      {% if business_income %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Business Income</span>
+          <span class="cov-value">{{ business_income }}</span>
+        </div>
+        <div class="cov-desc">Replaces lost income and covers operating expenses if your business is shut down by a covered event.</div>
+      </div>
+      {% endif %}
+
+      {% if equipment_breakdown %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Equipment Breakdown</span>
+          <span class="cov-value">{{ equipment_breakdown }}</span>
+        </div>
+        <div class="cov-desc">Covers repair or replacement costs when essential business equipment mechanically or electrically fails.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Additional Property Coverages -->
+    <div class="section-heading sentient" style="font-size: 22px; margin-top: 8px; margin-bottom: 4px;">Additional Property Coverages</div>
+    <div class="section-sub">Supplemental coverages that extend your commercial property protection.</div>
+
+    <div class="other-container r8">
+      {% if stretch_blanket %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Stretch Blanket</span>
+          <span class="other-val">{{ stretch_blanket }}</span>
+        </div>
+        <div class="other-desc">Provides a shared coverage limit that can flex across multiple property categories when one exceeds its individual limit.</div>
+      </div>
+      {% endif %}
+
+      {% if back_up_sewers_drains %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Back-up of Sewers &amp; Drains</span>
+          <span class="other-val">{{ back_up_sewers_drains }}</span>
+        </div>
+        <div class="other-desc">Covers damage caused by water backing up through sewers, drains, or sump systems at your business location.</div>
+      </div>
+      {% endif %}
+
+      {% if ordinance_or_law %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Ordinance or Law</span>
+          <span class="other-val">{{ ordinance_or_law }}</span>
+        </div>
+        <div class="other-desc">Pays the extra cost to bring your building up to current codes and ordinances during covered repairs.</div>
+      </div>
+      {% endif %}
+
+      {% if business_income_waiting_period %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">BI Waiting Period</span>
+          <span class="other-val">{{ business_income_waiting_period }}</span>
+        </div>
+        <div class="other-desc">The number of hours after a covered loss before business income coverage begins paying out.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Deductibles -->
+    <div class="section-heading sentient" style="font-size: 22px; margin-top: 14px; margin-bottom: 14px;">Deductibles</div>
+
+    <div class="other-container r8">
+      {% if building_deductible %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Building Deductible</span>
+          <span class="other-val">{{ building_deductible }}</span>
+        </div>
+        <div class="other-desc">Your out-of-pocket cost before coverage applies for building damage claims.</div>
+      </div>
+      {% endif %}
+
+      {% if bpp_deductible %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">BPP Deductible</span>
+          <span class="other-val">{{ bpp_deductible }}</span>
+        </div>
+        <div class="other-desc">The amount you pay before coverage kicks in for business personal property claims.</div>
+      </div>
+      {% endif %}
+
+      {% if wind_hail_deductible %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Wind/Hail Deductible</span>
+          <span class="other-val">{{ wind_hail_deductible }}</span>
+        </div>
+        <div class="other-desc">A separate deductible specifically for damage caused by wind or hail events.</div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+<!-- ════════════════════  PAGE 3 — GENERAL LIABILITY & WORKERS COMP  ═══ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">General Liability</div>
+    <div class="section-sub">Protects your business against third-party claims for bodily injury, property damage, and advertising injury.</div>
+
+    <div class="coverage-grid">
+      {% if gl_each_occurrence %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Each Occurrence</span>
+          <span class="cov-value">{{ gl_each_occurrence }}</span>
+        </div>
+        <div class="cov-desc">The maximum the policy will pay for a single claim or lawsuit arising from one incident.</div>
+      </div>
+      {% endif %}
+
+      {% if gl_general_aggregate %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">General Aggregate</span>
+          <span class="cov-value">{{ gl_general_aggregate }}</span>
+        </div>
+        <div class="cov-desc">The total maximum the policy will pay for all covered claims combined during the policy period.</div>
+      </div>
+      {% endif %}
+
+      {% if gl_products_completed_ops_aggregate %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Products/Completed Ops</span>
+          <span class="cov-value">{{ gl_products_completed_ops_aggregate }}</span>
+        </div>
+        <div class="cov-desc">Covers claims arising from products you sold or work you completed after the job is done.</div>
+      </div>
+      {% endif %}
+
+      {% if gl_medical_expenses %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Medical Expenses</span>
+          <span class="cov-value">{{ gl_medical_expenses }}</span>
+        </div>
+        <div class="cov-desc">Pays minor medical costs for a non-employee injured on your premises regardless of fault.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if gl_damage_to_premises_rented or gl_personal_advertising_injury %}
+    <div class="other-container r8" style="margin-bottom: 16px;">
+      {% if gl_damage_to_premises_rented %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Damage to Rented Premises</span>
+          <span class="other-val">{{ gl_damage_to_premises_rented }}</span>
+        </div>
+        <div class="other-desc">Covers damage you cause to a building or space you rent for your business operations.</div>
+      </div>
+      {% endif %}
+
+      {% if gl_personal_advertising_injury %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Personal &amp; Advertising Injury</span>
+          <span class="other-val">{{ gl_personal_advertising_injury }}</span>
+        </div>
+        <div class="other-desc">Protects against claims of libel, slander, copyright infringement, or invasion of privacy in your advertising.</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Workers' Compensation -->
+    {% if wc_bi_accident_each_accident or wc_bi_disease_policy_limit or wc_bi_disease_each_employee %}
+    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Workers' Compensation</div>
+    <div class="section-sub">Provides mandatory coverage for employee injuries and occupational diseases.</div>
+
+    {% if wc_bi_accident_each_accident %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">BI by Accident</div>
+        <div class="liab-val">{{ wc_bi_accident_each_accident }}</div>
+      </div>
+      <div class="liab-desc">The maximum paid per accident for employee injuries sustained in a single workplace incident.</div>
+    </div>
+    {% endif %}
+
+    {% if wc_bi_disease_policy_limit %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">BI by Disease (Policy)</div>
+        <div class="liab-val">{{ wc_bi_disease_policy_limit }}</div>
+      </div>
+      <div class="liab-desc">The total maximum the policy will pay for all occupational disease claims during the policy period.</div>
+    </div>
+    {% endif %}
+
+    {% if wc_bi_disease_each_employee %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">BI by Disease (Each)</div>
+        <div class="liab-val">{{ wc_bi_disease_each_employee }}</div>
+      </div>
+      <div class="liab-desc">The maximum paid per employee for an occupational disease claim.</div>
+    </div>
+    {% endif %}
+
+    {% if wc_class_codes and wc_class_codes|length > 0 %}
+    <table class="detail-table r8" style="margin-top: 10px;">
+      <thead>
+        <tr><th>Class Code</th><th>Est. Annual Remuneration</th><th>Rating</th><th>Premium</th></tr>
+      </thead>
+      <tbody>
+        {% for cc in wc_class_codes %}
+        <tr><td>{{ cc.class_code }}</td><td>{{ cc.estimated_annual_remuneration }}</td><td>{{ cc.rating }}</td><td>{{ cc.premium }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% endif %}
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+<!-- ════════════════════  PAGE 4 — UMBRELLA, CYBER & WIND  ════════════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <!-- Excess / Umbrella Liability -->
+    {% if umbrella_each_occurrence or umbrella_aggregate %}
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Excess / Umbrella Liability</div>
+    <div class="section-sub">Provides an additional layer of liability protection above your underlying policies.</div>
+
+    {% if umbrella_each_occurrence %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Each Occurrence</div>
+        <div class="liab-val">{{ umbrella_each_occurrence }}</div>
+      </div>
+      <div class="liab-desc">The maximum additional amount paid per incident once underlying policy limits are exhausted.</div>
+    </div>
+    {% endif %}
+
+    {% if umbrella_aggregate %}
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Aggregate</div>
+        <div class="liab-val">{{ umbrella_aggregate }}</div>
+      </div>
+      <div class="liab-desc">The total maximum the umbrella policy will pay for all claims combined during the policy period.</div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- Cyber Liability -->
+    {% if cyber_aggregate_limit or cyber_deductible %}
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Cyber Liability</div>
+    <div class="section-sub">Protects your business against data breaches, cyber attacks, and digital liability exposures.</div>
+
+    <div class="coverage-grid">
+      {% if cyber_aggregate_limit %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Aggregate Limit</span>
+          <span class="cov-value">{{ cyber_aggregate_limit }}</span>
+        </div>
+        <div class="cov-desc">The total maximum the cyber policy will pay for all covered cyber claims during the policy period.</div>
+      </div>
+      {% endif %}
+
+      {% if cyber_deductible %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Deductible</span>
+          <span class="cov-value">{{ cyber_deductible }}</span>
+        </div>
+        <div class="cov-desc">Your out-of-pocket cost before cyber liability coverage begins to pay on a claim.</div>
+      </div>
+      {% endif %}
+
+      {% if cyber_breach_response %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Breach Response</span>
+          <span class="cov-value">{{ cyber_breach_response }}</span>
+        </div>
+        <div class="cov-desc">Covers costs like forensic investigation, customer notification, and credit monitoring after a data breach.</div>
+      </div>
+      {% endif %}
+
+      {% if cyber_business_interruption %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Business Interruption</span>
+          <span class="cov-value">{{ cyber_business_interruption }}</span>
+        </div>
+        <div class="cov-desc">Replaces lost income when a cyber event disrupts your normal business operations.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="other-container r8" style="margin-bottom: 16px;">
+      {% if cyber_cyber_extortion %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Cyber Extortion</span>
+          <span class="other-val">{{ cyber_cyber_extortion }}</span>
+        </div>
+        <div class="other-desc">Covers ransom payments and related expenses when your systems are held hostage by ransomware.</div>
+      </div>
+      {% endif %}
+
+      {% if cyber_funds_transfer_fraud %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Funds Transfer Fraud</span>
+          <span class="other-val">{{ cyber_funds_transfer_fraud }}</span>
+        </div>
+        <div class="other-desc">Reimburses losses from fraudulent electronic fund transfers caused by social engineering or hacking.</div>
+      </div>
+      {% endif %}
+
+      {% if cyber_regulatory_defense %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Regulatory Defense</span>
+          <span class="other-val">{{ cyber_regulatory_defense }}</span>
+        </div>
+        <div class="other-desc">Covers legal costs and penalties from regulatory investigations following a data privacy violation.</div>
+      </div>
+      {% endif %}
+
+      {% if cyber_media_tech_liability %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Media &amp; Tech Liability</span>
+          <span class="other-val">{{ cyber_media_tech_liability }}</span>
+        </div>
+        <div class="other-desc">Protects against claims of copyright infringement, defamation, or errors in your digital content and technology services.</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Wind Insurance -->
+    {% if wind_coverage or wind_deductible %}
+    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Wind Insurance</div>
+    <div class="section-sub">Separate wind coverage for properties in high-risk wind zones.</div>
+
+    <div class="other-container r8">
+      {% if wind_coverage %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Wind Coverage</span>
+          <span class="other-val">{{ wind_coverage }}</span>
+        </div>
+        <div class="other-desc">The maximum amount the policy will pay for damage caused by windstorms.</div>
+      </div>
+      {% endif %}
+
+      {% if wind_deductible %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Wind Deductible</span>
+          <span class="other-val">{{ wind_deductible }}</span>
+        </div>
+        <div class="other-desc">The flat-dollar amount you pay before wind coverage begins on a claim.</div>
+      </div>
+      {% endif %}
+
+      {% if wind_percent_deductible %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Wind % Deductible</span>
+          <span class="other-val">{{ wind_percent_deductible }}</span>
+        </div>
+        <div class="other-desc">The percentage-based deductible applied to wind damage claims, calculated from the coverage limit.</div>
+      </div>
+      {% endif %}
+
+      {% if wind_coverage_premium %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Wind Premium</span>
+          <span class="other-val">{{ wind_coverage_premium }}</span>
+        </div>
+        <div class="other-desc">The annual premium charged specifically for wind coverage on this policy.</div>
+      </div>
+      {% endif %}
+
+      {% if wind_buydown %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Wind Buydown</span>
+          <span class="other-val">{{ wind_buydown }}</span>
+        </div>
+        <div class="other-desc">An optional endorsement that reduces your wind deductible for an additional premium.</div>
+      </div>
+      {% endif %}
+
+      {% if wind_buydown_amount %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Buydown Amount</span>
+          <span class="other-val">{{ wind_buydown_amount }}</span>
+        </div>
+        <div class="other-desc">The reduced deductible amount after purchasing the wind buydown option.</div>
+      </div>
+      {% endif %}
+
+      {% if wind_buydown_premium %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Buydown Premium</span>
+          <span class="other-val">{{ wind_buydown_premium }}</span>
+        </div>
+        <div class="other-desc">The additional annual cost to purchase the wind deductible buydown endorsement.</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+{% endblock %}

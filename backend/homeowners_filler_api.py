@@ -1,102 +1,85 @@
 from pathlib import Path
 from uuid import uuid4
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pypdf import PdfReader, PdfWriter
-from pypdf.generic import NameObject, BooleanObject
-
+from jinja2 import Environment, FileSystemLoader
+from browser_manager import get_browser
 
 router = APIRouter()
 
 BASE_DIR = Path(__file__).resolve().parent
-TEMPLATE_PDF_PATH = BASE_DIR / "templates" / "homeowners_quote_template.pdf"
+TEMPLATES_ROOT = BASE_DIR / "templates"
+TEMPLATE_DIR = TEMPLATES_ROOT / "homeowners"
 GENERATED_DIR = BASE_DIR / "generated_quotes"
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
-
-FIELD_MAP = {
-    "total_premium": "total-premium",
-    "dwelling": "dwelling",
-    "of_dwelling": "of-dwelling",
-    "other_structures": "other-structures",
-    "personal_property": "personal-property",
-    "loss_of_use": "loss-of-use",
-    "personal_liability": "personal-liability",
-    "medical_payments": "medical-payments",
-    "all_perils_deductible": "all-perils-deductible",
-    "wind_hail_deductible": "wind-hail-deductible",
-    "water_and_sewer_backup": "water-and-sewer-backup",
-    "client_name": "client-name",
-    "client_address": "client-address",
-    "client_phone": "client-phone",
-    "client_email": "client-email",
-    "agent_name": "agent-name",
-    "agent_address": "agent-address",
-    "agent_phone": "agent-phone",
-    "agent_email": "agent-email",
-    "replacement_cost_on_contents": "replacement-cost-on-contents",
-    "25_extended_replacement_cost": "25-extended-replacement-cost",
-}
+# Jinja2 env points at templates/ root so base.html inheritance resolves
+jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_ROOT)))
 
 
-def fill_branded_pdf(template_pdf_path: Path, output_pdf_path: Path, parsed_data: dict):
-    reader = PdfReader(str(template_pdf_path))
-    writer = PdfWriter()
-    writer.clone_document_from_reader(reader)
+async def render_homeowners_pdf(output_path: Path, data: dict):
+    """Render the homeowners HTML template with data and convert to PDF."""
+    template = jinja_env.get_template("homeowners/homeowners_quote.html")
 
-    form_values = {}
-    for parsed_key, pdf_field_name in FIELD_MAP.items():
-        value = parsed_data.get(parsed_key, "")
-        if value is None:
-            value = ""
-        form_values[pdf_field_name] = str(value)
+    context = {
+        "total_premium": data.get("total_premium", ""),
+        "dwelling": data.get("dwelling", ""),
+        "other_structures": data.get("other_structures", ""),
+        "personal_property": data.get("personal_property", ""),
+        "loss_of_use": data.get("loss_of_use", ""),
+        "personal_liability": data.get("personal_liability", ""),
+        "medical_payments": data.get("medical_payments", ""),
+        "all_perils_deductible": data.get("all_perils_deductible", ""),
+        "wind_hail_deductible": data.get("wind_hail_deductible", ""),
+        "water_and_sewer_backup": data.get("water_and_sewer_backup", ""),
+        "replacement_cost_on_contents": data.get("replacement_cost_on_contents", ""),
+        "extended_replacement_cost": data.get("25_extended_replacement_cost", ""),
+        "client_name": data.get("client_name", ""),
+        "client_address": data.get("client_address", ""),
+        "client_phone": data.get("client_phone", ""),
+        "client_email": data.get("client_email", ""),
+        "agent_name": data.get("agent_name", ""),
+        "agent_address": data.get("agent_address", ""),
+        "agent_phone": data.get("agent_phone", ""),
+        "agent_email": data.get("agent_email", ""),
+    }
 
-    root = writer._root_object
-    if "/AcroForm" not in root:
-        raise ValueError(
-            "This PDF does not contain a usable AcroForm. "
-            "Re-save the template as a proper fillable PDF in Acrobat."
+    html_string = template.render(**context)
+
+    # Write rendered HTML to a temp file in the template directory so
+    # Chromium can resolve all relative paths (assets/, fonts/) natively.
+    # Using set_content() loaded from about:blank which blocks file:// URIs.
+    tmp_html = TEMPLATE_DIR / f"_tmp_render_{uuid4().hex}.html"
+    tmp_html.write_text(html_string, encoding="utf-8")
+
+    browser = await get_browser()
+    page = await browser.new_page()
+    try:
+        await page.goto(tmp_html.resolve().as_uri(), wait_until="networkidle")
+        await page.pdf(
+            path=str(output_path),
+            prefer_css_page_size=True,
+            print_background=True,
+            margin={"top": "0", "right": "0", "bottom": "0", "left": "0"},
         )
-
-    root[NameObject("/AcroForm")][NameObject("/NeedAppearances")] = BooleanObject(True)
-
-    for page in writer.pages:
-        writer.update_page_form_field_values(page, form_values)
-
-    with open(output_pdf_path, "wb") as f:
-        writer.write(f)
+    finally:
+        await page.close()
+        # Clean up the temp HTML file
+        tmp_html.unlink(missing_ok=True)
 
 
 @router.post("/api/generate-homeowners-quote")
 async def generate_homeowners_quote(payload: dict):
-    if not TEMPLATE_PDF_PATH.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"Template not found at: {TEMPLATE_PDF_PATH}",
-        )
-
     try:
         output_path = GENERATED_DIR / f"homeowners_quote_{uuid4().hex}.pdf"
 
-        fill_branded_pdf(
-            template_pdf_path=TEMPLATE_PDF_PATH,
-            output_pdf_path=output_path,
-            parsed_data=payload,
-        )
-
-        from datetime import datetime
+        await render_homeowners_pdf(output_path=output_path, data=payload)
 
         client_name = str(payload.get("client_name", "")).strip()
-
-        # format date MM-DD-YYYY
         date_str = datetime.now().strftime("%m-%d-%Y")
-
-        # format client name Kevin-Li
-        safe_client = "Unknown"
-        if client_name:
-            safe_client = "-".join(client_name.split())
-
+        safe_client = "-".join(client_name.split()) if client_name else "Unknown"
         download_name = f"homeowners_quote_{date_str}_{safe_client}.pdf"
 
         return FileResponse(

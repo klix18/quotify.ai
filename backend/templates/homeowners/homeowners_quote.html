@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block cover_title %}Homeowners Insurance{% endblock %}
+
+{% block hero_images %}
+<img class="hero-img" src="assets/homeowners-image-1.jpg" alt="">
+<img class="hero-icon" src="assets/white-homeowner-icon.png" alt="">
+{% endblock %}
+
+{% block premium_content %}
+<div class="premium-amount sentient">{{ total_premium }}</div>
+{% endblock %}
+
+{% block why_bullets %}
+<li>Protects the full cost to rebuild your home after a covered loss.</li>
+<li>Provides meaningful liability protection for your assets and future income.</li>
+<li>Keeps deductibles at a level that is realistic if a loss occurs.</li>
+<li>Positions your home and auto together for the strongest overall value.</li>
+{% endblock %}
+
+
+{% block detail_pages %}
+<!-- ════════════════════  PAGE 2 — DETAILS  ══════════════════════════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 14px;">Homeowners Protection Details</div>
+
+    <div class="coverage-grid">
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Dwelling</span>
+          <span class="cov-value">{{ dwelling }}</span>
+        </div>
+        <div class="cov-desc">Protects the cost to repair or fully rebuild your home.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Other Structures</span>
+          <span class="cov-value">{{ other_structures }}</span>
+        </div>
+        <div class="cov-desc">Covers detached structures such as garages, fences, or sheds on your property.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Personal Property</span>
+          <span class="cov-value">{{ personal_property }}</span>
+        </div>
+        <div class="cov-desc">Protects belonging inside your home including furniture, electronics, clothing, and household items.</div>
+      </div>
+
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Loss of Use</span>
+          <span class="cov-value">{{ loss_of_use }}</span>
+        </div>
+        <div class="cov-desc">Helps pay for temporary living expenses if your home becomes uninhabitable due to a covered loss.</div>
+      </div>
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Liability Protection</div>
+    <div class="section-sub">These coverages work together to restore home and daily life after a covered loss.</div>
+
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Personal Liability</div>
+        <div class="liab-val">{{ personal_liability }}</div>
+      </div>
+      <div class="liab-desc">Provides coverage if someone is injured on your property, such as at a child's birthday party or if a guest trips and falls while visiting, and you are found legally responsible</div>
+    </div>
+
+    <div class="liab-card r8">
+      <div class="liab-left">
+        <div class="liab-name">Medical Payments</div>
+        <div class="liab-val">{{ medical_payments }}</div>
+      </div>
+      <div class="liab-desc">Helps cover minor medical expenses for a guest injured on your property regardless of fault.</div>
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 14px;">Other</div>
+
+    <div class="other-container r8">
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">All-Perils Deductible</span>
+          <span class="other-val">{{ all_perils_deductible }}</span>
+        </div>
+        <div class="other-desc">Protects belonging inside your home including furniture, electronics, clothing, and household items.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Wind/Hail Deductible</span>
+          <span class="other-val">{{ wind_hail_deductible }}</span>
+        </div>
+        <div class="other-desc">The percentage of the dwelling coverage amount you pay for damage specifically caused by wind or hail.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Water and Sewer Backup</span>
+          <span class="other-val">{{ water_and_sewer_backup }}</span>
+        </div>
+        <div class="other-desc">Provides coverage for damage caused by water backup through sewers or drains.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Replacement Cost</span>
+          <span class="other-val">{{ replacement_cost_on_contents }}</span>
+        </div>
+        <div class="other-desc">Ensures you receive the full cost to replace damaged personal property without depreciation.</div>
+      </div>
+
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">25% Extended Replacement Cost</span>
+          <span class="other-val">{{ extended_replacement_cost }}</span>
+        </div>
+        <div class="other-desc">Provides an additional 25% of coverage beyond the policy's limit to help rebuild your home in case construction costs exceed the original amount insured.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+{% endblock %}

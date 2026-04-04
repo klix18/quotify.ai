@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap">
+  <style>
+    /* ── Sentient Variable (local) ───────────────────────── */
+    @font-face {
+      font-family: 'Sentient';
+      src: url('../../fonts/WEB/fonts/Sentient-Regular.woff2') format('woff2'),
+           url('../../fonts/WEB/fonts/Sentient-Regular.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Sentient';
+      src: url('../../fonts/WEB/fonts/Sentient-Bold.woff2') format('woff2'),
+           url('../../fonts/WEB/fonts/Sentient-Bold.ttf') format('truetype');
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    /* ── Reset ───────────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    @page {
+      size: 816px 1056px;   /* 8.5 × 11 in at 96dpi (Chromium's CSS px) */
+      margin: 0;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       7 FONT STYLES — strict type system
+       ═══════════════════════════════════════════════════════
+       1. HEADER        — Sentient Bold 50px  #0451BD
+       2. SUBHEADER     — Poppins 500   16px  #4F4E4F
+       3. SECTION HEADER— Sentient 400  28px  #20272D
+       4. BODY          — Poppins 400   11px  #20272D
+       5. SECTION DESC  — Poppins 400   13px  #4F4E4F
+       6. FOOTER        — Poppins 500i  7.5px #4F4E4F
+       7a. POLICY NAME  — Poppins 600   15px  #0451BD
+       7b. POLICY VALUE — Poppins 400   15px  #0451BD
+       ═══════════════════════════════════════════════════════ */
+
+    /* ── Page frame ──────────────────────────────────────── */
+    .page {
+      width: 816px;
+      height: 1056px;
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      background: #fff;
+    }
+    .page:last-child { page-break-after: auto; }
+
+    .page-inner {
+      padding: 36px 44px 40px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Shared ──────────────────────────────────────────── */
+    .sentient { font-family: 'Sentient', serif; line-height: 1.10; letter-spacing: -0.06em; }
+    .r8 { border-radius: 16px; }
+
+    /* ── 6. FOOTER ───────────────────────────────────────── */
+    .disclaimer {
+      position: absolute;
+      bottom: 16px;
+      left: 44px;
+      right: 44px;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 500;
+      font-size: 7.5px;
+      color: #4F4E4F;
+      text-align: center;
+      font-style: italic;
+    }
+
+
+    /* ═════════════════════════════════════════════════════
+       PAGE 1 — COVER
+       ═════════════════════════════════════════════════════ */
+
+    .logo-wrap { text-align: center; margin-bottom: 4px; }
+    .logo-wrap img { height: 50px; }
+
+    /* 1. HEADER */
+    .cover-title {
+      text-align: center;
+      font-weight: 700;
+      font-size: 50px;
+      color: #0451BD;
+      margin-bottom: 4px;
+    }
+
+    /* 2. SUBHEADER */
+    .cover-subtitle {
+      text-align: center;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 500;
+      font-size: 16px;
+      color: #4F4E4F;
+      margin-bottom: 24px;
+    }
+
+    /* Hero image + premium banner */
+    .hero-banner-wrap {
+      width: 100%;
+      margin-bottom: {% block hero_margin %}32px{% endblock %};
+    }
+
+    .hero-wrap {
+      position: relative;
+      width: 100%;
+      height: {% block hero_height %}310px{% endblock %};
+      border-radius: 16px 16px 0 0;
+      overflow: hidden;
+    }
+    .hero-wrap img.hero-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 60%;
+      display: block;
+    }
+    .hero-icon {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      width: 52px;
+      height: auto;
+      opacity: 1;
+    }
+
+    .premium-banner {
+      background: #fff;
+      border: 8px solid #3DD990;
+      border-radius: 0 0 16px 16px;
+      text-align: center;
+      padding: 30px 32px 34px;
+    }
+    /* 3. SECTION HEADER — used for "Recommended Protection Plan" */
+    .premium-label {
+      font-weight: 400;
+      font-size: 28px;
+      color: #20272D;
+      margin-bottom: 2px;
+    }
+    /* 1. HEADER variant — premium amount */
+    .premium-amount {
+      font-weight: 700;
+      font-size: 42px;
+      color: #20272D;
+    }
+
+    /* Premium breakdown row (bundle home + auto) */
+    .premium-breakdown {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      margin-top: 8px;
+    }
+    .premium-sub {
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      color: #4F4E4F;
+    }
+    .premium-sub strong {
+      font-weight: 600;
+      color: #0451BD;
+    }
+
+    /* "Why This Plan Was Selected" */
+    .why-section {
+      display: flex;
+      align-items: flex-start;
+      gap: 36px;
+      margin-bottom: 32px;
+    }
+    /* 3. SECTION HEADER */
+    .why-title {
+      font-weight: 400;
+      font-size: 28px;
+      color: #20272D;
+      min-width: 160px;
+    }
+    /* 5. SECTION DESC */
+    .why-bullets {
+      list-style: disc;
+      padding-left: 16px;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 13px;
+      color: #4F4E4F;
+      line-height: 1.75;
+    }
+    .why-bullets li { margin-bottom: 2px; }
+
+    /* Client / Agent info cards */
+    .info-row {
+      display: flex;
+      gap: 18px;
+      margin-top: auto;
+    }
+    .info-card {
+      flex: 1;
+      background: #F2F2F2;
+      padding: 20px 24px;
+    }
+    /* Client card: inside gradient stroke (PDF-safe layered approach) */
+    .info-card-client {
+      position: relative;
+      border-radius: 16px;
+    }
+    /* Layer 1: gradient fill covering bottom 90% */
+    .info-card-client::before {
+      content: '';
+      position: absolute;
+      top: 10%;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border-radius: 0 0 16px 16px;
+      background: linear-gradient(to bottom, rgba(162, 222, 247, 0), rgba(162, 222, 247, 0.6) 40%, rgba(23, 101, 212, 1));
+      pointer-events: none;
+    }
+    /* Layer 2: inner fill that covers gradient center, leaving 4px border */
+    .info-card-client::after {
+      content: '';
+      position: absolute;
+      top: calc(10% + 4px);
+      left: 4px;
+      right: 4px;
+      bottom: 4px;
+      border-radius: 0 0 12px 12px;
+      background: #F2F2F2;
+      pointer-events: none;
+    }
+    /* Layer 3: content sits above both pseudo-elements */
+    .info-card-content {
+      position: relative;
+      z-index: 1;
+    }
+    /* 3. SECTION HEADER */
+    .info-card h3 {
+      font-weight: 400;
+      font-size: 28px;
+      color: #20272D;
+      margin-bottom: 14px;
+    }
+    /* 4. BODY */
+    .info-field {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      display: flex;
+      margin-bottom: 4px;
+      line-height: 1.45;
+    }
+    .info-label {
+      font-weight: 500;
+      min-width: 62px;
+    }
+    .info-gap { margin-bottom: 8px; }
+    .info-address { margin-bottom: 14px; min-height: 28px; }
+
+
+    /* ═════════════════════════════════════════════════════
+       DETAIL PAGES — SHARED STYLES
+       ═════════════════════════════════════════════════════ */
+
+    /* 3. SECTION HEADER */
+    .section-heading {
+      font-weight: 400;
+      font-size: 28px;
+      color: #20272D;
+    }
+
+    /* 5. SECTION DESC */
+    .section-sub {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 13px;
+      color: #4F4E4F;
+      margin-bottom: 12px;
+    }
+
+    /* 2×2 coverage grid */
+    .coverage-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .cov-card {
+      width: calc(50% - 7px);
+      background: #F2F2F2;
+      padding: 16px 20px;
+    }
+    .cov-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    /* 7a. POLICY NAME */
+    .cov-name {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 7b. POLICY VALUE */
+    .cov-value {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 4. BODY */
+    .cov-desc {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      line-height: 1.5;
+    }
+
+    /* Liability cards */
+    .liab-card {
+      background: #F2F2F2;
+      padding: 14px 20px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+    }
+    .liab-left { min-width: 155px; }
+    /* 7a. POLICY NAME */
+    .liab-name {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 7b. POLICY VALUE */
+    .liab-val {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 15px;
+      color: #0451BD;
+      margin-top: 2px;
+    }
+    /* 4. BODY */
+    .liab-desc {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      line-height: 1.5;
+      flex: 1;
+    }
+
+    /* Other — single container */
+    .other-container {
+      background: #F2F2F2;
+      padding: 20px 24px;
+    }
+    .other-entry { margin-bottom: 12px; }
+    .other-entry:last-child { margin-bottom: 0; }
+    .other-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+    /* 7a. POLICY NAME */
+    .other-name {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 7b. POLICY VALUE */
+    .other-val {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 15px;
+      color: #0451BD;
+    }
+    /* 4. BODY */
+    .other-desc {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      line-height: 1.45;
+    }
+
+    /* Data tables (drivers, vehicles, class codes) */
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+    .detail-table th {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 11px;
+      color: #0451BD;
+      text-align: left;
+      padding: 8px 12px;
+      background: #E8EFF8;
+      border-bottom: 2px solid #C4D8F3;
+    }
+    .detail-table td {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 11px;
+      color: #20272D;
+      padding: 8px 12px;
+      border-bottom: 1px solid #E8EFF8;
+    }
+    .detail-table tr:last-child td { border-bottom: none; }
+
+    /* Payment plan grid */
+    .payment-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .payment-card {
+      width: calc(50% - 7px);
+      background: #F2F2F2;
+      padding: 16px 20px;
+    }
+    .payment-card-title {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      color: #0451BD;
+      margin-bottom: 8px;
+    }
+    .payment-row {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+      color: #20272D;
+      margin-bottom: 4px;
+    }
+    .payment-row-label { font-weight: 500; }
+    .payment-row-value { font-weight: 400; }
+
+    /* Vehicle premium breakdown */
+    .vehicle-premium-card {
+      background: #F2F2F2;
+      padding: 16px 20px;
+      margin-bottom: 10px;
+    }
+    .vehicle-premium-title {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      color: #0451BD;
+      margin-bottom: 8px;
+    }
+    .premium-row {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+      color: #20272D;
+      margin-bottom: 3px;
+    }
+    .premium-row-label { font-weight: 400; }
+    .premium-row-value { font-weight: 500; }
+    .premium-row-total {
+      border-top: 1px solid #C4D8F3;
+      padding-top: 6px;
+      margin-top: 4px;
+      font-weight: 600;
+    }
+
+    /* Property info banner (dwelling) */
+    .property-banner {
+      background: #E8EFF8;
+      padding: 14px 20px;
+      margin-bottom: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 32px;
+    }
+    .property-banner-item {
+      font-family: 'Poppins', sans-serif;
+      font-size: 11px;
+      color: #20272D;
+    }
+    .property-banner-item strong {
+      font-weight: 600;
+      color: #0451BD;
+    }
+
+    {% block extra_styles %}{% endblock %}
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════  PAGE 1 — COVER  ════════════════════════ -->
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="cover-title sentient">{% block cover_title %}Insurance{% endblock %}</div>
+    <div class="cover-subtitle">Insurance made just for you</div>
+
+    <div class="hero-banner-wrap">
+      <div class="hero-wrap">
+        {% block hero_images %}{% endblock %}
+      </div>
+      <div class="premium-banner">
+        <div class="premium-label sentient">Recommended Protection Plan</div>
+        {% block premium_content %}{% endblock %}
+      </div>
+    </div>
+
+    <div class="why-section">
+      <div class="why-title sentient">Why This Plan<br>Was Selected</div>
+      <ul class="why-bullets">
+        {% block why_bullets %}{% endblock %}
+      </ul>
+    </div>
+
+    <div class="info-row">
+      <div class="info-card info-card-client">
+        <div class="info-card-content">
+          <h3 class="sentient">Client Information</h3>
+          <div class="info-field info-gap">
+            <span class="info-label">Name:</span>
+            <span>{{ client_name }}</span>
+          </div>
+          <div class="info-field info-address">
+            <span class="info-label">Address:</span>
+            <span>{{ client_address }}</span>
+          </div>
+          <div class="info-field">
+            <span class="info-label">Phone:</span>
+            <span>{{ client_phone }}</span>
+          </div>
+          <div class="info-field">
+            <span class="info-label">Email:</span>
+            <span>{{ client_email }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-card r8">
+        <h3 class="sentient">Agent Information</h3>
+        <div class="info-field info-gap">
+          <span class="info-label">Name:</span>
+          <span>{{ agent_name }}</span>
+        </div>
+        <div class="info-field info-address">
+          <span class="info-label">Address:</span>
+          <span>{{ agent_address }}</span>
+        </div>
+        <div class="info-field">
+          <span class="info-label">Phone:</span>
+          <span>{{ agent_phone }}</span>
+        </div>
+        <div class="info-field">
+          <span class="info-label">Email:</span>
+          <span>{{ agent_email }}</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+{% block detail_pages %}{% endblock %}
+
+</body>
+</html>

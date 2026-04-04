@@ -94,6 +94,20 @@ export const CYBER_COVERAGE_FIELDS = [
   ["cyber_media_tech_liability", "Media, Tech, Data & Network Liability"],
 ];
 
+// ─── Section 8: Wind Insurance ───────────────────────────────────
+export const WIND_COVERAGE_FIELDS = [
+  ["wind_coverage", "Wind"],
+  ["wind_deductible", "Wind Deductible"],
+  ["wind_percent_deductible", "Wind % Deductible"],
+  ["wind_coverage_premium", "Premium"],
+];
+
+export const WIND_BUYDOWN_FIELDS = [
+  ["wind_buydown", "Wind Buydown"],
+  ["wind_buydown_amount", "Buydown Amount"],
+  ["wind_buydown_premium", "Premium"],
+];
+
 // ─── Empty Structures ───────────────────────────────────────────
 
 export const EMPTY_COMMERCIAL_FORM = {
@@ -154,4 +168,13 @@ export const EMPTY_COMMERCIAL_FORM = {
   cyber_funds_transfer_fraud: "",
   cyber_regulatory_defense: "",
   cyber_media_tech_liability: "",
+
+  // S8: Wind Insurance
+  wind_coverage: "",
+  wind_deductible: "",
+  wind_percent_deductible: "",
+  wind_coverage_premium: "",
+  wind_buydown: "",
+  wind_buydown_amount: "",
+  wind_buydown_premium: "",
 };
