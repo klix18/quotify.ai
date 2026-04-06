@@ -182,7 +182,7 @@
       display: flex;
       align-items: flex-start;
       gap: 36px;
-      margin-bottom: 32px;
+      margin-bottom: 12px;
     }
     /* 3. SECTION HEADER */
     .why-title {
@@ -203,11 +203,11 @@
     }
     .why-bullets li { margin-bottom: 2px; }
 
-    /* Client / Agent info cards */
+    /* Client / Advisor info cards */
     .info-row {
       display: flex;
       gap: 18px;
-      margin-top: auto;
+      margin-top: 24px;
     }
     .info-card {
       flex: 1;
@@ -331,7 +331,7 @@
       align-items: flex-start;
       gap: 24px;
     }
-    .liab-left { min-width: 155px; }
+    .liab-left { width: 200px; flex-shrink: 0; }
     /* 7a. POLICY NAME */
     .liab-name {
       font-family: 'Poppins', sans-serif;
@@ -396,28 +396,36 @@
     /* Data tables (drivers, vehicles, class codes) */
     .detail-table {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       margin-bottom: 16px;
+      overflow: hidden;
     }
     .detail-table th {
       font-family: 'Poppins', sans-serif;
       font-weight: 600;
       font-size: 11px;
-      color: #0451BD;
+      color: #1765D4;
       text-align: left;
-      padding: 8px 12px;
-      background: #E8EFF8;
-      border-bottom: 2px solid #C4D8F3;
+      padding: 10px 14px;
+      background: #FFFFFF;
+      border-top: 1.5px solid #1765D4;
+      border-bottom: 1.5px solid #1765D4;
     }
+    .detail-table th:first-child { border-top-left-radius: 16px; border-left: 1.5px solid #1765D4; }
+    .detail-table th:last-child { border-top-right-radius: 16px; border-right: 1.5px solid #1765D4; }
     .detail-table td {
       font-family: 'Poppins', sans-serif;
       font-weight: 400;
       font-size: 11px;
       color: #20272D;
-      padding: 8px 12px;
-      border-bottom: 1px solid #E8EFF8;
+      padding: 10px 14px;
+      background: #F2F2F2;
+      border-bottom: 1px solid #E8E8E8;
     }
     .detail-table tr:last-child td { border-bottom: none; }
+    .detail-table tr:last-child td:first-child { border-bottom-left-radius: 16px; }
+    .detail-table tr:last-child td:last-child { border-bottom-right-radius: 16px; }
 
     /* Payment plan grid */
     .payment-grid {
@@ -433,20 +441,20 @@
     }
     .payment-card-title {
       font-family: 'Poppins', sans-serif;
-      font-weight: 600;
-      font-size: 15px;
-      color: #0451BD;
+      font-weight: 500;
+      font-size: 11px;
+      color: #20272D;
       margin-bottom: 8px;
     }
     .payment-row {
       display: flex;
       justify-content: space-between;
       font-family: 'Poppins', sans-serif;
-      font-size: 11px;
-      color: #20272D;
+      font-size: 14px;
+      color: #0451BD;
       margin-bottom: 4px;
     }
-    .payment-row-label { font-weight: 500; }
+    .payment-row-label { font-weight: 600; }
     .payment-row-value { font-weight: 400; }
 
     /* Vehicle premium breakdown */
@@ -532,12 +540,19 @@
     <div class="why-section">
       <div class="why-title sentient">Why This Plan<br>Was Selected</div>
       <ul class="why-bullets">
-        
-<li>Provides strong liability coverage to protect your assets and future income.</li>
-<li>Balances comprehensive and collision deductibles for manageable out-of-pocket costs.</li>
-<li>Includes uninsured motorist protection for added peace of mind on the road.</li>
-<li>Offers flexible payment options to fit your budget and preferences.</li>
-
+        {% if why_selected %}
+          {% for line in why_selected.split('\n') %}
+            {% set bullet = line.strip().lstrip('•').lstrip('-').strip() %}
+            {% if bullet %}
+              <li>{{ bullet }}</li>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <li>Covers liability, collision, and comprehensive in one plan.</li>
+          <li>Keeps deductibles at a level that won't break the bank.</li>
+          <li>Includes uninsured motorist protection as a safety net.</li>
+          <li>Gives you multiple payment options to stay comfortable.</li>
+        {% endif %}
       </ul>
     </div>
 
@@ -563,7 +578,7 @@
       </div>
 
       <div class="info-card r8">
-        <h3 class="sentient">Agent Information</h3>
+        <h3 class="sentient">Advisor Information</h3>
         <div class="info-field info-gap">
           <span class="info-label">Name:</span>
           <span>Michael Torres</span>
@@ -597,10 +612,8 @@
       <img src="auto/assets/logo.png" alt="Sizemore Insurance">
     </div>
 
-    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 14px;">Auto Coverage Details</div>
-
     <!-- Liability Limits — 2×2 grid -->
-    <div class="section-heading sentient" style="font-size: 22px; margin-bottom: 4px;">Liability Limits</div>
+    <div class="section-heading sentient" style="margin-top: 8px; margin-bottom: 4px;">Liability Limits</div>
     <div class="section-sub">These limits define the maximum your policy will pay for injuries or damage you cause to others.</div>
 
     <div class="coverage-grid">
@@ -638,7 +651,7 @@
     </div>
 
     <!-- Additional Coverages -->
-    <div class="section-heading sentient" style="font-size: 22px; margin-top: 8px; margin-bottom: 4px;">Additional Coverages</div>
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Additional Coverages</div>
     <div class="section-sub">Extra protections that round out your auto policy for broader peace of mind.</div>
 
     
@@ -682,7 +695,7 @@
     
 
     <!-- Deductibles -->
-    <div class="section-heading sentient" style="font-size: 22px; margin-top: 14px; margin-bottom: 14px;">Deductibles</div>
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 12px;">Deductibles</div>
 
     <div class="other-container r8">
       <div class="other-entry">
@@ -721,6 +734,12 @@
     <div class="section-sub">All drivers listed on the policy and their basic information.</div>
 
     <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 35%;">
+        <col style="width: 18%;">
+        <col style="width: 25%;">
+        <col style="width: 22%;">
+      </colgroup>
       <thead>
         <tr>
           <th>Driver Name</th>
@@ -752,9 +771,15 @@
     <!-- Vehicles -->
     
     <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Insured Vehicles</div>
-    <div class="section-sub">Vehicles covered under this policy along with their premium breakdowns.</div>
+    <div class="section-sub">Vehicles covered under this policy.</div>
 
     <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 38%;">
+        <col style="width: 28%;">
+        <col style="width: 14%;">
+        <col style="width: 20%;">
+      </colgroup>
       <thead>
         <tr>
           <th>Year / Make / Model / Trim</th>
@@ -774,44 +799,6 @@
         
       </tbody>
     </table>
-
-    <!-- Per-vehicle premium breakdowns -->
-    
-    
-    <div class="vehicle-premium-card r8">
-      <div class="vehicle-premium-title">2023 Toyota Camry XSE — Premium Breakdown</div>
-      
-      <div class="premium-row"><span class="premium-row-label">Bodily Injury</span><span class="premium-row-value">$245</span></div>
-      
-      
-      <div class="premium-row"><span class="premium-row-label">Property Damage</span><span class="premium-row-value">$189</span></div>
-      
-      
-      <div class="premium-row"><span class="premium-row-label">Medical Payments</span><span class="premium-row-value">$32</span></div>
-      
-      
-      <div class="premium-row"><span class="premium-row-label">UM/UIM Bodily Injury</span><span class="premium-row-value">$67</span></div>
-      
-      
-      
-      <div class="premium-row"><span class="premium-row-label">Comprehensive</span><span class="premium-row-value">$156</span></div>
-      
-      
-      <div class="premium-row"><span class="premium-row-label">Collision</span><span class="premium-row-value">$234</span></div>
-      
-      
-      <div class="premium-row"><span class="premium-row-label">Rental Reimbursement</span><span class="premium-row-value">$28</span></div>
-      
-      
-      <div class="premium-row"><span class="premium-row-label">Towing &amp; Roadside</span><span class="premium-row-value">$12</span></div>
-      
-      
-      <div class="premium-row premium-row-total"><span class="premium-row-label">Vehicle Subtotal</span><span class="premium-row-value">$963</span></div>
-      
-    </div>
-    
-    
-    
 
     <!-- Payment Options -->
     
@@ -860,8 +847,31 @@
       
     </div>
 
-    
-    
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 12px;">Paid-in-Full Discount</div>
+
+    <div class="other-container r8">
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Gross Premium</span>
+          <span class="other-val">$1,676.16</span>
+        </div>
+        <div class="other-desc">Total premium before any pay-in-full discount is applied.</div>
+      </div>
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Discount Amount</span>
+          <span class="other-val">-$40.00</span>
+        </div>
+        <div class="other-desc">Amount saved by choosing to pay in full.</div>
+      </div>
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Net Pay-in-Full</span>
+          <span class="other-val">$1,636.16</span>
+        </div>
+        <div class="other-desc">Your final amount due when paying the full premium upfront.</div>
+      </div>
+    </div>
 
   </div>
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>

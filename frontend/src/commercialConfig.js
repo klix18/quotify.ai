@@ -111,6 +111,9 @@ export const WIND_BUYDOWN_FIELDS = [
 // ─── Empty Structures ───────────────────────────────────────────
 
 export const EMPTY_COMMERCIAL_FORM = {
+  // Why This Plan Was Selected (AI-generated, editable)
+  why_selected: "",
+
   // S1: Commercial Policy
   policy_term: "",
   total_premium: "",

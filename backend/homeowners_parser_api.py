@@ -111,7 +111,7 @@ Rules:
   Example: "2% - $3,076".
 - replacement_cost_on_contents must be "Yes", "No", or "".
 - 25_extended_replacement_cost must be "Yes", "No", or "".
-- Do not infer agent info unless clearly present.
+- Do not infer advisor info unless clearly present.
 - client_address should be a single line string.
 - Use the quote's actual insured / prepared-for person as client_name, not the agency.
 - If an endorsement indicates 25% extended replacement cost is included, set
@@ -175,10 +175,16 @@ def normalize_homeowners_result(parsed: dict) -> tuple:
     # Extract confidence before normalizing data fields
     raw_confidence = parsed.pop("confidence", {})
 
+    CLIENT_KEYS = {
+        "client_name", "client_address", "client_phone", "client_email",
+    }
+
     for key in ALL_HOMEOWNERS_KEYS:
         parsed.setdefault(key, "")
         if parsed[key] is None:
             parsed[key] = ""
+        if key not in CLIENT_KEYS and str(parsed[key]).strip() == "":
+            parsed[key] = "N/A"
 
     # Flatten confidence (already flat for homeowners, but ensure float values)
     flat_confidence = {}
@@ -300,6 +306,12 @@ def stream_homeowners_quote_with_gemini(
                     "data": patch,
                 }) + "\n"
 
+        # ── Draft "Why Selected" after pass 1 ──
+        from why_selected_generator import generate_why_selected_draft, generate_why_selected_refine
+        draft_bullets = generate_why_selected_draft(dict(sent_draft), "homeowners")
+        if draft_bullets:
+            yield json.dumps({"type": "draft_patch", "data": {"why_selected": draft_bullets}}) + "\n"
+
         yield json.dumps({"type": "status", "message": "Verifying extracted fields..."}) + "\n"
 
         # PASS 2: strict structured extraction
@@ -351,6 +363,10 @@ def stream_homeowners_quote_with_gemini(
                 "type": "final_patch",
                 "data": final_patch,
             }) + "\n"
+
+        # Refine "Why This Plan Was Selected" bullets using final data
+        yield json.dumps({"type": "status", "message": "Generating plan summary..."}) + "\n"
+        data["why_selected"] = generate_why_selected_refine(data, draft_bullets, "homeowners")
 
         yield json.dumps({
             "type": "result",

@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from jinja2 import Environment, FileSystemLoader
 from browser_manager import get_browser
+from pdf_optimizer import optimize_pdf
 
 router = APIRouter()
 
@@ -25,6 +26,7 @@ async def render_homeowners_pdf(output_path: Path, data: dict):
 
     context = {
         "total_premium": data.get("total_premium", ""),
+        "why_selected": data.get("why_selected", ""),
         "dwelling": data.get("dwelling", ""),
         "other_structures": data.get("other_structures", ""),
         "personal_property": data.get("personal_property", ""),
@@ -68,6 +70,9 @@ async def render_homeowners_pdf(output_path: Path, data: dict):
         await page.close()
         # Clean up the temp HTML file
         tmp_html.unlink(missing_ok=True)
+
+    # Re-distill through Ghostscript to flatten Chromium's internal layers
+    optimize_pdf(output_path)
 
 
 @router.post("/api/generate-homeowners-quote")

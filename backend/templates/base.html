@@ -113,7 +113,7 @@
     /* Hero image + premium banner */
     .hero-banner-wrap {
       width: 100%;
-      margin-bottom: {% block hero_margin %}32px{% endblock %};
+      margin-bottom: {% block hero_margin %}16px{% endblock %};
     }
 
     .hero-wrap {
@@ -182,7 +182,8 @@
       display: flex;
       align-items: flex-start;
       gap: 36px;
-      margin-bottom: 32px;
+      margin-top: 8px;
+      margin-bottom: 8px;
     }
     /* 3. SECTION HEADER */
     .why-title {
@@ -203,47 +204,30 @@
     }
     .why-bullets li { margin-bottom: 2px; }
 
-    /* Client / Agent info cards */
+    /* Client / Advisor info cards */
     .info-row {
       display: flex;
       gap: 18px;
-      margin-top: auto;
+      margin-top: 18px;
     }
     .info-card {
       flex: 1;
       background: #F2F2F2;
       padding: 20px 24px;
     }
-    /* Client card: inside gradient stroke (PDF-safe layered approach) */
+    /* Client card: SVG gradient border (stays vector in PDF) */
     .info-card-client {
       position: relative;
       border-radius: 16px;
+      overflow: hidden;
     }
-    /* Layer 1: gradient fill covering bottom 90% */
-    .info-card-client::before {
-      content: '';
+    .info-card-client .gradient-border-svg {
       position: absolute;
-      top: 10%;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      border-radius: 0 0 16px 16px;
-      background: linear-gradient(to bottom, rgba(162, 222, 247, 0), rgba(162, 222, 247, 0.6) 40%, rgba(23, 101, 212, 1));
+      inset: 0;
+      width: 100%;
+      height: 100%;
       pointer-events: none;
     }
-    /* Layer 2: inner fill that covers gradient center, leaving 4px border */
-    .info-card-client::after {
-      content: '';
-      position: absolute;
-      top: calc(10% + 4px);
-      left: 4px;
-      right: 4px;
-      bottom: 4px;
-      border-radius: 0 0 12px 12px;
-      background: #F2F2F2;
-      pointer-events: none;
-    }
-    /* Layer 3: content sits above both pseudo-elements */
     .info-card-content {
       position: relative;
       z-index: 1;
@@ -343,7 +327,7 @@
       align-items: flex-start;
       gap: 24px;
     }
-    .liab-left { min-width: 155px; }
+    .liab-left { width: 200px; flex-shrink: 0; }
     /* 7a. POLICY NAME */
     .liab-name {
       font-family: 'Poppins', sans-serif;
@@ -408,28 +392,36 @@
     /* Data tables (drivers, vehicles, class codes) */
     .detail-table {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       margin-bottom: 16px;
+      overflow: hidden;
     }
     .detail-table th {
       font-family: 'Poppins', sans-serif;
       font-weight: 600;
       font-size: 11px;
-      color: #0451BD;
+      color: #1765D4;
       text-align: left;
-      padding: 8px 12px;
-      background: #E8EFF8;
-      border-bottom: 2px solid #C4D8F3;
+      padding: 10px 14px;
+      background: #FFFFFF;
+      border-top: 1.5px solid #1765D4;
+      border-bottom: 1.5px solid #1765D4;
     }
+    .detail-table th:first-child { border-top-left-radius: 16px; border-left: 1.5px solid #1765D4; }
+    .detail-table th:last-child { border-top-right-radius: 16px; border-right: 1.5px solid #1765D4; }
     .detail-table td {
       font-family: 'Poppins', sans-serif;
       font-weight: 400;
       font-size: 11px;
       color: #20272D;
-      padding: 8px 12px;
-      border-bottom: 1px solid #E8EFF8;
+      padding: 10px 14px;
+      background: #F2F2F2;
+      border-bottom: 1px solid #E8E8E8;
     }
     .detail-table tr:last-child td { border-bottom: none; }
+    .detail-table tr:last-child td:first-child { border-bottom-left-radius: 16px; }
+    .detail-table tr:last-child td:last-child { border-bottom-right-radius: 16px; }
 
     /* Payment plan grid */
     .payment-grid {
@@ -445,20 +437,20 @@
     }
     .payment-card-title {
       font-family: 'Poppins', sans-serif;
-      font-weight: 600;
-      font-size: 15px;
-      color: #0451BD;
+      font-weight: 500;
+      font-size: 11px;
+      color: #20272D;
       margin-bottom: 8px;
     }
     .payment-row {
       display: flex;
       justify-content: space-between;
       font-family: 'Poppins', sans-serif;
-      font-size: 11px;
-      color: #20272D;
+      font-size: 14px;
+      color: #0451BD;
       margin-bottom: 4px;
     }
-    .payment-row-label { font-weight: 500; }
+    .payment-row-label { font-weight: 600; }
     .payment-row-value { font-weight: 400; }
 
     /* Vehicle premium breakdown */
@@ -539,12 +531,35 @@
     <div class="why-section">
       <div class="why-title sentient">Why This Plan<br>Was Selected</div>
       <ul class="why-bullets">
-        {% block why_bullets %}{% endblock %}
+        {% if why_selected %}
+          {% for line in why_selected.split('\n') %}
+            {% set bullet = line.strip().lstrip('•').lstrip('-').strip() %}
+            {% if bullet %}
+              <li>{{ bullet }}</li>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          {% block why_bullets %}{% endblock %}
+        {% endif %}
       </ul>
     </div>
 
     <div class="info-row">
       <div class="info-card info-card-client">
+        <svg class="gradient-border-svg" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="clientGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stop-color="#A2DEF7" stop-opacity="0"/>
+              <stop offset="10%" stop-color="#A2DEF7" stop-opacity="0"/>
+              <stop offset="46%" stop-color="#A2DEF7" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#1765D4" stop-opacity="1"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" rx="14" ry="14"
+                width="100%" height="100%"
+                style="width: calc(100% - 4px); height: calc(100% - 4px);"
+                fill="none" stroke="url(#clientGrad)" stroke-width="4"/>
+        </svg>
         <div class="info-card-content">
           <h3 class="sentient">Client Information</h3>
           <div class="info-field info-gap">
@@ -567,7 +582,7 @@
       </div>
 
       <div class="info-card r8">
-        <h3 class="sentient">Agent Information</h3>
+        <h3 class="sentient">Advisor Information</h3>
         <div class="info-field info-gap">
           <span class="info-label">Name:</span>
           <span>{{ agent_name }}</span>

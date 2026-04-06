@@ -63,6 +63,17 @@ export default function DwellingPanel({
             />
           </div>
         ))}
+        <div style={{ gridColumn: "span 12", minWidth: 0 }}>
+          <FieldControl
+            fieldKey="why_selected"
+            label="Why This Plan Was Selected"
+            value={form.why_selected || ""}
+            onChange={onFieldChange}
+            multiline
+            rows={4}
+            {...fp("why_selected")}
+          />
+        </div>
       </div>
     </SectionCard>
   );

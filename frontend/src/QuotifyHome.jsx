@@ -28,6 +28,7 @@ import AutoPanel from "./AutoPanel";
 import DwellingPanel from "./DwellingPanel";
 import CommercialPanel from "./CommercialPanel";
 import BundlePanel from "./BundlePanel";
+import { triggerSparkleFlow } from "./sparkleFlow";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -51,6 +52,7 @@ export default function QuotifyHome() {
   });
   const [isParsing, setIsParsing] = React.useState(false);
   const [isGenerating, setIsGenerating] = React.useState(false);
+  const generateBtnRef = React.useRef(null);
   const [errorMessage, setErrorMessage] = React.useState("");
   const [parseStatus, setParseStatus] = React.useState("");
 
@@ -1470,6 +1472,9 @@ export default function QuotifyHome() {
     setErrorMessage("");
     setIsGenerating(true);
 
+    /* fire sparkle animation — fields dissolve into the button */
+    triggerSparkleFlow(generateBtnRef.current);
+
     try {
       const endpointMap = {
         homeowners: `${API_BASE_URL}/api/generate-homeowners-quote`,
@@ -2133,6 +2138,7 @@ export default function QuotifyHome() {
               </div>
 
               <button
+                ref={generateBtnRef}
                 type="button"
                 onClick={generateAndDownloadQuote}
                 disabled={isGenerating}
@@ -2145,8 +2151,9 @@ export default function QuotifyHome() {
                   color: COLORS.white,
                   border: `1px solid ${COLORS.blue}`,
                   borderRadius: 14,
-                  minHeight: 48,
-                  padding: "0 24px",
+                  height: 48,
+                  width: 160,
+                  padding: 0,
                   fontSize: 14,
                   fontWeight: 600,
                   fontFamily: "Poppins, sans-serif",
@@ -2158,7 +2165,7 @@ export default function QuotifyHome() {
                   flexShrink: 0,
                 }}
               >
-                {isGenerating ? "GENERATING..." : "Generate + Download Quote"}
+                {isGenerating ? "Creating..." : "Create Quote"}
               </button>
             </div>
             </div>
@@ -2811,10 +2818,11 @@ function FieldControl({
             rows={rows}
             style={{
               ...commonInputStyle,
+              display: "block",
               padding: "10px 12px",
-              minHeight: rows * 20,
+              height: rows * 20 + 20,
               lineHeight: 1.45,
-              resize: "vertical",
+              resize: "none",
               opacity: showSkeleton ? 0.35 : 1,
             }}
           />

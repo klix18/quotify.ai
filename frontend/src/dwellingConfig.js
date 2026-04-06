@@ -143,6 +143,9 @@ const emptyPaymentPlan = () => ({
 });
 
 export const EMPTY_DWELLING_FORM = {
+  // Why This Plan Was Selected (AI-generated, editable)
+  why_selected: "",
+
   // S1: Dwelling Policy
   effective_date: "",
   total_premium: "",

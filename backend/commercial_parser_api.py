@@ -578,6 +578,13 @@ def stream_commercial_quote_with_gemini(
                         "data": patch,
                     }) + "\n"
 
+        # ── Draft "Why Selected" after pass 1 ──
+        draft_data = json.loads(sent_draft_json) if sent_draft_json else {}
+        from why_selected_generator import generate_why_selected_draft, generate_why_selected_refine
+        draft_bullets = generate_why_selected_draft(draft_data, "commercial")
+        if draft_bullets:
+            yield json.dumps({"type": "draft_patch", "data": {"why_selected": draft_bullets}}) + "\n"
+
         yield json.dumps({"type": "status", "message": "Verifying extracted commercial fields..."}) + "\n"
 
         # ── PASS 2: strict structured extraction ─────────────────
@@ -625,6 +632,10 @@ def stream_commercial_quote_with_gemini(
 
         parsed = json.loads(full_text)
         data, confidence = normalize_commercial_result(parsed)
+
+        # Refine "Why This Plan Was Selected" bullets using final data
+        yield json.dumps({"type": "status", "message": "Generating plan summary..."}) + "\n"
+        data["why_selected"] = generate_why_selected_refine(data, draft_bullets, "commercial")
 
         yield json.dumps({
             "type": "result",

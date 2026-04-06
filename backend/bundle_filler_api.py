@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from jinja2 import Environment, FileSystemLoader
 from browser_manager import get_browser
+from pdf_optimizer import optimize_pdf
 
 router = APIRouter()
 
@@ -29,6 +30,7 @@ async def render_bundle_pdf(output_path: Path, data: dict):
         "bundle_total_premium": data.get("bundle_total_premium", ""),
         "home_premium": data.get("home_premium", ""),
         "auto_premium": data.get("auto_premium", ""),
+        "why_selected": data.get("why_selected", ""),
         # Client / Agent
         "client_name": data.get("client_name", ""),
         "client_address": data.get("client_address", ""),
@@ -86,6 +88,9 @@ async def render_bundle_pdf(output_path: Path, data: dict):
     finally:
         await page.close()
         tmp_html.unlink(missing_ok=True)
+
+    # Re-distill through Ghostscript to flatten Chromium's internal layers
+    optimize_pdf(output_path)
 
 
 @router.post("/api/generate-bundle-quote")

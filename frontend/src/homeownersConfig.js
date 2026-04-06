@@ -15,10 +15,10 @@ export const HOMEOWNERS_FIELDS = [
     ["client_address", "Client Address"],
     ["client_phone", "Client Phone"],
     ["client_email", "Client Email"],
-    ["agent_name", "Agent Name"],
-    ["agent_address", "Agent Address"],
-    ["agent_phone", "Agent Phone"],
-    ["agent_email", "Agent Email"],
+    ["agent_name", "Advisor Name"],
+    ["agent_address", "Advisor Address"],
+    ["agent_phone", "Advisor Phone"],
+    ["agent_email", "Advisor Email"],
   ];
   
   export const HOMEOWNERS_YES_NO_FIELDS = new Set([
@@ -75,6 +75,7 @@ export const HOMEOWNERS_FIELDS = [
     ],
   ];
   
-  export const EMPTY_HOMEOWNERS_FORM = Object.fromEntries(
-    HOMEOWNERS_FIELDS.map(([key]) => [key, ""])
-  );
+  export const EMPTY_HOMEOWNERS_FORM = {
+    ...Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, ""])),
+    why_selected: "",
+  };

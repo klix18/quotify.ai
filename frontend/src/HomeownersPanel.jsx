@@ -73,6 +73,18 @@ export default function HomeownersPanel({
           {policyRows.map((row, i) => (
             <div key={i}>{renderRow(row)}</div>
           ))}
+          <FieldControl
+            fieldKey="why_selected"
+            label="Why This Plan Was Selected"
+            value={form.why_selected || ""}
+            onChange={onFieldChange}
+            multiline
+            rows={4}
+            isLoading={loadingFields["why_selected"] || Object.values(loadingFields).some(Boolean)}
+            isFinal={finalizedFields["why_selected"]}
+            isManuallyEdited={manuallyEditedFields["why_selected"]}
+            confidence={confidenceMap?.["why_selected"] ?? null}
+          />
         </div>
       </SectionCard>
 

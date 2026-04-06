@@ -157,6 +157,9 @@ const emptyPaymentPlan = () => ({
 
 // ─── Complete Empty Form ─────────────────────────────────────────
 export const EMPTY_BUNDLE_FORM = {
+  // Why This Plan Was Selected (AI-generated, editable)
+  why_selected: "",
+
   // S1: Bundle Policy
   bundle_total_premium: "",
   home_premium: "",

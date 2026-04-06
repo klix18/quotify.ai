@@ -140,6 +140,9 @@ const emptyPaymentPlan = () => ({
 
 // ─── Complete Empty Form ─────────────────────────────────────────
 export const EMPTY_AUTO_FORM = {
+  // Why This Plan Was Selected (AI-generated, editable)
+  why_selected: "",
+
   // S1: Auto Policy
   quote_date: "",
   quote_effective_date: "",

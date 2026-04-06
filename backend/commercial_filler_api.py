@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from jinja2 import Environment, FileSystemLoader
 from browser_manager import get_browser
+from pdf_optimizer import optimize_pdf
 
 router = APIRouter()
 
@@ -26,6 +27,7 @@ async def render_commercial_pdf(output_path: Path, data: dict):
         # Policy
         "total_premium": data.get("total_premium", ""),
         "additional_premiums_taxes_fees": data.get("additional_premiums_taxes_fees", ""),
+        "why_selected": data.get("why_selected", ""),
         # Client / Agent
         "named_insured": data.get("named_insured", ""),
         "mailing_address": data.get("mailing_address", ""),
@@ -99,6 +101,9 @@ async def render_commercial_pdf(output_path: Path, data: dict):
     finally:
         await page.close()
         tmp_html.unlink(missing_ok=True)
+
+    # Re-distill through Ghostscript to flatten Chromium's internal layers
+    optimize_pdf(output_path)
 
 
 @router.post("/api/generate-commercial-quote")
