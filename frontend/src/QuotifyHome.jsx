@@ -1,4 +1,5 @@
 import React from "react";
+import { UserButton, useUser } from "@clerk/clerk-react";
 import COLORS from "./colors";
 import { INSURANCE_OPTIONS } from "./insuranceOptions";
 import {
@@ -33,6 +34,7 @@ import { triggerSparkleFlow } from "./sparkleFlow";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 export default function QuotifyHome() {
+  const { user } = useUser();
   const [selectedInsurance, setSelectedInsurance] = React.useState("homeowners");
   const [hoveredInsurance, setHoveredInsurance] = React.useState("");
   const [isBrowseHovered, setIsBrowseHovered] = React.useState(false);
@@ -1912,7 +1914,7 @@ export default function QuotifyHome() {
             </div>
           </SidebarBlock>
 
-          <SidebarBlock title="Upload Quote" status={uploadReady} style={{ flexShrink: 0 }}>
+          <SidebarBlock title="Upload Quote" status={uploadReady} style={{ flexShrink: 1, minHeight: 0, overflow: "hidden" }}>
             <div
               onDragEnter={(e) => {
                 if (!uploaderEnabled) return;
@@ -1934,7 +1936,7 @@ export default function QuotifyHome() {
                 handleDrop(e);
               }}
               style={{
-                minHeight: 200,
+                minHeight: 140,
                 borderRadius: 16,
                 border: `1.5px dashed ${
                   uploaderEnabled
@@ -1944,7 +1946,7 @@ export default function QuotifyHome() {
                     : COLORS.borderGrey
                 }`,
                 background: uploaderActive ? COLORS.blueSoft : COLORS.white,
-                padding: "18px 14px",
+                padding: "12px 14px",
                 transition: "all 200ms ease",
                 opacity: uploaderEnabled ? 1 : 0.5,
                 pointerEvents: uploaderEnabled ? "auto" : "none",
@@ -2077,6 +2079,29 @@ export default function QuotifyHome() {
               )}
             </div>
           </SidebarBlock>
+
+          {/* Profile */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "0 4px",
+              marginTop: "auto",
+              flexShrink: 0,
+            }}
+          >
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: { width: 32, height: 32 },
+                },
+              }}
+            />
+            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.mutedText }}>
+              {user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account"}
+            </div>
+          </div>
           </div>
         </aside>
 
