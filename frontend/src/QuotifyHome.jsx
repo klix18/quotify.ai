@@ -1594,6 +1594,52 @@ export default function QuotifyHome() {
   const advisorReady = !!selectedAdvisorName;
   const uploadReady = !!fileName;
 
+  // Required fields per insurance type: client info, advisor info, and policy
+  const REQUIRED_FIELDS_MAP = {
+    homeowners: [
+      "client_name", "client_address", "client_phone", "client_email",
+      "agent_name", "agent_address", "agent_phone", "agent_email",
+      "total_premium",
+    ],
+    auto: [
+      "client_name", "client_address", "client_phone", "client_email",
+      "agent_name", "agent_address", "agent_phone", "agent_email",
+      "total_premium",
+    ],
+    dwelling: [
+      "named_insured", "client_address", "client_phone", "client_email",
+      "agent_name", "agent_address", "agent_phone", "agent_email",
+      "total_premium",
+    ],
+    commercial: [
+      "named_insured", "mailing_address", "client_phone", "client_email",
+      "agent_name", "agent_address", "agent_phone", "agent_email",
+      "total_premium",
+    ],
+    bundle: [
+      "client_name", "client_address", "client_phone", "client_email",
+      "agent_name", "agent_address", "agent_phone", "agent_email",
+      "bundle_total_premium",
+    ],
+  };
+
+  const FORM_MAP = {
+    homeowners: homeownersForm,
+    auto: autoForm,
+    dwelling: dwellingForm,
+    commercial: commercialForm,
+    bundle: bundleForm,
+  };
+
+  const allRequiredFilled = (() => {
+    const fields = REQUIRED_FIELDS_MAP[selectedInsurance];
+    const form = FORM_MAP[selectedInsurance];
+    if (!fields || !form) return false;
+    return fields.every((key) => String(form[key] || "").trim() !== "");
+  })();
+
+  const allReady = allRequiredFilled;
+
   const homeownersCompletedFields = HOMEOWNERS_FIELDS.filter(
     ([key]) => String(homeownersForm[key] || "").trim() !== ""
   ).length;
@@ -2166,15 +2212,15 @@ export default function QuotifyHome() {
                 ref={generateBtnRef}
                 type="button"
                 onClick={generateAndDownloadQuote}
-                disabled={isGenerating}
+                disabled={!allReady || isGenerating}
                 onMouseEnter={() => {
-                  if (!isGenerating) setIsGenerateHovered(true);
+                  if (allReady && !isGenerating) setIsGenerateHovered(true);
                 }}
                 onMouseLeave={() => setIsGenerateHovered(false)}
                 style={{
-                  background: COLORS.blue,
-                  color: COLORS.white,
-                  border: `1px solid ${COLORS.blue}`,
+                  background: allReady ? COLORS.blue : "#DFE3E8",
+                  color: allReady ? COLORS.white : "#B0B7C3",
+                  border: `1px solid ${allReady ? COLORS.blue : "#DFE3E8"}`,
                   borderRadius: 14,
                   height: 48,
                   width: 160,
@@ -2182,7 +2228,7 @@ export default function QuotifyHome() {
                   fontSize: 14,
                   fontWeight: 600,
                   fontFamily: "Poppins, sans-serif",
-                  cursor: isGenerating ? "not-allowed" : "pointer",
+                  cursor: allReady && !isGenerating ? "pointer" : "not-allowed",
                   transition: "all 200ms ease",
                   boxShadow: isGenerateHovered
                     ? `0 0 28px ${COLORS.hoverShadow}`
