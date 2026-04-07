@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from jinja2 import Environment, FileSystemLoader
 from browser_manager import get_browser
 from pdf_optimizer import optimize_pdf
+from pdf_storage_helpers import store_generated_pdf
 
 router = APIRouter()
 
@@ -117,6 +118,17 @@ async def generate_commercial_quote(payload: dict):
         date_str = datetime.now().strftime("%m-%d-%Y")
         safe_client = "-".join(client_name.split()) if client_name else "Unknown"
         download_name = f"commercial_quote_{date_str}_{safe_client}.pdf"
+
+        # Store generated PDF in database
+        try:
+            await store_generated_pdf(
+                pdf_path=output_path,
+                file_name=download_name,
+                insurance_type="commercial",
+                client_name=client_name,
+            )
+        except Exception:
+            pass
 
         return FileResponse(
             path=output_path,

@@ -18,6 +18,8 @@ from fastapi.responses import StreamingResponse
 from google import genai
 from google.genai import types
 
+from pdf_storage_helpers import store_uploaded_pdf
+
 load_dotenv()
 
 router = APIRouter()
@@ -837,9 +839,20 @@ async def parse_dwelling_quote(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Please upload a PDF file.")
 
+    file_bytes = await file.read()
+
+    try:
+        await store_uploaded_pdf(
+            file_data=file_bytes,
+            file_name=file.filename or "dwelling_quote.pdf",
+            insurance_type="dwelling",
+        )
+    except Exception:
+        pass
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
         temp_path = Path(temp_file.name)
-        temp_file.write(await file.read())
+        temp_file.write(file_bytes)
 
     def event_stream():
         try:

@@ -20,6 +20,8 @@ from fastapi.responses import StreamingResponse
 from google import genai
 from google.genai import types
 
+from pdf_storage_helpers import store_uploaded_pdf
+
 load_dotenv()
 
 router = APIRouter()
@@ -870,11 +872,25 @@ async def parse_bundle_quote(files: List[UploadFile] = File(...)):
     if len(files) > 2:
         raise HTTPException(status_code=400, detail="Bundle accepts at most 2 PDFs.")
 
+    # Read all file bytes upfront and store in database
+    file_bytes_list = []
+    for f in files:
+        f_bytes = await f.read()
+        file_bytes_list.append(f_bytes)
+        try:
+            await store_uploaded_pdf(
+                file_data=f_bytes,
+                file_name=f.filename or "bundle_quote.pdf",
+                insurance_type="bundle",
+            )
+        except Exception:
+            pass
+
     if len(files) == 1:
         # Single combined bundle PDF — use bundle parser
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             temp_path = Path(temp_file.name)
-            temp_file.write(await files[0].read())
+            temp_file.write(file_bytes_list[0])
 
         def event_stream_single():
             try:
@@ -890,9 +906,9 @@ async def parse_bundle_quote(files: List[UploadFile] = File(...)):
 
     # Two files — classify and parse separately, then merge
     temp_paths = []
-    for f in files:
+    for fb in file_bytes_list:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tf:
-            tf.write(await f.read())
+            tf.write(fb)
             temp_paths.append(Path(tf.name))
 
     def event_stream_dual():

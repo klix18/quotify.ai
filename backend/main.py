@@ -20,6 +20,7 @@ from wind_parser_api import router as wind_parser_router
 
 from analytics_api import router as analytics_router
 from track_api import router as track_router
+from pdf_storage_api import router as pdf_storage_router
 
 from browser_manager import get_browser, close_browser
 from database import init_db, close_pool
@@ -68,3 +69,6 @@ app.include_router(wind_parser_router)
 # Analytics & tracking routers
 app.include_router(analytics_router)
 app.include_router(track_router)
+
+# PDF storage router
+app.include_router(pdf_storage_router)

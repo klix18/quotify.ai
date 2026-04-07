@@ -14,6 +14,8 @@ from fastapi.responses import StreamingResponse
 from google import genai
 from google.genai import types
 
+from pdf_storage_helpers import store_uploaded_pdf
+
 load_dotenv()
 
 router = APIRouter()
@@ -276,8 +278,18 @@ async def parse_wind_quote(file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
+    content = await file.read()
+
+    try:
+        await store_uploaded_pdf(
+            file_data=content,
+            file_name=file.filename or "wind_quote.pdf",
+            insurance_type="wind",
+        )
+    except Exception:
+        pass
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        content = await file.read()
         tmp.write(content)
         tmp_path = Path(tmp.name)
 
