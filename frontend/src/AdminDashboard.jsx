@@ -204,7 +204,20 @@ function ManualChangesLeaderboard({ data }) {
 }
 
 /* ── Clickable User Row ──────────────────────────────────────── */
-function UserRow({ user, onClick }) {
+function RoleBadge({ role }) {
+  const isAdmin = role === "admin";
+  return (
+    <span style={{
+      display: "inline-block", padding: "3px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600,
+      textTransform: "capitalize",
+      background: isAdmin ? "rgba(23,101,212,0.08)" : "rgba(31,157,85,0.08)",
+      color: isAdmin ? COLORS.blue : COLORS.green,
+      border: `1px solid ${isAdmin ? "rgba(23,101,212,0.15)" : "rgba(31,157,85,0.15)"}`,
+    }}>{role || "advisor"}</span>
+  );
+}
+
+function UserRow({ user, role, onClick }) {
   const [hovered, setHovered] = React.useState(false);
   return (
     <tr
@@ -231,9 +244,11 @@ function UserRow({ user, onClick }) {
           {user.user_name}
         </div>
       </td>
+      <td style={{ padding: "12px 14px", textAlign: "center" }}><RoleBadge role={role} /></td>
       <td style={{ padding: "12px 14px", textAlign: "right", fontWeight: 700, color: COLORS.black }}>{user.total}</td>
       <td style={{ padding: "12px 14px", textAlign: "right" }}>{user.quotes_created}</td>
       <td style={{ padding: "12px 14px", textAlign: "right" }}>{user.pdfs_uploaded}</td>
+      <td style={{ padding: "12px 14px", textAlign: "right", fontWeight: 600, color: "#0B91E6" }}>{user.days_active || 0}</td>
       <td style={{ padding: "12px 14px", textAlign: "right", color: COLORS.mutedText }}>
         <span style={{ fontSize: 16 }}>&#8250;</span>
       </td>
@@ -241,7 +256,7 @@ function UserRow({ user, onClick }) {
   );
 }
 
-function UserTable({ users, onSelectUser }) {
+function UserTable({ users, clerkUsers, onSelectUser }) {
   if (!users || users.length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No user activity yet</div>;
   const th = { padding: "10px 14px", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" };
   return (
@@ -250,15 +265,22 @@ function UserTable({ users, onSelectUser }) {
         <thead>
           <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)` }}>
             <th style={{ ...th, textAlign: "left" }}>User</th>
+            <th style={{ ...th, textAlign: "center" }}>Role</th>
             <th style={{ ...th, textAlign: "right" }}>Total</th>
             <th style={{ ...th, textAlign: "right" }}>Quotes</th>
             <th style={{ ...th, textAlign: "right" }}>Uploads</th>
+            <th style={{ ...th, textAlign: "right" }}>Days Active</th>
             <th style={{ ...th, textAlign: "right", width: 30 }}></th>
           </tr>
         </thead>
         <tbody>
           {users.map((u) => (
-            <UserRow key={u.user_name} user={u} onClick={() => onSelectUser(u.user_name)} />
+            <UserRow
+              key={u.user_name}
+              user={u}
+              role={clerkUsers[u.user_name]?.role || "advisor"}
+              onClick={() => onSelectUser(u.user_name)}
+            />
           ))}
         </tbody>
       </table>
@@ -267,9 +289,116 @@ function UserTable({ users, onSelectUser }) {
 }
 
 /* ── User Detail View ────────────────────────────────────────── */
-function UserDetailView({ userName, period, getToken, onBack }) {
+function DaysActiveCard({ daysActive, activeDates }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <GlassPanel borderRadius={18} style={{ flex: "1 1 200px", minWidth: 170, transition: "all 200ms ease", boxShadow: hovered ? `0 8px 32px rgba(23,101,212,0.10)` : "none" }}>
+      <div
+        style={{ padding: "24px 28px", cursor: "pointer" }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 11, color: COLORS.mutedText, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
+              Days Active
+            </div>
+            <div style={{ fontSize: 32, fontWeight: 700, color: "#0B91E6", lineHeight: 1.1 }}>{daysActive}</div>
+          </div>
+          <div style={{ fontSize: 18, color: COLORS.mutedText, transition: "transform 200ms ease", transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}>
+            &#9662;
+          </div>
+        </div>
+        {expanded && activeDates && activeDates.length > 0 && (
+          <div style={{ marginTop: 14, borderTop: `1px solid rgba(180,200,230,0.3)`, paddingTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {activeDates.map((date) => {
+              const d = new Date(date + "T00:00:00");
+              return (
+                <span key={date} style={{
+                  fontSize: 11, fontWeight: 500, padding: "4px 10px", borderRadius: 8,
+                  background: "rgba(23,101,212,0.06)", color: COLORS.blue,
+                  border: "1px solid rgba(23,101,212,0.12)",
+                }}>
+                  {d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </GlassPanel>
+  );
+}
+
+function RoleToggle({ clerkUserId, currentRole, getToken, onRoleChanged }) {
+  const [role, setRole] = React.useState(currentRole || "advisor");
+  const [saving, setSaving] = React.useState(false);
+  const [confirmTarget, setConfirmTarget] = React.useState(null);
+
+  const handleChange = (newRole) => {
+    if (newRole === role) return;
+    setConfirmTarget(newRole);
+  };
+
+  const confirmChange = async () => {
+    if (!confirmTarget || !clerkUserId) return;
+    setSaving(true);
+    try {
+      const token = await getToken();
+      const resp = await fetch(`${API_BASE_URL}/api/admin/users/${clerkUserId}/role`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ role: confirmTarget }),
+      });
+      if (resp.ok) {
+        setRole(confirmTarget);
+        if (onRoleChanged) onRoleChanged(confirmTarget);
+      }
+    } catch {}
+    setSaving(false);
+    setConfirmTarget(null);
+  };
+
+  return (
+    <>
+      {confirmTarget && (
+        <ConfirmModal
+          message={`Change this user's role to "${confirmTarget}"? They will ${confirmTarget === "admin" ? "gain" : "lose"} admin access.`}
+          onConfirm={confirmChange}
+          onCancel={() => setConfirmTarget(null)}
+          confirming={saving}
+        />
+      )}
+      <div style={{ display: "flex", gap: 6 }}>
+        {["advisor", "admin"].map((r) => {
+          const active = role === r;
+          return (
+            <button
+              key={r}
+              onClick={() => handleChange(r)}
+              disabled={saving}
+              style={{
+                padding: "6px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+                textTransform: "capitalize", cursor: saving ? "not-allowed" : "pointer",
+                transition: "all 200ms ease", border: "none",
+                background: active ? (r === "admin" ? COLORS.blue : COLORS.green) : "rgba(0,0,0,0.04)",
+                color: active ? COLORS.white : COLORS.mutedText,
+              }}
+            >{r}</button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefresh }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+
+  const clerkUser = clerkUsers[userName] || null;
 
   React.useEffect(() => {
     (async () => {
@@ -292,10 +421,7 @@ function UserDetailView({ userName, period, getToken, onBack }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <HoverButton variant="outline" onClick={onBack} style={{ height: 40, padding: "0 18px" }}>
-          &#8249; Users
-        </HoverButton>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
             width: 40, height: 40, borderRadius: "50%",
@@ -305,8 +431,22 @@ function UserDetailView({ userName, period, getToken, onBack }) {
           }}>
             {userName.charAt(0).toUpperCase()}
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.black }}>{userName}</div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.black }}>{userName}</div>
+            {clerkUser?.email && <div style={{ fontSize: 12, color: COLORS.mutedText }}>{clerkUser.email}</div>}
+          </div>
         </div>
+        {clerkUser?.id && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, color: COLORS.mutedText, fontWeight: 500 }}>Role:</span>
+            <RoleToggle
+              clerkUserId={clerkUser.id}
+              currentRole={clerkUser.role}
+              getToken={getToken}
+              onRoleChanged={() => onRefresh()}
+            />
+          </div>
+        )}
       </div>
 
       {/* User stat cards */}
@@ -314,6 +454,7 @@ function UserDetailView({ userName, period, getToken, onBack }) {
         <StatCard label="Total Events" value={data.total_events} color={COLORS.blue} />
         <StatCard label="Quotes Created" value={data.quotes_created} color={COLORS.green} />
         <StatCard label="PDFs Uploaded" value={data.pdfs_uploaded} />
+        <DaysActiveCard daysActive={data.days_active || 0} activeDates={data.active_dates || []} />
       </div>
 
       {/* Insurance breakdown */}
@@ -390,18 +531,30 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
     if (!fileName || fileName === "—") return;
     try {
       const token = await getToken();
-      const resp = await fetch(`${API_BASE_URL}/api/pdfs?doc_type=${type}&limit=200`, {
+      // Find the document ID from the list
+      const listResp = await fetch(`${API_BASE_URL}/api/pdfs?doc_type=${type}&limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      // Find matching document by file_name
-      const doc = data.documents?.find((d) =>
+      if (!listResp.ok) return;
+      const listData = await listResp.json();
+      const doc = listData.documents?.find((d) =>
         d.file_name === fileName || fileName.startsWith(d.file_name?.split(".pdf")[0])
       );
-      if (doc) {
-        window.open(`${API_BASE_URL}/api/pdfs/${doc.id}`, "_blank");
-      }
+      if (!doc) return;
+      // Download the actual PDF with auth
+      const pdfResp = await fetch(`${API_BASE_URL}/api/pdfs/${doc.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!pdfResp.ok) return;
+      const blob = await pdfResp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.file_name || fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch {}
   };
 
@@ -517,6 +670,7 @@ export default function AdminDashboard({ onBack }) {
   const [resetConfirm, setResetConfirm] = React.useState(false);
   const [resetting, setResetting] = React.useState(false);
   const [selectedUser, setSelectedUser] = React.useState(null);
+  const [clerkUsers, setClerkUsers] = React.useState({});  // keyed by display name -> { id, role }
 
   // Mouse-tracking orbs
   const containerRef = React.useRef(null);
@@ -589,9 +743,10 @@ export default function AdminDashboard({ onBack }) {
     setError("");
     try {
       const token = await getToken();
-      const [summaryResp, changesResp] = await Promise.all([
+      const [summaryResp, changesResp, usersResp] = await Promise.all([
         fetch(`${API_BASE_URL}/api/admin/analytics/summary?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE_URL}/api/admin/analytics/manual-changes?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (summaryResp.status === 403) {
         setError("You don't have admin access. Set role: 'admin' in your Clerk user's public metadata.");
@@ -603,6 +758,17 @@ export default function AdminDashboard({ onBack }) {
       }
       setData(await summaryResp.json());
       if (changesResp.ok) setManualChanges(await changesResp.json());
+      if (usersResp.ok) {
+        const usersData = await usersResp.json();
+        const map = {};
+        for (const u of usersData.users || []) {
+          const displayName = `${u.first_name} ${u.last_name}`.trim();
+          map[displayName] = { id: u.id, role: u.role, email: u.email };
+          // Also key by first name only as fallback
+          if (u.first_name) map[u.first_name] = { id: u.id, role: u.role, email: u.email };
+        }
+        setClerkUsers(map);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -641,7 +807,7 @@ export default function AdminDashboard({ onBack }) {
         minHeight: "100vh",
         background: COLORS.pageBg,
         fontFamily: "Poppins, sans-serif",
-        padding: "32px 40px",
+        padding: "22px 28px 24px 28px",
         position: "relative",
         overflow: "hidden",
       }}
@@ -667,8 +833,8 @@ export default function AdminDashboard({ onBack }) {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <HoverButton variant="outline" onClick={onBack} style={{ height: 48, padding: "0 24px" }}>
-              Back
+            <HoverButton variant="outline" onClick={selectedUser ? () => setSelectedUser(null) : onBack} style={{ height: 48, padding: "0 24px" }}>
+              Close
             </HoverButton>
             <div>
               <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 22, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 4 }}>
@@ -698,7 +864,7 @@ export default function AdminDashboard({ onBack }) {
               {loading ? "Loading..." : "Refresh"}
             </HoverButton>
             <HoverButton variant="danger" onClick={() => setResetConfirm(true)}>
-              Reset Data
+              Clear Data
             </HoverButton>
           </div>
         </div>
@@ -732,7 +898,7 @@ export default function AdminDashboard({ onBack }) {
             <Section title="Team Leaderboard" action={
               <div style={{ fontSize: 12, color: COLORS.mutedText }}>Click a user for details</div>
             }>
-              <UserTable users={data.usage_by_user} onSelectUser={setSelectedUser} />
+              <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} onSelectUser={setSelectedUser} />
             </Section>
 
             {/* Two-column: insurance breakdown + manual changes */}
@@ -759,6 +925,8 @@ export default function AdminDashboard({ onBack }) {
             period={period}
             getToken={getToken}
             onBack={() => setSelectedUser(null)}
+            clerkUsers={clerkUsers}
+            onRefresh={fetchAnalytics}
           />
         )}
       </div>

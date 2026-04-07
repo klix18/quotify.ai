@@ -21,6 +21,7 @@ from wind_parser_api import router as wind_parser_router
 from analytics_api import router as analytics_router
 from track_api import router as track_router
 from pdf_storage_api import router as pdf_storage_router
+from clerk_users_api import router as clerk_users_router
 
 from browser_manager import get_browser, close_browser
 from database import init_db, close_pool
@@ -72,3 +73,6 @@ app.include_router(track_router)
 
 # PDF storage router
 app.include_router(pdf_storage_router)
+
+# Clerk user management router
+app.include_router(clerk_users_router)

@@ -64,13 +64,14 @@ async def get_analytics_summary(
             ORDER BY count DESC
         """, cutoff)
 
-        # Usage by user
+        # Usage by user (includes days active)
         user_rows = await conn.fetch("""
             SELECT
                 user_name,
                 COUNT(*) AS total,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created,
-                COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded
+                COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded,
+                COUNT(DISTINCT DATE(created_at AT TIME ZONE 'UTC')) AS days_active
             FROM analytics_events
             WHERE created_at >= $1
             GROUP BY user_name
@@ -112,6 +113,7 @@ async def get_analytics_summary(
                 "total": row["total"],
                 "quotes_created": row["quotes_created"],
                 "pdfs_uploaded": row["pdfs_uploaded"],
+                "days_active": row["days_active"],
             }
             for row in user_rows
         ],
@@ -212,12 +214,22 @@ async def get_user_detail(
             LIMIT 50
         """, cutoff, user_name)
 
+        # Distinct active days (one per calendar date)
+        active_day_rows = await conn.fetch("""
+            SELECT DISTINCT DATE(created_at AT TIME ZONE 'UTC') AS active_date
+            FROM analytics_events
+            WHERE created_at >= $1 AND user_name = $2
+            ORDER BY active_date DESC
+        """, cutoff, user_name)
+
     return {
         "user_name": user_name,
         "period": period,
         "total_events": totals["total_events"],
         "quotes_created": totals["quotes_created"],
         "pdfs_uploaded": totals["pdfs_uploaded"],
+        "days_active": len(active_day_rows),
+        "active_dates": [row["active_date"].isoformat() for row in active_day_rows],
         "by_insurance_type": {row["insurance_type"]: row["count"] for row in type_rows},
         "recent_events": [
             {
