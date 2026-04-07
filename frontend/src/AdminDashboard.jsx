@@ -53,10 +53,10 @@ function HoverButton({ children, onClick, disabled, variant = "primary", style: 
       boxShadow: hovered && !disabled ? `0 0 28px ${COLORS.hoverShadow}` : "0 0 0 rgba(0,0,0,0)",
     },
     outline: {
-      background: "rgba(255,255,255,0.6)", color: COLORS.black,
-      border: `1px solid ${COLORS.borderGrey}`,
-      backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-      boxShadow: hovered ? `0 0 24px ${COLORS.hoverShadow}` : "0 0 0 rgba(0,0,0,0)",
+      background: "rgba(255,255,255,0.55)", color: COLORS.black,
+      border: `1px solid rgba(255,255,255,0.5)`,
+      backdropFilter: "blur(20px) saturate(1.6)", WebkitBackdropFilter: "blur(20px) saturate(1.6)",
+      boxShadow: hovered ? `0 2px 20px ${COLORS.hoverShadow}` : "0 2px 12px rgba(0,0,0,0.04)",
     },
     danger: {
       background: COLORS.dangerSoft, color: COLORS.danger,
@@ -218,9 +218,9 @@ function RoleBadge({ role }) {
 }
 
 const RANK_COLORS = {
-  1: "linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C)",
-  2: "linear-gradient(135deg, #C0C0C0, #E8E8E8, #A8A8A8, #E0E0E0, #808080)",
-  3: "linear-gradient(135deg, #CD7F32, #E8B873, #A0622E, #DBA860, #8C5A2A)",
+  1: "linear-gradient(135deg, #91672C, #C9A84C, #7A5521, #C9A84C, #6B4A1A)",
+  2: "linear-gradient(135deg, #6B6B6B, #A0A0A0, #585858, #A0A0A0, #4A4A4A)",
+  3: "linear-gradient(135deg, #8B5E2A, #B87D3E, #724B1E, #B87D3E, #5C3D18)",
 };
 
 function UserRow({ user, role, onClick, rank }) {
@@ -911,70 +911,71 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         />
       )}
 
-      {/* Sticky header */}
+      {/* Sticky header — individual frosted elements, no container bar */}
       <div style={{
         position: "sticky", top: 0, zIndex: 20,
-        paddingTop: 22, paddingBottom: 0,
+        padding: "18px 28px 14px 28px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        flexWrap: "wrap", gap: 12,
+        pointerEvents: "none",
       }}>
-        <div style={{ padding: "0 28px 16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <HoverButton
-              variant="outline"
-              onClick={isAdmin && selectedUser ? () => setSelectedUser(null) : onBack}
-              style={{ height: 48, padding: "0 24px" }}
-            >
-              {isAdmin && selectedUser ? "Back" : "Close"}
-            </HoverButton>
-            <div>
-              <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 22, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 4 }}>
-                {isAdmin ? "Analytics Dashboard" : "My Activity"}
-              </div>
-              <div style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 400, lineHeight: 1.35 }}>
-                Showing data for: {periodLabel}
-              </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, pointerEvents: "auto" }}>
+          <HoverButton
+            variant="outline"
+            onClick={isAdmin && selectedUser ? () => setSelectedUser(null) : onBack}
+            style={{ height: 44, padding: "0 22px" }}
+          >
+            {isAdmin && selectedUser ? "Back" : "Close"}
+          </HoverButton>
+          <div style={{
+            background: "rgba(255,255,255,0.55)",
+            backdropFilter: "blur(20px) saturate(1.6)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.6)",
+            borderRadius: 14, padding: "8px 18px",
+            border: "1px solid rgba(255,255,255,0.5)",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+          }}>
+            <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 2 }}>
+              {isAdmin ? "Analytics Dashboard" : "My Activity"}
+            </div>
+            <div style={{ fontSize: 12, color: COLORS.mutedText, fontWeight: 400, lineHeight: 1.35 }}>
+              Showing data for: {periodLabel}
             </div>
           </div>
-
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              style={{
-                padding: "0 14px", height: 48, borderRadius: 14,
-                border: `1px solid ${COLORS.borderGrey}`,
-                background: "rgba(255,255,255,0.6)", backdropFilter: "blur(12px)",
-                fontSize: 14, fontFamily: "Poppins, sans-serif", fontWeight: 500,
-                color: COLORS.black, cursor: "pointer", transition: "all 200ms ease",
-              }}
-            >
-              {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
-            {isAdmin && (
-              <HoverButton variant="primary" onClick={fetchAnalytics} disabled={loading}>
-                {loading ? "Loading..." : "Refresh"}
-              </HoverButton>
-            )}
-            {isAdmin && (
-              <HoverButton variant="danger" onClick={() => setResetConfirm(true)}>
-                Clear Data
-              </HoverButton>
-            )}
-          </div>
         </div>
-        {/* Blur fade edge — content scrolling underneath gets blurred out */}
-        <div style={{
-          height: 24,
-          background: "linear-gradient(to bottom, rgba(240,244,250,0.95) 0%, rgba(240,244,250,0.7) 40%, rgba(240,244,250,0) 100%)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-          maskImage: "linear-gradient(to bottom, black 0%, transparent 100%)",
-          WebkitMaskImage: "linear-gradient(to bottom, black 0%, transparent 100%)",
-          pointerEvents: "none",
-        }} />
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", pointerEvents: "auto" }}>
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            style={{
+              padding: "0 14px", height: 44, borderRadius: 14,
+              border: `1px solid rgba(255,255,255,0.5)`,
+              background: "rgba(255,255,255,0.55)",
+              backdropFilter: "blur(20px) saturate(1.6)",
+              WebkitBackdropFilter: "blur(20px) saturate(1.6)",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+              fontSize: 13, fontFamily: "Poppins, sans-serif", fontWeight: 500,
+              color: COLORS.black, cursor: "pointer", transition: "all 200ms ease",
+            }}
+          >
+            {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+          {isAdmin && (
+            <HoverButton variant="primary" onClick={fetchAnalytics} disabled={loading} style={{ height: 44 }}>
+              {loading ? "Loading..." : "Refresh"}
+            </HoverButton>
+          )}
+          {isAdmin && (
+            <HoverButton variant="danger" onClick={() => setResetConfirm(true)} style={{ height: 44 }}>
+              Clear Data
+            </HoverButton>
+          )}
+        </div>
       </div>
 
       {/* Content wrapper */}
-      <div style={{ position: "relative", zIndex: 1, padding: "0 28px 24px 28px" }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "8px 28px 24px 28px" }}>
 
         {/* Error */}
         {error && (
