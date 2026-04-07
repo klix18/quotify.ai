@@ -253,17 +253,24 @@ function SignInPage() {
 
 function AuthenticatedApp() {
   const { user } = useUser();
-  const [showAdmin, setShowAdmin] = React.useState(false);
+  const [showActivity, setShowActivity] = React.useState(false);
   const isAdmin = user?.publicMetadata?.role === "admin";
+  const userName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "";
 
-  if (showAdmin && isAdmin) {
-    return <AdminDashboard onBack={() => setShowAdmin(false)} />;
+  if (showActivity) {
+    return (
+      <AdminDashboard
+        onBack={() => setShowActivity(false)}
+        isAdmin={isAdmin}
+        currentUserName={userName}
+      />
+    );
   }
 
   return (
     <QuotifyHome
       isAdmin={isAdmin}
-      onOpenAdmin={() => setShowAdmin(true)}
+      onOpenActivity={() => setShowActivity(true)}
     />
   );
 }

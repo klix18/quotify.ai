@@ -7,10 +7,11 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 
-from auth import require_admin
+from auth import get_current_user, require_admin
 from database import get_pool
 
 router = APIRouter(prefix="/api/admin/analytics", tags=["analytics"])
+self_router = APIRouter(prefix="/api/analytics", tags=["analytics-self"])
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -281,3 +282,75 @@ async def reset_analytics(
 
     deleted_count = int(result.split(" ")[-1])
     return {"deleted": deleted_count, "period": period}
+
+
+# ── Self-service endpoint (any authenticated user) ─────────────────
+
+@self_router.get("/me")
+async def get_my_stats(
+    user_name: str = Query(..., description="Display name of the current user"),
+    period: str = Query("month", regex="^(week|month|6months|year|all)$"),
+    _user: dict = Depends(get_current_user),
+):
+    """Get analytics for the currently authenticated user (no admin required)."""
+    pool = await get_pool()
+    cutoff = _period_start(period)
+
+    async with pool.acquire() as conn:
+        totals = await conn.fetchrow("""
+            SELECT
+                COUNT(*) AS total_events,
+                COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created,
+                COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded
+            FROM analytics_events
+            WHERE created_at >= $1 AND user_name = $2
+        """, cutoff, user_name)
+
+        type_rows = await conn.fetch("""
+            SELECT insurance_type, COUNT(*) AS count
+            FROM analytics_events
+            WHERE created_at >= $1 AND user_name = $2
+            GROUP BY insurance_type
+            ORDER BY count DESC
+        """, cutoff, user_name)
+
+        recent_rows = await conn.fetch("""
+            SELECT
+                id, created_at, insurance_type, advisor,
+                uploaded_pdf, manually_changed_fields, created_quote, generated_pdf
+            FROM analytics_events
+            WHERE created_at >= $1 AND user_name = $2
+            ORDER BY created_at DESC
+            LIMIT 50
+        """, cutoff, user_name)
+
+        active_day_rows = await conn.fetch("""
+            SELECT DISTINCT DATE(created_at AT TIME ZONE 'UTC') AS active_date
+            FROM analytics_events
+            WHERE created_at >= $1 AND user_name = $2
+            ORDER BY active_date DESC
+        """, cutoff, user_name)
+
+    return {
+        "user_name": user_name,
+        "period": period,
+        "total_events": totals["total_events"],
+        "quotes_created": totals["quotes_created"],
+        "pdfs_uploaded": totals["pdfs_uploaded"],
+        "days_active": len(active_day_rows),
+        "active_dates": [row["active_date"].isoformat() for row in active_day_rows],
+        "by_insurance_type": {row["insurance_type"]: row["count"] for row in type_rows},
+        "recent_events": [
+            {
+                "id": row["id"],
+                "created_at": row["created_at"].isoformat(),
+                "insurance_type": row["insurance_type"],
+                "advisor": row["advisor"],
+                "uploaded_pdf": row["uploaded_pdf"],
+                "manually_changed_fields": row["manually_changed_fields"],
+                "created_quote": row["created_quote"],
+                "generated_pdf": row["generated_pdf"],
+            }
+            for row in recent_rows
+        ],
+    }

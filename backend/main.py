@@ -18,7 +18,7 @@ from commercial_parser_api import router as commercial_parser_router
 from bundle_parser_api import router as bundle_parser_router
 from wind_parser_api import router as wind_parser_router
 
-from analytics_api import router as analytics_router
+from analytics_api import router as analytics_router, self_router as analytics_self_router
 from track_api import router as track_router
 from pdf_storage_api import router as pdf_storage_router
 from clerk_users_api import router as clerk_users_router
@@ -69,6 +69,7 @@ app.include_router(wind_parser_router)
 
 # Analytics & tracking routers
 app.include_router(analytics_router)
+app.include_router(analytics_self_router)
 app.include_router(track_router)
 
 # PDF storage router

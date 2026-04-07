@@ -34,7 +34,7 @@ import { triggerSparkleFlow } from "./sparkleFlow";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-export default function QuotifyHome({ isAdmin, onOpenAdmin }) {
+export default function QuotifyHome({ isAdmin, onOpenActivity }) {
   const { user } = useUser();
   const { getToken } = useAuth();
   const [selectedInsurance, setSelectedInsurance] = React.useState("homeowners");
@@ -2166,24 +2166,22 @@ export default function QuotifyHome({ isAdmin, onOpenAdmin }) {
             <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.mutedText, flex: 1 }}>
               {user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account"}
             </div>
-            {isAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                style={{
-                  background: COLORS.blueSoft,
-                  color: COLORS.blue,
-                  border: `1px solid ${COLORS.blueBorder}`,
-                  borderRadius: 8,
-                  padding: "5px 12px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontFamily: "Poppins, sans-serif",
-                }}
-              >
-                Admin
-              </button>
-            )}
+            <button
+              onClick={onOpenActivity}
+              style={{
+                background: COLORS.blueSoft,
+                color: COLORS.blue,
+                border: `1px solid ${COLORS.blueBorder}`,
+                borderRadius: 8,
+                padding: "5px 12px",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "Poppins, sans-serif",
+              }}
+            >
+              Activity
+            </button>
           </div>
           </div>
         </aside>

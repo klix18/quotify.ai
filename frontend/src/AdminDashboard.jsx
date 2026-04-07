@@ -394,7 +394,7 @@ function RoleToggle({ clerkUserId, currentRole, getToken, onRoleChanged }) {
   );
 }
 
-function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefresh }) {
+function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefresh, isAdmin }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
@@ -405,14 +405,18 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
       setLoading(true);
       try {
         const token = await getToken();
-        const resp = await fetch(`${API_BASE_URL}/api/admin/analytics/user/${encodeURIComponent(userName)}?period=${period}`, {
+        // Admins use the admin endpoint; advisors use the self-service endpoint
+        const url = isAdmin
+          ? `${API_BASE_URL}/api/admin/analytics/user/${encodeURIComponent(userName)}?period=${period}`
+          : `${API_BASE_URL}/api/analytics/me?user_name=${encodeURIComponent(userName)}&period=${period}`;
+        const resp = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (resp.ok) setData(await resp.json());
       } catch {}
       setLoading(false);
     })();
-  }, [userName, period, getToken]);
+  }, [userName, period, getToken, isAdmin]);
 
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: COLORS.mutedText, fontSize: 13 }}>Loading user data...</div>;
   if (!data) return <div style={{ padding: 40, textAlign: "center", color: COLORS.mutedText, fontSize: 13 }}>Failed to load user data.</div>;
@@ -421,32 +425,30 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: "50%",
-            background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: COLORS.white, fontSize: 16, fontWeight: 700,
-          }}>
-            {userName.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.black }}>{userName}</div>
-            {clerkUser?.email && <div style={{ fontSize: 12, color: COLORS.mutedText }}>{clerkUser.email}</div>}
-          </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: "50%",
+          background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: COLORS.white, fontSize: 16, fontWeight: 700,
+        }}>
+          {userName.charAt(0).toUpperCase()}
         </div>
-        {clerkUser?.id && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: COLORS.mutedText, fontWeight: 500 }}>Role:</span>
-            <RoleToggle
-              clerkUserId={clerkUser.id}
-              currentRole={clerkUser.role}
-              getToken={getToken}
-              onRoleChanged={() => onRefresh()}
-            />
-          </div>
-        )}
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.black }}>{userName}</div>
+          {clerkUser?.email && <div style={{ fontSize: 12, color: COLORS.mutedText }}>{clerkUser.email}</div>}
+          {isAdmin && clerkUser?.id && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+              <span style={{ fontSize: 12, color: COLORS.mutedText, fontWeight: 500 }}>Role:</span>
+              <RoleToggle
+                clerkUserId={clerkUser.id}
+                currentRole={clerkUser.role}
+                getToken={getToken}
+                onRoleChanged={() => onRefresh()}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* User stat cards */}
@@ -660,7 +662,7 @@ function HoverRow({ children }) {
 }
 
 /* ── Main Dashboard ──────────────────────────────────────────── */
-export default function AdminDashboard({ onBack }) {
+export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
   const { getToken } = useAuth();
   const [period, setPeriod] = React.useState("month");
   const [data, setData] = React.useState(null);
@@ -669,7 +671,8 @@ export default function AdminDashboard({ onBack }) {
   const [error, setError] = React.useState("");
   const [resetConfirm, setResetConfirm] = React.useState(false);
   const [resetting, setResetting] = React.useState(false);
-  const [selectedUser, setSelectedUser] = React.useState(null);
+  // Advisors go directly to their own page; admins start at the dashboard
+  const [selectedUser, setSelectedUser] = React.useState(isAdmin ? null : currentUserName);
   const [clerkUsers, setClerkUsers] = React.useState({});  // keyed by display name -> { id, role }
 
   // Mouse-tracking orbs
@@ -743,38 +746,44 @@ export default function AdminDashboard({ onBack }) {
     setError("");
     try {
       const token = await getToken();
-      const [summaryResp, changesResp, usersResp] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/admin/analytics/summary?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_BASE_URL}/api/admin/analytics/manual-changes?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
-      if (summaryResp.status === 403) {
-        setError("You don't have admin access. Set role: 'admin' in your Clerk user's public metadata.");
-        return;
-      }
-      if (!summaryResp.ok) {
-        const detail = await summaryResp.json().catch(() => ({}));
-        throw new Error(detail?.detail || `HTTP ${summaryResp.status}`);
-      }
-      setData(await summaryResp.json());
-      if (changesResp.ok) setManualChanges(await changesResp.json());
-      if (usersResp.ok) {
-        const usersData = await usersResp.json();
-        const map = {};
-        for (const u of usersData.users || []) {
-          const displayName = `${u.first_name} ${u.last_name}`.trim();
-          map[displayName] = { id: u.id, role: u.role, email: u.email };
-          // Also key by first name only as fallback
-          if (u.first_name) map[u.first_name] = { id: u.id, role: u.role, email: u.email };
+
+      if (isAdmin) {
+        // Admin: fetch full dashboard data
+        const [summaryResp, changesResp, usersResp] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/admin/analytics/summary?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_BASE_URL}/api/admin/analytics/manual-changes?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        if (summaryResp.status === 403) {
+          setError("You don't have admin access. Set role: 'admin' in your Clerk user's public metadata.");
+          return;
         }
-        setClerkUsers(map);
+        if (!summaryResp.ok) {
+          const detail = await summaryResp.json().catch(() => ({}));
+          throw new Error(detail?.detail || `HTTP ${summaryResp.status}`);
+        }
+        setData(await summaryResp.json());
+        if (changesResp.ok) setManualChanges(await changesResp.json());
+        if (usersResp.ok) {
+          const usersData = await usersResp.json();
+          const map = {};
+          for (const u of usersData.users || []) {
+            const displayName = `${u.first_name} ${u.last_name}`.trim();
+            map[displayName] = { id: u.id, role: u.role, email: u.email };
+            if (u.first_name) map[u.first_name] = { id: u.id, role: u.role, email: u.email };
+          }
+          setClerkUsers(map);
+        }
+      } else {
+        // Advisor: just set a minimal data object so the page renders
+        setData({ _advisorMode: true });
       }
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [period, getToken]);
+  }, [period, getToken, isAdmin]);
 
   React.useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
 
@@ -804,22 +813,30 @@ export default function AdminDashboard({ onBack }) {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         background: COLORS.pageBg,
         fontFamily: "Poppins, sans-serif",
-        padding: "22px 28px 24px 28px",
         position: "relative",
-        overflow: "hidden",
+        overflow: "auto",
       }}
     >
       {/* Animated orbs */}
-      <div ref={orbPrimaryRef} style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "rgba(23,101,212,0.14)", filter: "blur(80px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.4s ease" }} />
-      <div ref={orbCyanRef} style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "rgba(201,242,255,0.22)", filter: "blur(100px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.6s ease" }} />
-      <div ref={orbTrailRef} style={{ position: "absolute", width: 700, height: 700, borderRadius: "50%", background: "rgba(11,145,230,0.08)", filter: "blur(120px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 1s ease" }} />
+      <div ref={orbPrimaryRef} style={{ position: "fixed", width: 400, height: 400, borderRadius: "50%", background: "rgba(23,101,212,0.14)", filter: "blur(80px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.4s ease" }} />
+      <div ref={orbCyanRef} style={{ position: "fixed", width: 500, height: 500, borderRadius: "50%", background: "rgba(201,242,255,0.22)", filter: "blur(100px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.6s ease" }} />
+      <div ref={orbTrailRef} style={{ position: "fixed", width: 700, height: 700, borderRadius: "50%", background: "rgba(11,145,230,0.08)", filter: "blur(120px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 1s ease" }} />
 
-      {/* Content wrapper above orbs */}
-      <div style={{ position: "relative", zIndex: 1 }}>
-
+      {/* Fixed Header with glass blur */}
+      <div style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 20,
+        padding: "16px 28px",
+        background: "rgba(255,255,255,0.60)",
+        backdropFilter: "blur(40px) saturate(1.8)",
+        WebkitBackdropFilter: "blur(40px) saturate(1.8)",
+        borderBottom: "1px solid rgba(200,215,235,0.35)",
+        boxShadow: "0 1px 8px rgba(0,0,0,0.04)",
+      }}>
         {/* Reset Confirmation Modal */}
         {resetConfirm && (
           <ConfirmModal
@@ -829,16 +846,18 @@ export default function AdminDashboard({ onBack }) {
             confirming={resetting}
           />
         )}
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <HoverButton variant="outline" onClick={selectedUser ? () => setSelectedUser(null) : onBack} style={{ height: 48, padding: "0 24px" }}>
-              Close
+            <HoverButton
+              variant="outline"
+              onClick={isAdmin && selectedUser ? () => setSelectedUser(null) : onBack}
+              style={{ height: 48, padding: "0 24px" }}
+            >
+              {isAdmin && selectedUser ? "Back" : "Close"}
             </HoverButton>
             <div>
               <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 22, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 4 }}>
-                Analytics Dashboard
+                {isAdmin ? "Analytics Dashboard" : "My Activity"}
               </div>
               <div style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 400, lineHeight: 1.35 }}>
                 Showing data for: {periodLabel}
@@ -860,14 +879,22 @@ export default function AdminDashboard({ onBack }) {
             >
               {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
-            <HoverButton variant="primary" onClick={fetchAnalytics} disabled={loading}>
-              {loading ? "Loading..." : "Refresh"}
-            </HoverButton>
-            <HoverButton variant="danger" onClick={() => setResetConfirm(true)}>
-              Clear Data
-            </HoverButton>
+            {isAdmin && (
+              <HoverButton variant="primary" onClick={fetchAnalytics} disabled={loading}>
+                {loading ? "Loading..." : "Refresh"}
+              </HoverButton>
+            )}
+            {isAdmin && (
+              <HoverButton variant="danger" onClick={() => setResetConfirm(true)}>
+                Clear Data
+              </HoverButton>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Content wrapper below sticky header */}
+      <div style={{ position: "relative", zIndex: 1, padding: "24px 28px 24px 28px" }}>
 
         {/* Error */}
         {error && (
@@ -927,6 +954,7 @@ export default function AdminDashboard({ onBack }) {
             onBack={() => setSelectedUser(null)}
             clerkUsers={clerkUsers}
             onRefresh={fetchAnalytics}
+            isAdmin={isAdmin}
           />
         )}
       </div>
