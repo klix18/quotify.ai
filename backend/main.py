@@ -18,16 +18,22 @@ from commercial_parser_api import router as commercial_parser_router
 from bundle_parser_api import router as bundle_parser_router
 from wind_parser_api import router as wind_parser_router
 
+from analytics_api import router as analytics_router
+from track_api import router as track_router
+
 from browser_manager import get_browser, close_browser
+from database import init_db, close_pool
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: launch Chromium once so first PDF generation is instant
+    # Startup: launch Chromium + initialize database
     await get_browser()
+    await init_db()
     yield
-    # Shutdown: clean up the browser process
+    # Shutdown: clean up browser + database pool
     await close_browser()
+    await close_pool()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -45,6 +51,7 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
+# Existing routers
 app.include_router(homeowners_parser_router)
 app.include_router(homeowners_filler_router)
 app.include_router(auto_filler_router)
@@ -57,3 +64,7 @@ app.include_router(dwelling_parser_router)
 app.include_router(commercial_parser_router)
 app.include_router(bundle_parser_router)
 app.include_router(wind_parser_router)
+
+# Analytics & tracking routers
+app.include_router(analytics_router)
+app.include_router(track_router)

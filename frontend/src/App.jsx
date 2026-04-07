@@ -3,9 +3,11 @@ import {
   SignedIn,
   SignedOut,
   SignInButton,
+  useUser,
 } from "@clerk/clerk-react";
 import COLORS from "./colors";
 import QuotifyHome from "./QuotifyHome";
+import AdminDashboard from "./AdminDashboard";
 
 function SignInPage() {
   const mainRef = React.useRef(null);
@@ -249,6 +251,23 @@ function SignInPage() {
   );
 }
 
+function AuthenticatedApp() {
+  const { user } = useUser();
+  const [showAdmin, setShowAdmin] = React.useState(false);
+  const isAdmin = user?.publicMetadata?.role === "admin";
+
+  if (showAdmin && isAdmin) {
+    return <AdminDashboard onBack={() => setShowAdmin(false)} />;
+  }
+
+  return (
+    <QuotifyHome
+      isAdmin={isAdmin}
+      onOpenAdmin={() => setShowAdmin(true)}
+    />
+  );
+}
+
 function App() {
   return (
     <>
@@ -256,7 +275,7 @@ function App() {
         <SignInPage />
       </SignedOut>
       <SignedIn>
-        <QuotifyHome />
+        <AuthenticatedApp />
       </SignedIn>
     </>
   );

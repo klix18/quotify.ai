@@ -1,6 +1,7 @@
 import React from "react";
-import { UserButton, useUser } from "@clerk/clerk-react";
+import { UserButton, useUser, useAuth } from "@clerk/clerk-react";
 import COLORS from "./colors";
+import { trackEvent, getManualFieldNames } from "./trackEvent";
 import { INSURANCE_OPTIONS } from "./insuranceOptions";
 import {
   HOMEOWNERS_FIELDS,
@@ -33,8 +34,9 @@ import { triggerSparkleFlow } from "./sparkleFlow";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-export default function QuotifyHome() {
+export default function QuotifyHome({ isAdmin, onOpenAdmin }) {
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [selectedInsurance, setSelectedInsurance] = React.useState("homeowners");
   const [hoveredInsurance, setHoveredInsurance] = React.useState("");
   const [isBrowseHovered, setIsBrowseHovered] = React.useState(false);
@@ -583,6 +585,7 @@ export default function QuotifyHome() {
 
       setHomeownersConfidence(finalConfidence);
       setParseStatus("Done.");
+
     } catch (error) {
       if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
@@ -769,6 +772,7 @@ export default function QuotifyHome() {
       setAutoIsLoading(false);
       setAutoIsParsed(true);
       setParseStatus("Done.");
+
     } catch (error) {
       if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
@@ -960,6 +964,7 @@ export default function QuotifyHome() {
       setDwellingIsLoading(false);
       setDwellingIsParsed(true);
       setParseStatus("Done.");
+
     } catch (error) {
       if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
@@ -1228,6 +1233,7 @@ export default function QuotifyHome() {
       setBundleIsLoading(false);
       setBundleIsParsed(true);
       setParseStatus("Done.");
+
     } catch (error) {
       if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
@@ -1375,6 +1381,7 @@ export default function QuotifyHome() {
       setCommercialIsLoading(false);
       setCommercialIsParsed(true);
       setParseStatus("Done.");
+
     } catch (error) {
       if (error.name === "AbortError") return;
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
@@ -1461,6 +1468,7 @@ export default function QuotifyHome() {
         setCommercialConfidence((prev) => ({ ...prev, ...finalConfidence }));
       }
       setWindParseStatus("Done.");
+
     } catch (error) {
       setWindParseStatus("");
       setWindFileName("");
@@ -1534,6 +1542,29 @@ export default function QuotifyHome() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+
+      // Track workflow event for analytics
+      const manualMap = {
+        homeowners: homeownersManual,
+        auto: autoManual,
+        dwelling: dwellingManual,
+        commercial: commercialManual,
+        bundle: bundleManual,
+      };
+      const userName = user?.fullName
+        || (user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : null)
+        || user?.primaryEmailAddress?.emailAddress
+        || "Unknown";
+      trackEvent({
+        userName,
+        insuranceType: selectedInsurance,
+        advisor: selectedAdvisorName,
+        uploadedPdf: fileName,
+        manuallyChangedFields: getManualFieldNames(manualMap[selectedInsurance] || {}),
+        createdQuote: true,
+        generatedPdf: outFileName,
+        getToken,
+      });
     } catch (error) {
       setErrorMessage(
         error.message || "Something went wrong while generating the quote."
@@ -1597,29 +1628,19 @@ export default function QuotifyHome() {
   // Required fields per insurance type: client info, advisor info, and policy
   const REQUIRED_FIELDS_MAP = {
     homeowners: [
-      "client_name", "client_address", "client_phone", "client_email",
-      "agent_name", "agent_address", "agent_phone", "agent_email",
-      "total_premium",
+      "client_name", "agent_name", "total_premium",
     ],
     auto: [
-      "client_name", "client_address", "client_phone", "client_email",
-      "agent_name", "agent_address", "agent_phone", "agent_email",
-      "total_premium",
+      "client_name", "agent_name", "total_premium",
     ],
     dwelling: [
-      "named_insured", "client_address", "client_phone", "client_email",
-      "agent_name", "agent_address", "agent_phone", "agent_email",
-      "total_premium",
+      "named_insured", "agent_name", "total_premium",
     ],
     commercial: [
-      "named_insured", "mailing_address", "client_phone", "client_email",
-      "agent_name", "agent_address", "agent_phone", "agent_email",
-      "total_premium",
+      "named_insured", "agent_name", "total_premium",
     ],
     bundle: [
-      "client_name", "client_address", "client_phone", "client_email",
-      "agent_name", "agent_address", "agent_phone", "agent_email",
-      "bundle_total_premium",
+      "client_name", "agent_name", "bundle_total_premium",
     ],
   };
 
@@ -2110,13 +2131,11 @@ export default function QuotifyHome() {
               {errorMessage && (
                 <div
                   style={{
-                    marginTop: 10,
-                    borderRadius: 10,
-                    border: `1px solid ${COLORS.dangerBorder}`,
-                    background: COLORS.dangerSoft,
+                    marginTop: 8,
                     color: COLORS.danger,
-                    padding: "8px 10px",
-                    fontSize: 11,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    textAlign: "center",
                     lineHeight: 1.4,
                   }}
                 >
@@ -2144,9 +2163,27 @@ export default function QuotifyHome() {
                 },
               }}
             />
-            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.mutedText }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.mutedText, flex: 1 }}>
               {user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account"}
             </div>
+            {isAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                style={{
+                  background: COLORS.blueSoft,
+                  color: COLORS.blue,
+                  border: `1px solid ${COLORS.blueBorder}`,
+                  borderRadius: 8,
+                  padding: "5px 12px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "Poppins, sans-serif",
+                }}
+              >
+                Admin
+              </button>
+            )}
           </div>
           </div>
         </aside>
