@@ -223,7 +223,7 @@ const RANK_COLORS = {
   3: "linear-gradient(135deg, #7A4B1A, #CD8D42, #6A3D12, #D4994A, #5C3D18)",
 };
 
-function UserRow({ user, role, onClick, rank }) {
+function UserRow({ user, role, onClick, rank, imageUrl }) {
   const [hovered, setHovered] = React.useState(false);
   const rankGradient = RANK_COLORS[rank];
   const nameColor = rankGradient
@@ -244,14 +244,18 @@ function UserRow({ user, role, onClick, rank }) {
     >
       <td style={{ padding: "12px 14px", fontWeight: 600 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: "50%",
-            background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: COLORS.white, fontSize: 13, fontWeight: 700, flexShrink: 0,
-          }}>
-            {user.user_name.charAt(0).toUpperCase()}
-          </div>
+          {imageUrl ? (
+            <img src={imageUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+          ) : (
+            <div style={{
+              width: 32, height: 32, borderRadius: "50%",
+              background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: COLORS.white, fontSize: 13, fontWeight: 700, flexShrink: 0,
+            }}>
+              {user.user_name.charAt(0).toUpperCase()}
+            </div>
+          )}
           <span style={{ fontWeight: 700, ...nameColor }}>{user.user_name}</span>
         </div>
       </td>
@@ -312,6 +316,7 @@ function UserTable({ users, clerkUsers, onSelectUser }) {
               role={clerkUsers[u.user_name]?.role || "advisor"}
               onClick={() => onSelectUser(u.user_name)}
               rank={idx + 1}
+              imageUrl={clerkUsers[u.user_name]?.image_url}
             />
           ))}
         </tbody>
@@ -459,14 +464,18 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Profile header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: "50%",
-          background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: COLORS.white, fontSize: 16, fontWeight: 700,
-        }}>
-          {userName.charAt(0).toUpperCase()}
-        </div>
+        {clerkUser?.image_url ? (
+          <img src={clerkUser.image_url} alt="" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover" }} />
+        ) : (
+          <div style={{
+            width: 40, height: 40, borderRadius: "50%",
+            background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: COLORS.white, fontSize: 16, fontWeight: 700,
+          }}>
+            {userName.charAt(0).toUpperCase()}
+          </div>
+        )}
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.black }}>{userName}</div>
           {clerkUser?.email && <div style={{ fontSize: 12, color: COLORS.mutedText }}>{clerkUser.email}</div>}
@@ -844,8 +853,8 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
           const map = {};
           for (const u of usersData.users || []) {
             const displayName = `${u.first_name} ${u.last_name}`.trim();
-            map[displayName] = { id: u.id, role: u.role, email: u.email };
-            if (u.first_name) map[u.first_name] = { id: u.id, role: u.role, email: u.email };
+            map[displayName] = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
+            if (u.first_name) map[u.first_name] = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
           }
           setClerkUsers(map);
         }
@@ -892,7 +901,8 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         background: `linear-gradient(160deg, rgba(230,240,255,0.7) 0%, ${COLORS.pageBg} 30%, rgba(220,235,255,0.5) 60%, ${COLORS.pageBg} 80%, rgba(200,225,255,0.4) 100%)`,
         fontFamily: "Poppins, sans-serif",
         position: "relative",
-        overflow: "auto",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       {/* Animated orbs */}
@@ -910,9 +920,9 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         />
       )}
 
-      {/* Sticky header — individual frosted elements, no container bar */}
+      {/* Fixed header — outside scroll container so backdropFilter works */}
       <div style={{
-        position: "sticky", top: 0, zIndex: 20,
+        flexShrink: 0, zIndex: 20,
         padding: "18px 28px 14px 28px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         flexWrap: "wrap", gap: 12,
@@ -966,8 +976,8 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         </div>
       </div>
 
-      {/* Content wrapper */}
-      <div style={{ position: "relative", zIndex: 1, padding: "8px 28px 24px 28px" }}>
+      {/* Scrollable content area — separate from header */}
+      <div style={{ flex: 1, overflow: "auto", padding: "8px 28px 24px 28px", position: "relative", zIndex: 1 }}>
 
         {/* Error */}
         {error && (
