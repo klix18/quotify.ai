@@ -218,18 +218,17 @@ function RoleBadge({ role }) {
 }
 
 const RANK_COLORS = {
-  1: { name: "linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C)", avatar: "linear-gradient(135deg, #BF953F, #FCF6BA, #AA771C)" },
-  2: { name: "linear-gradient(135deg, #C0C0C0, #E8E8E8, #A8A8A8, #E0E0E0, #808080)", avatar: "linear-gradient(135deg, #C0C0C0, #E8E8E8, #909090)" },
-  3: { name: "linear-gradient(135deg, #CD7F32, #E8B873, #A0622E, #DBA860, #8C5A2A)", avatar: "linear-gradient(135deg, #CD7F32, #E8B873, #8C5A2A)" },
+  1: "linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C)",
+  2: "linear-gradient(135deg, #C0C0C0, #E8E8E8, #A8A8A8, #E0E0E0, #808080)",
+  3: "linear-gradient(135deg, #CD7F32, #E8B873, #A0622E, #DBA860, #8C5A2A)",
 };
 
 function UserRow({ user, role, onClick, rank }) {
   const [hovered, setHovered] = React.useState(false);
-  const rankStyle = RANK_COLORS[rank];
-  const nameColor = rankStyle
-    ? { backgroundImage: rankStyle.name, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
+  const rankGradient = RANK_COLORS[rank];
+  const nameColor = rankGradient
+    ? { backgroundImage: rankGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
     : { color: COLORS.black };
-  const avatarBg = rankStyle ? rankStyle.avatar : `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`;
 
   return (
     <tr
@@ -247,7 +246,7 @@ function UserRow({ user, role, onClick, rank }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{
             width: 32, height: 32, borderRadius: "50%",
-            background: avatarBg,
+            background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
             display: "flex", alignItems: "center", justifyContent: "center",
             color: COLORS.white, fontSize: 13, fontWeight: 700, flexShrink: 0,
           }}>
@@ -474,19 +473,17 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
         </div>
       </div>
 
-      {/* Role toggle — separate block below profile */}
+      {/* Role toggle — inline below profile */}
       {isAdmin && clerkUser?.id && (
-        <GlassPanel borderRadius={16} style={{}}>
-          <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 600 }}>Role</span>
-            <RoleToggle
-              clerkUserId={clerkUser.id}
-              currentRole={clerkUser.role}
-              getToken={getToken}
-              onRoleChanged={() => onRefresh()}
-            />
-          </div>
-        </GlassPanel>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 600 }}>Role</span>
+          <RoleToggle
+            clerkUserId={clerkUser.id}
+            currentRole={clerkUser.role}
+            getToken={getToken}
+            onRoleChanged={() => onRefresh()}
+          />
+        </div>
       )}
 
       {/* User stat cards */}
@@ -904,21 +901,22 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
       <div ref={orbCyanRef} style={{ position: "fixed", width: 500, height: 500, borderRadius: "50%", background: "rgba(201,242,255,0.22)", filter: "blur(100px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.6s ease" }} />
       <div ref={orbTrailRef} style={{ position: "fixed", width: 700, height: 700, borderRadius: "50%", background: "rgba(11,145,230,0.08)", filter: "blur(120px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 1s ease" }} />
 
-      {/* Content wrapper */}
-      <div style={{ position: "relative", zIndex: 1, padding: "22px 28px 24px 28px" }}>
+      {/* Reset Confirmation Modal */}
+      {resetConfirm && (
+        <ConfirmModal
+          message={`Are you sure you want to delete all "${periodLabel}" data? This action cannot be undone.`}
+          onConfirm={handleReset}
+          onCancel={() => setResetConfirm(false)}
+          confirming={resetting}
+        />
+      )}
 
-        {/* Reset Confirmation Modal */}
-        {resetConfirm && (
-          <ConfirmModal
-            message={`Are you sure you want to delete all "${periodLabel}" data? This action cannot be undone.`}
-            onConfirm={handleReset}
-            onCancel={() => setResetConfirm(false)}
-            confirming={resetting}
-          />
-        )}
-
-        {/* Header — floating, no bar */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
+      {/* Sticky header */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 20,
+        paddingTop: 22, paddingBottom: 0,
+      }}>
+        <div style={{ padding: "0 28px 16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <HoverButton
               variant="outline"
@@ -963,6 +961,20 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
             )}
           </div>
         </div>
+        {/* Blur fade edge — content scrolling underneath gets blurred out */}
+        <div style={{
+          height: 24,
+          background: "linear-gradient(to bottom, rgba(240,244,250,0.95) 0%, rgba(240,244,250,0.7) 40%, rgba(240,244,250,0) 100%)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          maskImage: "linear-gradient(to bottom, black 0%, transparent 100%)",
+          WebkitMaskImage: "linear-gradient(to bottom, black 0%, transparent 100%)",
+          pointerEvents: "none",
+        }} />
+      </div>
+
+      {/* Content wrapper */}
+      <div style={{ position: "relative", zIndex: 1, padding: "0 28px 24px 28px" }}>
 
         {/* Error */}
         {error && (
