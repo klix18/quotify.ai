@@ -217,8 +217,20 @@ function RoleBadge({ role }) {
   );
 }
 
-function UserRow({ user, role, onClick }) {
+const RANK_COLORS = {
+  1: { name: "linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C)", avatar: "linear-gradient(135deg, #BF953F, #FCF6BA, #AA771C)" },
+  2: { name: "linear-gradient(135deg, #C0C0C0, #E8E8E8, #A8A8A8, #E0E0E0, #808080)", avatar: "linear-gradient(135deg, #C0C0C0, #E8E8E8, #909090)" },
+  3: { name: "linear-gradient(135deg, #CD7F32, #E8B873, #A0622E, #DBA860, #8C5A2A)", avatar: "linear-gradient(135deg, #CD7F32, #E8B873, #8C5A2A)" },
+};
+
+function UserRow({ user, role, onClick, rank }) {
   const [hovered, setHovered] = React.useState(false);
+  const rankStyle = RANK_COLORS[rank];
+  const nameColor = rankStyle
+    ? { backgroundImage: rankStyle.name, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
+    : { color: COLORS.black };
+  const avatarBg = rankStyle ? rankStyle.avatar : `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`;
+
   return (
     <tr
       onClick={onClick}
@@ -231,17 +243,17 @@ function UserRow({ user, role, onClick }) {
         background: hovered ? "rgba(23,101,212,0.04)" : "transparent",
       }}
     >
-      <td style={{ padding: "12px 14px", fontWeight: 600, color: COLORS.blue }}>
+      <td style={{ padding: "12px 14px", fontWeight: 600 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{
             width: 32, height: 32, borderRadius: "50%",
-            background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
+            background: avatarBg,
             display: "flex", alignItems: "center", justifyContent: "center",
             color: COLORS.white, fontSize: 13, fontWeight: 700, flexShrink: 0,
           }}>
             {user.user_name.charAt(0).toUpperCase()}
           </div>
-          {user.user_name}
+          <span style={{ fontWeight: 700, ...nameColor }}>{user.user_name}</span>
         </div>
       </td>
       <td style={{ padding: "12px 14px", textAlign: "center" }}><RoleBadge role={role} /></td>
@@ -257,7 +269,27 @@ function UserRow({ user, role, onClick }) {
 }
 
 function UserTable({ users, clerkUsers, onSelectUser }) {
-  if (!users || users.length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No user activity yet</div>;
+  // Merge analytics users with all Clerk users so everyone appears
+  const analyticsMap = {};
+  for (const u of (users || [])) {
+    analyticsMap[u.user_name] = u;
+  }
+  // Build a deduplicated set of Clerk display names (skip first-name-only fallback keys)
+  const clerkDisplayNames = new Set();
+  for (const [name, info] of Object.entries(clerkUsers)) {
+    // Only include keys that look like full names (have a space) or match exactly a clerk user with that single name
+    if (name.includes(" ") || !Object.keys(clerkUsers).some((k) => k !== name && k.startsWith(name + " "))) {
+      clerkDisplayNames.add(name);
+    }
+  }
+  // Add any Clerk user not already in analytics
+  for (const name of clerkDisplayNames) {
+    if (!analyticsMap[name]) {
+      analyticsMap[name] = { user_name: name, total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0 };
+    }
+  }
+  const allUsers = Object.values(analyticsMap).sort((a, b) => b.total - a.total);
+
   const th = { padding: "10px 14px", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" };
   return (
     <div style={{ overflowX: "auto" }}>
@@ -274,12 +306,13 @@ function UserTable({ users, clerkUsers, onSelectUser }) {
           </tr>
         </thead>
         <tbody>
-          {users.map((u) => (
+          {allUsers.map((u, idx) => (
             <UserRow
               key={u.user_name}
               user={u}
               role={clerkUsers[u.user_name]?.role || "advisor"}
               onClick={() => onSelectUser(u.user_name)}
+              rank={idx + 1}
             />
           ))}
         </tbody>
@@ -425,6 +458,7 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Profile header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{
           width: 40, height: 40, borderRadius: "50%",
@@ -437,19 +471,23 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.black }}>{userName}</div>
           {clerkUser?.email && <div style={{ fontSize: 12, color: COLORS.mutedText }}>{clerkUser.email}</div>}
-          {isAdmin && clerkUser?.id && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-              <span style={{ fontSize: 12, color: COLORS.mutedText, fontWeight: 500 }}>Role:</span>
-              <RoleToggle
-                clerkUserId={clerkUser.id}
-                currentRole={clerkUser.role}
-                getToken={getToken}
-                onRoleChanged={() => onRefresh()}
-              />
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Role toggle — separate block below profile */}
+      {isAdmin && clerkUser?.id && (
+        <GlassPanel borderRadius={16} style={{}}>
+          <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 600 }}>Role</span>
+            <RoleToggle
+              clerkUserId={clerkUser.id}
+              currentRole={clerkUser.role}
+              getToken={getToken}
+              onRoleChanged={() => onRefresh()}
+            />
+          </div>
+        </GlassPanel>
+      )}
 
       {/* User stat cards */}
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -511,6 +549,9 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
 function SnapshotHistory({ events, getToken, onRefresh }) {
   const [deleteTarget, setDeleteTarget] = React.useState(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [filterUser, setFilterUser] = React.useState("");
+  const [filterInsurance, setFilterInsurance] = React.useState("");
+  const [filterDate, setFilterDate] = React.useState("");
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -533,7 +574,6 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
     if (!fileName || fileName === "—") return;
     try {
       const token = await getToken();
-      // Find the document ID from the list
       const listResp = await fetch(`${API_BASE_URL}/api/pdfs?doc_type=${type}&limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -543,7 +583,6 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
         d.file_name === fileName || fileName.startsWith(d.file_name?.split(".pdf")[0])
       );
       if (!doc) return;
-      // Download the actual PDF with auth
       const pdfResp = await fetch(`${API_BASE_URL}/api/pdfs/${doc.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -562,6 +601,27 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
 
   if (!events || events.length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No events yet</div>;
 
+  // Derive unique values for filter dropdowns
+  const uniqueUsers = [...new Set(events.map((e) => e.user_name).filter(Boolean))].sort();
+  const uniqueInsurance = [...new Set(events.map((e) => e.insurance_type).filter(Boolean))].sort();
+  const uniqueDates = [...new Set(events.map((e) => new Date(e.created_at).toLocaleDateString()))];
+
+  // Apply filters
+  const filtered = events.filter((e) => {
+    if (filterUser && e.user_name !== filterUser) return false;
+    if (filterInsurance && e.insurance_type !== filterInsurance) return false;
+    if (filterDate && new Date(e.created_at).toLocaleDateString() !== filterDate) return false;
+    return true;
+  });
+
+  const filterSelect = {
+    padding: "4px 10px", height: 32, borderRadius: 8,
+    border: `1px solid ${COLORS.borderGrey}`,
+    background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)",
+    fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
+    color: COLORS.black, cursor: "pointer",
+  };
+
   const th = { padding: "8px 10px", color: COLORS.mutedText, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", textAlign: "left" };
   const td = { padding: "8px 10px", fontSize: 12, fontWeight: 400, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
   const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
@@ -576,6 +636,23 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
           confirming={deleting}
         />
       )}
+
+      {/* Sub-filters row */}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginBottom: 12, flexWrap: "wrap" }}>
+        <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)} style={filterSelect}>
+          <option value="">All Users</option>
+          {uniqueUsers.map((u) => <option key={u} value={u}>{u}</option>)}
+        </select>
+        <select value={filterInsurance} onChange={(e) => setFilterInsurance(e.target.value)} style={filterSelect}>
+          <option value="">All Insurance</option>
+          {uniqueInsurance.map((t) => <option key={t} value={t} style={{ textTransform: "capitalize" }}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+        </select>
+        <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={filterSelect}>
+          <option value="">All Dates</option>
+          {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </div>
+
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "Poppins, sans-serif" }}>
           <thead>
@@ -592,7 +669,9 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
             </tr>
           </thead>
           <tbody>
-            {events.map((e) => (
+            {filtered.length === 0 ? (
+              <tr><td colSpan={9} style={{ padding: 20, textAlign: "center", color: COLORS.mutedText, fontSize: 12 }}>No events match the selected filters</td></tr>
+            ) : filtered.map((e) => (
               <HoverRow key={e.id}>
                 <td style={td}>{new Date(e.created_at).toLocaleString()}</td>
                 <td style={{ ...td, fontWeight: 500 }}>{e.user_name}</td>
@@ -814,7 +893,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
       onMouseLeave={handleMouseLeave}
       style={{
         height: "100vh",
-        background: COLORS.pageBg,
+        background: `linear-gradient(160deg, rgba(230,240,255,0.7) 0%, ${COLORS.pageBg} 30%, rgba(220,235,255,0.5) 60%, ${COLORS.pageBg} 80%, rgba(200,225,255,0.4) 100%)`,
         fontFamily: "Poppins, sans-serif",
         position: "relative",
         overflow: "auto",
@@ -825,18 +904,9 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
       <div ref={orbCyanRef} style={{ position: "fixed", width: 500, height: 500, borderRadius: "50%", background: "rgba(201,242,255,0.22)", filter: "blur(100px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.6s ease" }} />
       <div ref={orbTrailRef} style={{ position: "fixed", width: 700, height: 700, borderRadius: "50%", background: "rgba(11,145,230,0.08)", filter: "blur(120px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 1s ease" }} />
 
-      {/* Fixed Header with glass blur */}
-      <div style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 20,
-        padding: "16px 28px",
-        background: "rgba(255,255,255,0.60)",
-        backdropFilter: "blur(40px) saturate(1.8)",
-        WebkitBackdropFilter: "blur(40px) saturate(1.8)",
-        borderBottom: "1px solid rgba(200,215,235,0.35)",
-        boxShadow: "0 1px 8px rgba(0,0,0,0.04)",
-      }}>
+      {/* Content wrapper */}
+      <div style={{ position: "relative", zIndex: 1, padding: "22px 28px 24px 28px" }}>
+
         {/* Reset Confirmation Modal */}
         {resetConfirm && (
           <ConfirmModal
@@ -846,7 +916,9 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
             confirming={resetting}
           />
         )}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+
+        {/* Header — floating, no bar */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <HoverButton
               variant="outline"
@@ -891,10 +963,6 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Content wrapper below sticky header */}
-      <div style={{ position: "relative", zIndex: 1, padding: "24px 28px 24px 28px" }}>
 
         {/* Error */}
         {error && (

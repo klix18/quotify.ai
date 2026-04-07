@@ -1,9 +1,9 @@
 export const INSURANCE_OPTIONS = [
-    { key: "bundle", label: "Bundle", icon: "/i-bundle.png", enabled: true },
+    { key: "bundle", label: "Bundle (Beta)", icon: "/i-bundle.png", enabled: true },
     { key: "homeowners", label: "Homeowners", icon: "/i-homeowners.png", enabled: true },
     { key: "auto", label: "Auto", icon: "/i-auto.png", enabled: true },
-    { key: "dwelling", label: "Dwelling", icon: "/i-dwelling.png", enabled: true },
-    { key: "commercial", label: "Commercial", icon: "/i-commercial.png", enabled: true },
+    { key: "dwelling", label: "Dwelling (Beta)", icon: "/i-dwelling.png", enabled: true },
+    { key: "commercial", label: "Commercial (Beta)", icon: "/i-commercial.png", enabled: true },
     { key: "motorcycle", label: "Motorcycle", icon: "/i-motor.png", enabled: false },
     { key: "boat", label: "Boat", icon: "/i-boat.png", enabled: false },
     { key: "renters", label: "Renters", icon: "/i-renter.png", enabled: false },
