@@ -53,10 +53,10 @@ function HoverButton({ children, onClick, disabled, variant = "primary", style: 
       boxShadow: hovered && !disabled ? `0 0 28px ${COLORS.hoverShadow}` : "0 0 0 rgba(0,0,0,0)",
     },
     outline: {
-      background: "rgba(255,255,255,0.55)", color: COLORS.black,
-      border: `1px solid rgba(255,255,255,0.5)`,
-      backdropFilter: "blur(20px) saturate(1.6)", WebkitBackdropFilter: "blur(20px) saturate(1.6)",
-      boxShadow: hovered ? `0 2px 20px ${COLORS.hoverShadow}` : "0 2px 12px rgba(0,0,0,0.04)",
+      background: "rgba(255,255,255,0.45)", color: COLORS.black,
+      border: `1px solid rgba(255,255,255,0.4)`,
+      backdropFilter: "blur(24px) saturate(1.8)", WebkitBackdropFilter: "blur(24px) saturate(1.8)",
+      boxShadow: "none",
     },
     danger: {
       background: COLORS.dangerSoft, color: COLORS.danger,
@@ -218,9 +218,9 @@ function RoleBadge({ role }) {
 }
 
 const RANK_COLORS = {
-  1: "linear-gradient(135deg, #91672C, #C9A84C, #7A5521, #C9A84C, #6B4A1A)",
-  2: "linear-gradient(135deg, #6B6B6B, #A0A0A0, #585858, #A0A0A0, #4A4A4A)",
-  3: "linear-gradient(135deg, #8B5E2A, #B87D3E, #724B1E, #B87D3E, #5C3D18)",
+  1: "linear-gradient(135deg, #8B6914, #D4AF37, #7A5521, #E0C252, #6B4A1A)",
+  2: "linear-gradient(135deg, #5A5A5A, #B8B8B8, #4A4A4A, #C4C4C4, #3D3D3D)",
+  3: "linear-gradient(135deg, #7A4B1A, #CD8D42, #6A3D12, #D4994A, #5C3D18)",
 };
 
 function UserRow({ user, role, onClick, rank }) {
@@ -476,7 +476,6 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
       {/* Role toggle — inline below profile */}
       {isAdmin && clerkUser?.id && (
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 600 }}>Role</span>
           <RoleToggle
             clerkUserId={clerkUser.id}
             currentRole={clerkUser.role}
@@ -919,7 +918,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         flexWrap: "wrap", gap: 12,
         pointerEvents: "none",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, pointerEvents: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, pointerEvents: "auto" }}>
           <HoverButton
             variant="outline"
             onClick={isAdmin && selectedUser ? () => setSelectedUser(null) : onBack}
@@ -927,14 +926,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
           >
             {isAdmin && selectedUser ? "Back" : "Close"}
           </HoverButton>
-          <div style={{
-            background: "rgba(255,255,255,0.55)",
-            backdropFilter: "blur(20px) saturate(1.6)",
-            WebkitBackdropFilter: "blur(20px) saturate(1.6)",
-            borderRadius: 14, padding: "8px 18px",
-            border: "1px solid rgba(255,255,255,0.5)",
-            boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
-          }}>
+          <div>
             <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 2 }}>
               {isAdmin ? "Analytics Dashboard" : "My Activity"}
             </div>
@@ -950,11 +942,11 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
             onChange={(e) => setPeriod(e.target.value)}
             style={{
               padding: "0 14px", height: 44, borderRadius: 14,
-              border: `1px solid rgba(255,255,255,0.5)`,
-              background: "rgba(255,255,255,0.55)",
-              backdropFilter: "blur(20px) saturate(1.6)",
-              WebkitBackdropFilter: "blur(20px) saturate(1.6)",
-              boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+              border: `1px solid rgba(255,255,255,0.4)`,
+              background: "rgba(255,255,255,0.45)",
+              backdropFilter: "blur(24px) saturate(1.8)",
+              WebkitBackdropFilter: "blur(24px) saturate(1.8)",
+              boxShadow: "none",
               fontSize: 13, fontFamily: "Poppins, sans-serif", fontWeight: 500,
               color: COLORS.black, cursor: "pointer", transition: "all 200ms ease",
             }}
