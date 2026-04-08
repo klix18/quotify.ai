@@ -39,15 +39,20 @@ function GlassPanel({ children, borderRadius = 24, style = {} }) {
 }
 
 /* ── Hover Button ────────────────────────────────────────────── */
-/* ── Blur Aura — layered backdrop blur rings that fade outward ── */
-function BlurAura({ children, spread = 12, blur = 18, style = {} }) {
-  // Build 3 concentric rings: inner (full blur), mid, outer (light blur).
-  // Each ring is a plain rounded-rect with backdrop-filter — no mask-composite needed.
-  const rings = [
-    { inset: 0,             br: 16,              blurAmt: blur,       bg: "rgba(239,242,247,0.45)" },
-    { inset: -(spread / 2), br: spread / 2 + 16, blurAmt: blur * 0.5, bg: "rgba(239,242,247,0.22)" },
-    { inset: -spread,       br: spread + 16,     blurAmt: blur * 0.2, bg: "rgba(239,242,247,0.08)" },
-  ];
+/* ── Blur Aura — smooth gradient backdrop blur that fades outward ── */
+function BlurAura({ children, spread = 20, blur = 22, style = {} }) {
+  // 6 concentric rings from tight (full blur + opaque) to wide (minimal blur + transparent).
+  // More rings = smoother gradient transition. Each ring fades in both blur intensity and opacity.
+  const steps = 6;
+  const rings = Array.from({ length: steps }, (_, i) => {
+    const t = i / (steps - 1); // 0 = innermost, 1 = outermost
+    return {
+      inset: -(spread * t),
+      br: 14 + spread * t,
+      blurAmt: blur * (1 - t * 0.85),       // inner: full blur → outer: 15% blur
+      opacity: 0.38 * (1 - t * 0.88),        // inner: 0.38 → outer: ~0.045
+    };
+  });
   return (
     <div style={{ position: "relative", ...style }}>
       {rings.map((r, i) => (
@@ -55,9 +60,9 @@ function BlurAura({ children, spread = 12, blur = 18, style = {} }) {
           position: "absolute",
           top: r.inset, left: r.inset, right: r.inset, bottom: r.inset,
           borderRadius: r.br,
-          backdropFilter: `blur(${r.blurAmt}px) saturate(1.4)`,
-          WebkitBackdropFilter: `blur(${r.blurAmt}px) saturate(1.4)`,
-          background: r.bg,
+          backdropFilter: `blur(${r.blurAmt}px) saturate(${1 + 0.4 * (1 - i / (steps - 1))})`,
+          WebkitBackdropFilter: `blur(${r.blurAmt}px) saturate(${1 + 0.4 * (1 - i / (steps - 1))})`,
+          background: `rgba(239,242,247,${r.opacity})`,
           pointerEvents: "none",
           zIndex: 0,
         }} />
@@ -207,10 +212,10 @@ function ManualChangesLeaderboard({ data }) {
   const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
   const maxCount = data[0]?.count || 1;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {data.slice(0, 15).map((item, i) => (
         <div key={`${item.field}-${item.insurance_type}`}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.black, fontFamily: "monospace" }}>{item.field}</span>
               <span style={{
@@ -221,8 +226,8 @@ function ManualChangesLeaderboard({ data }) {
             </div>
             <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.blue }}>{item.count}x</span>
           </div>
-          <div style={{ height: 5, borderRadius: 3, background: "rgba(0,0,0,0.04)", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${(item.count / maxCount) * 100}%`, borderRadius: 3, background: typeColors[item.insurance_type] || COLORS.blue, transition: "width 0.4s ease" }} />
+          <div style={{ height: 8, borderRadius: 4, background: "rgba(0,0,0,0.04)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${(item.count / maxCount) * 100}%`, borderRadius: 4, background: typeColors[item.insurance_type] || COLORS.blue, transition: "width 0.4s ease" }} />
           </div>
         </div>
       ))}
@@ -657,8 +662,8 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
     color: COLORS.black, cursor: "pointer",
   };
 
-  const th = { padding: "8px 10px", color: COLORS.mutedText, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", textAlign: "left" };
-  const td = { padding: "8px 10px", fontSize: 12, fontWeight: 400, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+  const th = { padding: "10px 14px", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", textAlign: "left" };
+  const td = { padding: "12px 14px", fontSize: 13, fontWeight: 400, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
   const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
 
   return (
@@ -958,7 +963,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         pointerEvents: "none",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, pointerEvents: "auto" }}>
-          <BlurAura spread={12} blur={18}>
+          <BlurAura>
             <HoverButton
               variant="outline"
               onClick={isAdmin && selectedUser ? () => setSelectedUser(null) : onBack}
@@ -967,7 +972,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
               {isAdmin && selectedUser ? "Back" : "Close"}
             </HoverButton>
           </BlurAura>
-          <BlurAura spread={10} blur={14}>
+          <BlurAura>
             <div style={{ padding: "4px 8px" }}>
               <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 2 }}>
                 {isAdmin ? "Analytics Dashboard" : "My Activity"}
@@ -980,7 +985,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", pointerEvents: "auto" }}>
-          <BlurAura spread={12} blur={18}>
+          <BlurAura>
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
@@ -997,14 +1002,14 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
             </select>
           </BlurAura>
           {isAdmin && (
-            <BlurAura spread={12} blur={18}>
+            <BlurAura>
               <HoverButton variant="primary" onClick={fetchAnalytics} disabled={loading} style={{ height: 44 }}>
                 {loading ? "Loading..." : "Refresh"}
               </HoverButton>
             </BlurAura>
           )}
           {isAdmin && (
-            <BlurAura spread={12} blur={18}>
+            <BlurAura>
               <HoverButton variant="danger" onClick={() => setResetConfirm(true)} style={{ height: 44 }}>
                 Clear Data
               </HoverButton>
