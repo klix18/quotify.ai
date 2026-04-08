@@ -39,6 +39,29 @@ function GlassPanel({ children, borderRadius = 24, style = {} }) {
 }
 
 /* ── Hover Button ────────────────────────────────────────────── */
+/* ── Blur Aura — feathered backdrop blur that fades out around an element ── */
+function BlurAura({ children, spread = 14, blur = 20, style = {} }) {
+  return (
+    <div style={{ position: "relative", ...style }}>
+      {/* The oversized blur layer behind the content */}
+      <div style={{
+        position: "absolute",
+        top: -spread, left: -spread, right: -spread, bottom: -spread,
+        backdropFilter: `blur(${blur}px)`,
+        WebkitBackdropFilter: `blur(${blur}px)`,
+        maskImage: `linear-gradient(to bottom, transparent 0%, black ${spread}px, black calc(100% - ${spread}px), transparent 100%), linear-gradient(to right, transparent 0%, black ${spread}px, black calc(100% - ${spread}px), transparent 100%)`,
+        WebkitMaskImage: `linear-gradient(to bottom, transparent 0%, black ${spread}px, black calc(100% - ${spread}px), transparent 100%), linear-gradient(to right, transparent 0%, black ${spread}px, black calc(100% - ${spread}px), transparent 100%)`,
+        maskComposite: "intersect",
+        WebkitMaskComposite: "destination-in",
+        pointerEvents: "none",
+        zIndex: 0,
+      }} />
+      {/* Actual content on top */}
+      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+    </div>
+  );
+}
+
 function HoverButton({ children, onClick, disabled, variant = "primary", style: extraStyle }) {
   const [hovered, setHovered] = React.useState(false);
   const base = {
@@ -53,9 +76,8 @@ function HoverButton({ children, onClick, disabled, variant = "primary", style: 
       boxShadow: hovered && !disabled ? `0 0 28px ${COLORS.hoverShadow}` : "0 0 0 rgba(0,0,0,0)",
     },
     outline: {
-      background: "rgba(255,255,255,0.45)", color: COLORS.black,
-      border: `1px solid rgba(255,255,255,0.4)`,
-      backdropFilter: "blur(24px) saturate(1.8)", WebkitBackdropFilter: "blur(24px) saturate(1.8)",
+      background: "rgba(255,255,255,0.5)", color: COLORS.black,
+      border: `1px solid rgba(220,230,245,0.6)`,
       boxShadow: "none",
     },
     danger: {
@@ -929,13 +951,15 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         pointerEvents: "none",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, pointerEvents: "auto" }}>
-          <HoverButton
-            variant="outline"
-            onClick={isAdmin && selectedUser ? () => setSelectedUser(null) : onBack}
-            style={{ height: 44, padding: "0 22px" }}
-          >
-            {isAdmin && selectedUser ? "Back" : "Close"}
-          </HoverButton>
+          <BlurAura spread={12} blur={18}>
+            <HoverButton
+              variant="outline"
+              onClick={isAdmin && selectedUser ? () => setSelectedUser(null) : onBack}
+              style={{ height: 44, padding: "0 22px" }}
+            >
+              {isAdmin && selectedUser ? "Back" : "Close"}
+            </HoverButton>
+          </BlurAura>
           <div>
             <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 2 }}>
               {isAdmin ? "Analytics Dashboard" : "My Activity"}
@@ -947,31 +971,35 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", pointerEvents: "auto" }}>
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            style={{
-              padding: "0 14px", height: 44, borderRadius: 14,
-              border: `1px solid rgba(255,255,255,0.4)`,
-              background: "rgba(255,255,255,0.45)",
-              backdropFilter: "blur(24px) saturate(1.8)",
-              WebkitBackdropFilter: "blur(24px) saturate(1.8)",
-              boxShadow: "none",
-              fontSize: 13, fontFamily: "Poppins, sans-serif", fontWeight: 500,
-              color: COLORS.black, cursor: "pointer", transition: "all 200ms ease",
-            }}
-          >
-            {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
+          <BlurAura spread={12} blur={18}>
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              style={{
+                padding: "0 14px", height: 44, borderRadius: 14,
+                border: `1px solid rgba(220,230,245,0.6)`,
+                background: "rgba(255,255,255,0.5)",
+                boxShadow: "none",
+                fontSize: 13, fontFamily: "Poppins, sans-serif", fontWeight: 500,
+                color: COLORS.black, cursor: "pointer", transition: "all 200ms ease",
+              }}
+            >
+              {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </BlurAura>
           {isAdmin && (
-            <HoverButton variant="primary" onClick={fetchAnalytics} disabled={loading} style={{ height: 44 }}>
-              {loading ? "Loading..." : "Refresh"}
-            </HoverButton>
+            <BlurAura spread={12} blur={18}>
+              <HoverButton variant="primary" onClick={fetchAnalytics} disabled={loading} style={{ height: 44 }}>
+                {loading ? "Loading..." : "Refresh"}
+              </HoverButton>
+            </BlurAura>
           )}
           {isAdmin && (
-            <HoverButton variant="danger" onClick={() => setResetConfirm(true)} style={{ height: 44 }}>
-              Clear Data
-            </HoverButton>
+            <BlurAura spread={12} blur={18}>
+              <HoverButton variant="danger" onClick={() => setResetConfirm(true)} style={{ height: 44 }}>
+                Clear Data
+              </HoverButton>
+            </BlurAura>
           )}
         </div>
       </div>
@@ -1013,7 +1041,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
 
             {/* Two-column: insurance breakdown + manual changes */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-              <Section title="Usage by Insurance Type">
+              <Section title="Insurance Type Leaderboard">
                 <InsuranceBreakdown data={data.usage_by_insurance_type} />
               </Section>
               <Section title="Manual Changes Leaderboard">
