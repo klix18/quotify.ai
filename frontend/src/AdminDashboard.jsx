@@ -40,17 +40,19 @@ function GlassPanel({ children, borderRadius = 24, style = {} }) {
 
 /* ── Hover Button ────────────────────────────────────────────── */
 /* ── Blur Aura — smooth gradient backdrop blur that fades outward ── */
-function BlurAura({ children, spread = 20, blur = 22, style = {} }) {
-  // 6 concentric rings from tight (full blur + opaque) to wide (minimal blur + transparent).
-  // More rings = smoother gradient transition. Each ring fades in both blur intensity and opacity.
+function BlurAura({ children, spread = 50, blur = 18, style = {} }) {
+  // 6 concentric rings. Each ring gets a CSS mask (single linear-gradient, no composite)
+  // that fades its edges. Outer rings fade more aggressively → blur dissolves smoothly.
   const steps = 6;
   const rings = Array.from({ length: steps }, (_, i) => {
     const t = i / (steps - 1); // 0 = innermost, 1 = outermost
+    const fadePct = Math.round(10 + t * 50); // edge fade: inner 10%, outer 60%
     return {
       inset: -(spread * t),
       br: 14 + spread * t,
-      blurAmt: blur * (1 - t * 0.85),       // inner: full blur → outer: 15% blur
-      opacity: 0.38 * (1 - t * 0.88),        // inner: 0.38 → outer: ~0.045
+      blurAmt: blur * (1 - t),              // full blur → 0 at outer edge
+      opacity: 0.35 * (1 - t * 0.92),       // 0.35 → ~0.03
+      mask: `linear-gradient(to bottom, transparent 0%, black ${fadePct}%, black ${100 - fadePct}%, transparent 100%)`,
     };
   });
   return (
@@ -60,9 +62,11 @@ function BlurAura({ children, spread = 20, blur = 22, style = {} }) {
           position: "absolute",
           top: r.inset, left: r.inset, right: r.inset, bottom: r.inset,
           borderRadius: r.br,
-          backdropFilter: `blur(${r.blurAmt}px) saturate(${1 + 0.4 * (1 - i / (steps - 1))})`,
-          WebkitBackdropFilter: `blur(${r.blurAmt}px) saturate(${1 + 0.4 * (1 - i / (steps - 1))})`,
+          backdropFilter: `blur(${r.blurAmt}px) saturate(${1 + 0.3 * (1 - i / (steps - 1))})`,
+          WebkitBackdropFilter: `blur(${r.blurAmt}px) saturate(${1 + 0.3 * (1 - i / (steps - 1))})`,
           background: `rgba(239,242,247,${r.opacity})`,
+          maskImage: r.mask,
+          WebkitMaskImage: r.mask,
           pointerEvents: "none",
           zIndex: 0,
         }} />
