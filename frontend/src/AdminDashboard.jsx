@@ -39,24 +39,29 @@ function GlassPanel({ children, borderRadius = 24, style = {} }) {
 }
 
 /* ── Hover Button ────────────────────────────────────────────── */
-/* ── Blur Aura — feathered backdrop blur that fades out around an element ── */
-function BlurAura({ children, spread = 14, blur = 20, style = {} }) {
+/* ── Blur Aura — layered backdrop blur rings that fade outward ── */
+function BlurAura({ children, spread = 12, blur = 18, style = {} }) {
+  // Build 3 concentric rings: inner (full blur), mid, outer (light blur).
+  // Each ring is a plain rounded-rect with backdrop-filter — no mask-composite needed.
+  const rings = [
+    { inset: 0,             br: 16,              blurAmt: blur,       bg: "rgba(239,242,247,0.45)" },
+    { inset: -(spread / 2), br: spread / 2 + 16, blurAmt: blur * 0.5, bg: "rgba(239,242,247,0.22)" },
+    { inset: -spread,       br: spread + 16,     blurAmt: blur * 0.2, bg: "rgba(239,242,247,0.08)" },
+  ];
   return (
     <div style={{ position: "relative", ...style }}>
-      {/* The oversized blur layer behind the content */}
-      <div style={{
-        position: "absolute",
-        top: -spread, left: -spread, right: -spread, bottom: -spread,
-        backdropFilter: `blur(${blur}px)`,
-        WebkitBackdropFilter: `blur(${blur}px)`,
-        maskImage: `linear-gradient(to bottom, transparent 0%, black ${spread}px, black calc(100% - ${spread}px), transparent 100%), linear-gradient(to right, transparent 0%, black ${spread}px, black calc(100% - ${spread}px), transparent 100%)`,
-        WebkitMaskImage: `linear-gradient(to bottom, transparent 0%, black ${spread}px, black calc(100% - ${spread}px), transparent 100%), linear-gradient(to right, transparent 0%, black ${spread}px, black calc(100% - ${spread}px), transparent 100%)`,
-        maskComposite: "intersect",
-        WebkitMaskComposite: "destination-in",
-        pointerEvents: "none",
-        zIndex: 0,
-      }} />
-      {/* Actual content on top */}
+      {rings.map((r, i) => (
+        <div key={i} style={{
+          position: "absolute",
+          top: r.inset, left: r.inset, right: r.inset, bottom: r.inset,
+          borderRadius: r.br,
+          backdropFilter: `blur(${r.blurAmt}px) saturate(1.4)`,
+          WebkitBackdropFilter: `blur(${r.blurAmt}px) saturate(1.4)`,
+          background: r.bg,
+          pointerEvents: "none",
+          zIndex: 0,
+        }} />
+      ))}
       <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
     </div>
   );
@@ -112,7 +117,7 @@ function HoverButton({ children, onClick, disabled, variant = "primary", style: 
 }
 
 /* ── Confirmation Modal ──────────────────────────────────────── */
-function ConfirmModal({ message, onConfirm, onCancel, confirming }) {
+function ConfirmModal({ message, onConfirm, onCancel, confirming, confirmLabel = "Delete", confirmingLabel = "Deleting...", confirmVariant = "dangerConfirm" }) {
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 9999,
@@ -126,8 +131,8 @@ function ConfirmModal({ message, onConfirm, onCancel, confirming }) {
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <HoverButton variant="ghost" onClick={onCancel} style={{ height: 40, padding: "0 20px" }}>Cancel</HoverButton>
-            <HoverButton variant="dangerConfirm" onClick={onConfirm} disabled={confirming} style={{ height: 40, padding: "0 20px" }}>
-              {confirming ? "Deleting..." : "Delete"}
+            <HoverButton variant={confirmVariant} onClick={onConfirm} disabled={confirming} style={{ height: 40, padding: "0 20px" }}>
+              {confirming ? confirmingLabel : confirmLabel}
             </HoverButton>
           </div>
         </div>
@@ -428,6 +433,9 @@ function RoleToggle({ clerkUserId, currentRole, getToken, onRoleChanged }) {
           onConfirm={confirmChange}
           onCancel={() => setConfirmTarget(null)}
           confirming={saving}
+          confirmLabel="Confirm"
+          confirmingLabel="Saving..."
+          confirmVariant="primary"
         />
       )}
       <div style={{ display: "flex", gap: 6 }}>
@@ -923,8 +931,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         background: `linear-gradient(160deg, rgba(230,240,255,0.7) 0%, ${COLORS.pageBg} 30%, rgba(220,235,255,0.5) 60%, ${COLORS.pageBg} 80%, rgba(200,225,255,0.4) 100%)`,
         fontFamily: "Poppins, sans-serif",
         position: "relative",
-        display: "flex",
-        flexDirection: "column",
+        overflow: "auto",
       }}
     >
       {/* Animated orbs */}
@@ -942,9 +949,9 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         />
       )}
 
-      {/* Fixed header — outside scroll container so backdropFilter works */}
+      {/* Fixed header — overlaps scrollable content so BlurAura can blur it */}
       <div style={{
-        flexShrink: 0, zIndex: 20,
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 20,
         padding: "18px 28px 14px 28px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         flexWrap: "wrap", gap: 12,
@@ -960,14 +967,16 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
               {isAdmin && selectedUser ? "Back" : "Close"}
             </HoverButton>
           </BlurAura>
-          <div>
-            <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 2 }}>
-              {isAdmin ? "Analytics Dashboard" : "My Activity"}
+          <BlurAura spread={10} blur={14}>
+            <div style={{ padding: "4px 8px" }}>
+              <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 2 }}>
+                {isAdmin ? "Analytics Dashboard" : "My Activity"}
+              </div>
+              <div style={{ fontSize: 12, color: COLORS.mutedText, fontWeight: 400, lineHeight: 1.35 }}>
+                Showing data for: {periodLabel}
+              </div>
             </div>
-            <div style={{ fontSize: 12, color: COLORS.mutedText, fontWeight: 400, lineHeight: 1.35 }}>
-              Showing data for: {periodLabel}
-            </div>
-          </div>
+          </BlurAura>
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", pointerEvents: "auto" }}>
@@ -1004,8 +1013,8 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         </div>
       </div>
 
-      {/* Scrollable content area — separate from header */}
-      <div style={{ flex: 1, overflow: "auto", padding: "8px 28px 24px 28px", position: "relative", zIndex: 1 }}>
+      {/* Content area — padded at top to sit below the fixed header */}
+      <div style={{ position: "relative", zIndex: 1, padding: "80px 28px 24px 28px" }}>
 
         {/* Error */}
         {error && (
