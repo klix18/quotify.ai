@@ -12,7 +12,7 @@ import {
   DWELLING_PAYMENT_PLAN_FIELDS,
   POLICY_FORM_OPTIONS,
   CONSTRUCTION_TYPE_OPTIONS,
-} from "./dwellingConfig";
+} from "../configs/dwellingConfig";
 
 export default function DwellingPanel({
   form,

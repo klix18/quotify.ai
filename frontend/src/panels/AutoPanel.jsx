@@ -8,7 +8,7 @@ import {
   PAYMENT_PLANS,
   PAYMENT_PLAN_FIELDS,
   PAID_IN_FULL_DISCOUNT_FIELDS,
-} from "./autoConfig";
+} from "../configs/autoConfig";
 
 export default function AutoPanel({
   form,

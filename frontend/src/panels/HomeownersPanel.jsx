@@ -4,7 +4,7 @@ import {
   HOMEOWNERS_CLIENT_FIELDS,
   HOMEOWNERS_LABEL_MAP,
   HOMEOWNERS_ROWS,
-} from "./homeownersConfig";
+} from "../configs/homeownersConfig";
 
 export default function HomeownersPanel({
   form,

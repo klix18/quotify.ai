@@ -11,7 +11,7 @@ from pdf_storage_helpers import store_generated_pdf
 
 router = APIRouter()
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_ROOT = BASE_DIR / "templates"
 TEMPLATE_DIR = TEMPLATES_ROOT / "commercial"
 GENERATED_DIR = BASE_DIR / "generated_quotes"

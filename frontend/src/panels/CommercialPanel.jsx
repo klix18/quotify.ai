@@ -11,7 +11,7 @@ import {
   CYBER_COVERAGE_FIELDS,
   WIND_COVERAGE_FIELDS,
   WIND_BUYDOWN_FIELDS,
-} from "./commercialConfig";
+} from "../configs/commercialConfig";
 
 export default function CommercialPanel({
   form,

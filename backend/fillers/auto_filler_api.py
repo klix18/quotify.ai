@@ -11,26 +11,23 @@ from pdf_storage_helpers import store_generated_pdf
 
 router = APIRouter()
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_ROOT = BASE_DIR / "templates"
-TEMPLATE_DIR = TEMPLATES_ROOT / "bundle"
+TEMPLATE_DIR = TEMPLATES_ROOT / "auto"
 GENERATED_DIR = BASE_DIR / "generated_quotes"
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_ROOT)))
 
 
-async def render_bundle_pdf(output_path: Path, data: dict):
-    """Render the bundle HTML template with data and convert to PDF."""
-    template = jinja_env.get_template("bundle/bundle_quote.html")
+async def render_auto_pdf(output_path: Path, data: dict):
+    """Render the auto HTML template with data and convert to PDF."""
+    template = jinja_env.get_template("auto/auto_quote.html")
 
     coverages = data.get("coverages", {})
 
     context = {
-        # Bundle premiums
-        "bundle_total_premium": data.get("bundle_total_premium", ""),
-        "home_premium": data.get("home_premium", ""),
-        "auto_premium": data.get("auto_premium", ""),
+        "total_premium": data.get("total_premium", ""),
         "why_selected": data.get("why_selected", ""),
         # Client / Agent
         "client_name": data.get("client_name", ""),
@@ -41,19 +38,7 @@ async def render_bundle_pdf(output_path: Path, data: dict):
         "agent_address": data.get("agent_address", ""),
         "agent_phone": data.get("agent_phone", ""),
         "agent_email": data.get("agent_email", ""),
-        # Homeowners coverages
-        "dwelling": data.get("dwelling", ""),
-        "other_structures": data.get("other_structures", ""),
-        "personal_property": data.get("personal_property", ""),
-        "loss_of_use": data.get("loss_of_use", ""),
-        "personal_liability": data.get("personal_liability", ""),
-        "medical_payments": data.get("medical_payments", ""),
-        "all_perils_deductible": data.get("all_perils_deductible", ""),
-        "wind_hail_deductible": data.get("wind_hail_deductible", ""),
-        "water_and_sewer_backup": data.get("water_and_sewer_backup", ""),
-        "replacement_cost_on_contents": data.get("replacement_cost_on_contents", ""),
-        "extended_replacement_cost": data.get("25_extended_replacement_cost", ""),
-        # Auto coverages (policy-level)
+        # Coverages (policy-level)
         "bi_limit": coverages.get("bi_limit", ""),
         "pd_limit": coverages.get("pd_limit", ""),
         "medpay_limit": coverages.get("medpay_limit", ""),
@@ -64,10 +49,10 @@ async def render_bundle_pdf(output_path: Path, data: dict):
         "collision_deductible": coverages.get("collision_deductible", ""),
         "rental_limit": coverages.get("rental_limit", ""),
         "towing_limit": coverages.get("towing_limit", ""),
-        # Drivers & Vehicles
+        # Drivers & Vehicles (arrays passed through)
         "drivers": data.get("drivers", []),
         "vehicles": data.get("vehicles", []),
-        # Payment options
+        # Payment options (nested dict passed through)
         "payment_options": data.get("payment_options", {}),
     }
 
@@ -94,28 +79,28 @@ async def render_bundle_pdf(output_path: Path, data: dict):
     optimize_pdf(output_path)
 
 
-@router.post("/api/generate-bundle-quote")
-async def generate_bundle_quote(payload: dict):
+@router.post("/api/generate-auto-quote")
+async def generate_auto_quote(payload: dict):
     try:
-        output_path = GENERATED_DIR / f"bundle_quote_{uuid4().hex}.pdf"
+        output_path = GENERATED_DIR / f"auto_quote_{uuid4().hex}.pdf"
 
-        await render_bundle_pdf(output_path=output_path, data=payload)
+        await render_auto_pdf(output_path=output_path, data=payload)
 
         client_name = str(payload.get("client_name", "")).strip()
         date_str = datetime.now().strftime("%m-%d-%Y")
         safe_client = "-".join(client_name.split()) if client_name else "Unknown"
-        download_name = f"bundle_quote_{date_str}_{safe_client}.pdf"
+        download_name = f"auto_quote_{date_str}_{safe_client}.pdf"
 
         # Store generated PDF in database
         try:
             await store_generated_pdf(
                 pdf_path=output_path,
                 file_name=download_name,
-                insurance_type="bundle",
+                insurance_type="auto",
                 client_name=client_name,
             )
         except Exception:
-            pass
+            pass  # Don't fail the response if storage fails
 
         return FileResponse(
             path=output_path,

@@ -2,34 +2,34 @@ import React from "react";
 import { UserButton, useUser, useAuth } from "@clerk/clerk-react";
 import COLORS from "./colors";
 import { trackEvent, getManualFieldNames } from "./trackEvent";
-import { INSURANCE_OPTIONS } from "./insuranceOptions";
+import { INSURANCE_OPTIONS } from "./configs/insuranceOptions";
 import {
   HOMEOWNERS_FIELDS,
   EMPTY_HOMEOWNERS_FORM,
-} from "./homeownersConfig";
+} from "./configs/homeownersConfig";
 import {
   EMPTY_AUTO_FORM,
   emptyDriver,
   emptyVehicle,
-} from "./autoConfig";
+} from "./configs/autoConfig";
 import {
   EMPTY_DWELLING_FORM,
   emptyProperty,
-} from "./dwellingConfig";
+} from "./configs/dwellingConfig";
 import {
   EMPTY_COMMERCIAL_FORM,
   emptyWcClassCode,
-} from "./commercialConfig";
+} from "./configs/commercialConfig";
 import {
   EMPTY_BUNDLE_FORM,
   emptyDriver as emptyBundleDriver,
   emptyVehicle as emptyBundleVehicle,
-} from "./bundleConfig";
-import HomeownersPanel from "./HomeownersPanel";
-import AutoPanel from "./AutoPanel";
-import DwellingPanel from "./DwellingPanel";
-import CommercialPanel from "./CommercialPanel";
-import BundlePanel from "./BundlePanel";
+} from "./configs/bundleConfig";
+import HomeownersPanel from "./panels/HomeownersPanel";
+import AutoPanel from "./panels/AutoPanel";
+import DwellingPanel from "./panels/DwellingPanel";
+import CommercialPanel from "./panels/CommercialPanel";
+import BundlePanel from "./panels/BundlePanel";
 import { triggerSparkleFlow } from "./sparkleFlow";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";

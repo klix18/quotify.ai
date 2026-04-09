@@ -12,7 +12,7 @@ import {
   BUNDLE_PAYMENT_PLANS,
   BUNDLE_PAYMENT_PLAN_FIELDS,
   BUNDLE_PAID_IN_FULL_DISCOUNT_FIELDS,
-} from "./bundleConfig";
+} from "../configs/bundleConfig";
 
 export default function BundlePanel({
   form,

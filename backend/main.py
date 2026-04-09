@@ -5,18 +5,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from advisor_info_api import router as advisor_router
 
-from homeowners_parser_api import router as homeowners_parser_router
-from homeowners_filler_api import router as homeowners_filler_router
-from auto_filler_api import router as auto_filler_router
-from bundle_filler_api import router as bundle_filler_router
-from dwelling_filler_api import router as dwelling_filler_router
-from commercial_filler_api import router as commercial_filler_router
+from parsers.homeowners_parser_api import router as homeowners_parser_router
+from parsers.auto_parser_api import router as auto_parser_router
+from parsers.dwelling_parser_api import router as dwelling_parser_router
+from parsers.commercial_parser_api import router as commercial_parser_router
+from parsers.bundle_parser_api import router as bundle_parser_router
+from parsers.wind_parser_api import router as wind_parser_router
 
-from auto_parser_api import router as auto_parser_router
-from dwelling_parser_api import router as dwelling_parser_router
-from commercial_parser_api import router as commercial_parser_router
-from bundle_parser_api import router as bundle_parser_router
-from wind_parser_api import router as wind_parser_router
+from fillers.homeowners_filler_api import router as homeowners_filler_router
+from fillers.auto_filler_api import router as auto_filler_router
+from fillers.bundle_filler_api import router as bundle_filler_router
+from fillers.dwelling_filler_api import router as dwelling_filler_router
+from fillers.commercial_filler_api import router as commercial_filler_router
 
 from analytics_api import router as analytics_router, self_router as analytics_self_router
 from track_api import router as track_router
