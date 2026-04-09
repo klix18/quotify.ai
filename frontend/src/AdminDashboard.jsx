@@ -15,16 +15,18 @@ const PERIODS = [
 ];
 
 /* ── Glass Panel (matches right panel from QuotifyHome) ──────── */
+/* Replaced runtime backdropFilter: blur(48px) with a static frosted-glass
+   background. The old blur was re-computed every scroll frame because
+   fixed-position animated orbs behind the panels kept changing the
+   backdrop content, causing content inside cards to flash/reload.    */
 function GlassPanel({ children, borderRadius = 24, style = {} }) {
   return (
-    <div style={{ position: "relative", borderRadius, overflow: "hidden", border: "none", ...style }}>
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "rgba(255,255,255,0.70)",
-        backdropFilter: "blur(48px) saturate(2.0) brightness(1.05)",
-        WebkitBackdropFilter: "blur(48px) saturate(2.0) brightness(1.05)",
-        zIndex: 0,
-      }} />
+    <div style={{
+      position: "relative", borderRadius, overflow: "hidden", border: "none",
+      background: "rgba(255,255,255,0.88)",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 4px 24px rgba(23,101,212,0.04)",
+      ...style,
+    }}>
       <div style={{
         position: "absolute", inset: 0, borderRadius,
         boxShadow: "inset 0 2px 0 0 rgba(255,255,255,1), inset 0 -1px 0 0 rgba(255,255,255,0.2), inset 1px 0 0 0 rgba(255,255,255,0.4), inset -1px 0 0 0 rgba(255,255,255,0.4)",
@@ -41,42 +43,21 @@ function GlassPanel({ children, borderRadius = 24, style = {} }) {
 }
 
 /* ── Hover Button ────────────────────────────────────────────── */
-/* ── Blur Aura — smooth gradient backdrop blur that fades outward ── */
-function BlurAura({ children, spread = 60, blur = 22, style = {} }) {
-  // 8 concentric rings with masks that fade in BOTH directions (vertical + horizontal).
-  // Pure blur only — no frosted glass overlay.
-  const steps = 8;
-  const rings = Array.from({ length: steps }, (_, i) => {
-    const t = i / (steps - 1);
-    const fadePct = Math.round(8 + t * 45);
-    const vMask = `linear-gradient(to bottom, transparent 0%, black ${fadePct}%, black ${100 - fadePct}%, transparent 100%)`;
-    const hMask = `linear-gradient(to right, transparent 0%, black ${fadePct}%, black ${100 - fadePct}%, transparent 100%)`;
-    return {
-      inset: -(spread * t),
-      br: 14 + spread * t,
-      blurAmt: blur * (1 - t * 0.85),
-      maskImage: `${vMask}, ${hMask}`,
-      maskComposite: "intersect",
-      WebkitMaskComposite: "source-in",
-    };
-  });
+/* ── Blur Aura — lightweight frosted halo behind fixed header items ── */
+/* Replaced 8 nested backdropFilter rings with a single radial-gradient
+   background that simulates the same soft halo without any blur
+   compositing. This eliminates 8 × backdrop-filter layers per instance. */
+function BlurAura({ children, spread = 60, style = {} }) {
   return (
     <div style={{ position: "relative", ...style }}>
-      {rings.map((r, i) => (
-        <div key={i} style={{
-          position: "absolute",
-          top: r.inset, left: r.inset, right: r.inset, bottom: r.inset,
-          borderRadius: r.br,
-          backdropFilter: `blur(${r.blurAmt}px)`,
-          WebkitBackdropFilter: `blur(${r.blurAmt}px)`,
-          maskImage: r.maskImage,
-          WebkitMaskImage: r.maskImage,
-          maskComposite: r.maskComposite,
-          WebkitMaskComposite: r.WebkitMaskComposite,
-          pointerEvents: "none",
-          zIndex: 0,
-        }} />
-      ))}
+      <div style={{
+        position: "absolute",
+        top: -spread, left: -spread, right: -spread, bottom: -spread,
+        borderRadius: 14 + spread,
+        background: "radial-gradient(ellipse at center, rgba(235,242,255,0.85) 0%, rgba(235,242,255,0.5) 40%, transparent 70%)",
+        pointerEvents: "none",
+        zIndex: 0,
+      }} />
       <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
     </div>
   );
@@ -633,7 +614,7 @@ function UserSnapshotHistory({ events, getToken }) {
   const filterSelect = {
     padding: "4px 10px", height: 32, borderRadius: 8,
     border: `1px solid ${COLORS.borderGrey}`,
-    background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)",
+    background: "rgba(255,255,255,0.88)",
     fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
     color: COLORS.black, cursor: "pointer",
   };
@@ -772,7 +753,7 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30 }) {
   const filterSelect = {
     padding: "4px 10px", height: 32, borderRadius: 8,
     border: `1px solid ${COLORS.borderGrey}`,
-    background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)",
+    background: "rgba(255,255,255,0.88)",
     fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
     color: COLORS.black, cursor: "pointer",
   };

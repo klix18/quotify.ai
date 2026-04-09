@@ -149,74 +149,44 @@ function ChatMessage({ role, content, isStreaming }) {
 }
 
 /* ── Rainbow Border Wrapper ──────────────────────────────────────── */
-/* All keyframes & scrollbar styles are now in index.css.            */
-/* Animation driven by requestAnimationFrame — immune to re-renders */
-
-// Module-level angle so it never resets, even if the component remounts
-let _rainbowAngle = 0;
-let _rainbowRafId = null;
-let _rainbowRefCount = 0;
-const _rainbowListeners = new Set();
-
-function _startRainbowLoop() {
-  if (_rainbowRafId !== null) return;
-  let last = performance.now();
-  const tick = (now) => {
-    const dt = now - last;
-    last = now;
-    _rainbowAngle = (_rainbowAngle + (dt / 6000) * 360) % 360;
-    for (const cb of _rainbowListeners) cb(_rainbowAngle);
-    _rainbowRafId = requestAnimationFrame(tick);
-  };
-  _rainbowRafId = requestAnimationFrame(tick);
-}
-
-function _stopRainbowLoop() {
-  if (_rainbowRafId !== null) {
-    cancelAnimationFrame(_rainbowRafId);
-    _rainbowRafId = null;
-  }
-}
+/* Uses a pure-CSS rotating gradient instead of JS requestAnimationFrame.
+   The conic-gradient is rasterized once and rotated via CSS transform,
+   which the GPU compositor handles without main-thread repaints.
+   This eliminates the scroll-jank that occurred when the gradient
+   string was being regenerated 60× / second via JS.                 */
 
 function RainbowBorder({ children, borderRadius = 20, borderWidth = 2 }) {
-  const outerRef = useRef(null);
   const dur = "0.4s";
   const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
 
-  useEffect(() => {
-    const update = (angle) => {
-      if (outerRef.current) {
-        outerRef.current.style.background =
-          `conic-gradient(from ${angle}deg, #ff6b6b, #ffa500, #ffd93d, #6bcb77, #4d96ff, #9b59b6, #ff6b6b)`;
-      }
-    };
-    _rainbowListeners.add(update);
-    _rainbowRefCount++;
-    _startRainbowLoop();
-    update(_rainbowAngle);
-    return () => {
-      _rainbowListeners.delete(update);
-      _rainbowRefCount--;
-      if (_rainbowRefCount <= 0) _stopRainbowLoop();
-    };
-  }, []);
-
   return (
-    <div
-      ref={outerRef}
-      style={{
-        borderRadius: borderRadius + borderWidth,
-        padding: borderWidth,
-        transition: `border-radius ${dur} ${ease}`,
-      }}
-    >
+    <div style={{
+      position: "relative",
+      borderRadius: borderRadius + borderWidth,
+      padding: borderWidth,
+      overflow: "hidden",
+      transition: `border-radius ${dur} ${ease}`,
+    }}>
+      {/* Spinning gradient layer — GPU-composited via CSS animation, no JS.
+          Uses 50vmax overflow so the gradient square is always large enough
+          to cover the container at any rotation angle, whether expanded
+          (~52vw × 560px) or collapsed into a tiny pill (~180 × 40px). */}
       <div style={{
+        position: "absolute",
+        inset: "-50vmax",
+        background: "conic-gradient(from 0deg, #ff6b6b, #ffa500, #ffd93d, #6bcb77, #4d96ff, #9b59b6, #ff6b6b)",
+        animation: "rainbowSpin 6s linear infinite",
+        zIndex: 0,
+        pointerEvents: "none",
+      }} />
+      {/* Inner content — sits above the gradient, masking it to a thin border */}
+      <div style={{
+        position: "relative",
         borderRadius,
         overflow: "hidden",
         background: "rgba(250, 252, 255, 0.97)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
         transition: `border-radius ${dur} ${ease}`,
+        zIndex: 1,
       }}>
         {children}
       </div>
@@ -234,6 +204,7 @@ export default function ChatPanel({ period, userName, onOpenMemory }) {
   const [sessionId] = useState(() => crypto.randomUUID());
   const [greeting, setGreeting] = useState(null);
   const [isOpen, setIsOpen] = useState(true);
+  const [pillHovered, setPillHovered] = useState(false);
   const scrollAreaRef = useRef(null);
   const inputRef = useRef(null);
   const abortRef = useRef(null);
@@ -453,22 +424,28 @@ export default function ChatPanel({ period, userName, onOpenMemory }) {
   return (
     <div style={{ display: "flex", justifyContent: "center", width: "100%", marginBottom: expanded ? 24 : 20 }}>
       {/* Outer morph shell — rainbow border adapts shape */}
-      <div style={{
-        position: "relative",
-        maxWidth: expanded ? "52vw" : 180,
-        width: "100%",
-        transition: `max-width ${dur} ${ease}`,
-      }}>
+      <div
+        onMouseEnter={() => !expanded && setPillHovered(true)}
+        onMouseLeave={() => setPillHovered(false)}
+        style={{
+          position: "relative",
+          maxWidth: expanded ? "52vw" : 180,
+          width: "100%",
+          transform: !expanded && pillHovered ? "scale(1.06)" : "scale(1)",
+          transition: `max-width ${dur} ${ease}, transform 0.2s ${ease}`,
+        }}
+      >
         <RainbowBorder borderRadius={expanded ? 20 : 50} borderWidth={2}>
           {/* Pill header — always visible, clickable when collapsed */}
           <div
             onClick={expanded ? undefined : handleToggle}
             style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
+              display: "flex", alignItems: "center",
+              justifyContent: expanded ? "space-between" : "center",
               padding: expanded ? "14px 20px" : "10px 20px",
-              borderBottom: expanded ? `1px solid ${COLORS.borderGrey}` : "none",
+              borderBottom: `1px solid ${expanded ? COLORS.borderGrey : "transparent"}`,
               cursor: expanded ? "default" : "pointer",
-              transition: `padding ${dur} ${ease}, border-color ${dur} ${ease}`,
+              transition: `padding ${dur} ${ease}, border-color ${dur} ${ease}, justify-content ${dur} ${ease}`,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -517,10 +494,10 @@ export default function ChatPanel({ period, userName, onOpenMemory }) {
 
           {/* Chat body — height morphs to 0 when collapsed */}
           <div style={{
-            maxHeight: expanded ? 520 : 0,
+            height: expanded ? 520 : 0,
             opacity: expanded ? 1 : 0,
             overflow: "hidden",
-            transition: `max-height ${dur} ${ease}, opacity ${expanded ? "0.35s 0.1s" : "0.15s"} ${ease}`,
+            transition: `height ${dur} ${ease}, opacity ${expanded ? "0.35s 0.1s" : "0.15s"} ${ease}`,
             display: "flex",
             flexDirection: "column",
           }}>

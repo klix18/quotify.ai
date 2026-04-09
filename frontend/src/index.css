@@ -29,6 +29,11 @@ body {
   50% { opacity: 0; }
 }
 
+@keyframes rainbowSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .chatScrollArea {
   scrollbar-width: thin;
   scrollbar-color: #D4E2F4 transparent;
