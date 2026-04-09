@@ -79,7 +79,7 @@ async def init_db():
 
         # Chat tables (separate execute to avoid multi-statement issues)
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS chat_sessions (
+            CREATE TABLE IF NOT EXISTS chat_session_memories (
                 id              TEXT PRIMARY KEY,
                 user_id         TEXT NOT NULL,
                 user_role       TEXT NOT NULL DEFAULT 'admin',
@@ -89,12 +89,12 @@ async def init_db():
                 key_topics      TEXT[] DEFAULT ARRAY[]::TEXT[],
                 message_count   INTEGER DEFAULT 0
             );
-            CREATE INDEX IF NOT EXISTS idx_chat_sessions_user
-                ON chat_sessions (user_id);
+            CREATE INDEX IF NOT EXISTS idx_chat_session_memories_user
+                ON chat_session_memories (user_id);
         """)
 
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS chat_memories (
+            CREATE TABLE IF NOT EXISTS chat_insight_memories (
                 id              TEXT PRIMARY KEY,
                 user_id         TEXT NOT NULL,
                 memory_type     TEXT NOT NULL DEFAULT 'insight',
@@ -106,8 +106,8 @@ async def init_db():
                 relevance_score FLOAT DEFAULT 1.0,
                 is_active       BOOLEAN DEFAULT TRUE
             );
-            CREATE INDEX IF NOT EXISTS idx_chat_memories_user
-                ON chat_memories (user_id, is_active);
+            CREATE INDEX IF NOT EXISTS idx_chat_insight_memories_user
+                ON chat_insight_memories (user_id, is_active);
         """)
 
 

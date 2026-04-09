@@ -494,6 +494,68 @@ async def end_session_endpoint(
     return {"status": "ended"}
 
 
+# ── Memory & session history endpoints ──────────────────────────────
+
+@router.get("/memory/sessions")
+async def list_sessions(
+    admin: dict = Depends(require_admin),
+):
+    """List all saved chat session summaries for the current user."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT id, user_role, started_at, ended_at, summary, key_topics, message_count
+            FROM chat_session_memories
+            WHERE user_id = $1 AND summary IS NOT NULL AND summary != ''
+            ORDER BY started_at DESC
+        """, admin["user_id"])
+    return [dict(r) for r in rows]
+
+
+@router.delete("/memory/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    admin: dict = Depends(require_admin),
+):
+    """Delete a saved chat session summary."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute("""
+            DELETE FROM chat_session_memories WHERE id = $1 AND user_id = $2
+        """, session_id, admin["user_id"])
+    return {"deleted": result == "DELETE 1"}
+
+
+@router.get("/memory/memories")
+async def list_memories(
+    admin: dict = Depends(require_admin),
+):
+    """List all long-term memories for the current user."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT id, memory_type, content, context, created_at, last_accessed, access_count, relevance_score, is_active
+            FROM chat_insight_memories
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+        """, admin["user_id"])
+    return [dict(r) for r in rows]
+
+
+@router.delete("/memory/memories/{memory_id}")
+async def delete_memory(
+    memory_id: str,
+    admin: dict = Depends(require_admin),
+):
+    """Delete a long-term memory."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute("""
+            DELETE FROM chat_insight_memories WHERE id = $1 AND user_id = $2
+        """, memory_id, admin["user_id"])
+    return {"deleted": result == "DELETE 1"}
+
+
 # ── Chat message (SSE streaming) ─────────────────────────────────────
 
 @router.post("/message")

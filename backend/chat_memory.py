@@ -132,7 +132,7 @@ Respond in this exact JSON format:
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO chat_sessions (id, user_id, user_role, started_at, ended_at, summary, key_topics, message_count)
+            INSERT INTO chat_session_memories (id, user_id, user_role, started_at, ended_at, summary, key_topics, message_count)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """,
             session_id,
@@ -155,7 +155,7 @@ async def get_recent_summaries(user_id: str, limit: int = 5) -> list[dict]:
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT summary, key_topics, started_at, message_count
-            FROM chat_sessions
+            FROM chat_session_memories
             WHERE user_id = $1 AND summary IS NOT NULL AND summary != ''
             ORDER BY started_at DESC
             LIMIT $2
@@ -200,7 +200,7 @@ Respond in this exact JSON format:
             for mem in memories:
                 # Check for duplicates before inserting
                 existing = await conn.fetch("""
-                    SELECT id, content FROM chat_memories
+                    SELECT id, content FROM chat_insight_memories
                     WHERE user_id = $1 AND is_active = TRUE
                 """, user_id)
 
@@ -210,7 +210,7 @@ Respond in this exact JSON format:
                     if _content_similar(mem.get("content", ""), ex["content"]):
                         # Update access time instead of duplicating
                         await conn.execute("""
-                            UPDATE chat_memories
+                            UPDATE chat_insight_memories
                             SET last_accessed = NOW(), access_count = access_count + 1
                             WHERE id = $1
                         """, ex["id"])
@@ -219,7 +219,7 @@ Respond in this exact JSON format:
 
                 if not is_duplicate and mem.get("content"):
                     await conn.execute("""
-                        INSERT INTO chat_memories (id, user_id, memory_type, content, context)
+                        INSERT INTO chat_insight_memories (id, user_id, memory_type, content, context)
                         VALUES ($1, $2, $3, $4, $5)
                     """,
                         str(uuid4()),
@@ -250,7 +250,7 @@ async def get_active_memories(user_id: str, limit: int = 10) -> list[dict]:
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT id, memory_type, content, context, created_at, last_accessed, access_count
-            FROM chat_memories
+            FROM chat_insight_memories
             WHERE user_id = $1 AND is_active = TRUE
             ORDER BY
                 relevance_score * (1.0 / (1.0 + EXTRACT(EPOCH FROM (NOW() - last_accessed)) / 86400.0 / 30.0)) DESC
@@ -260,7 +260,7 @@ async def get_active_memories(user_id: str, limit: int = 10) -> list[dict]:
         # Update access timestamps
         for row in rows:
             await conn.execute("""
-                UPDATE chat_memories
+                UPDATE chat_insight_memories
                 SET last_accessed = NOW(), access_count = access_count + 1
                 WHERE id = $1
             """, row["id"])
@@ -273,7 +273,7 @@ async def decay_old_memories():
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
-            UPDATE chat_memories
+            UPDATE chat_insight_memories
             SET relevance_score = GREATEST(0.1, relevance_score - 0.1)
             WHERE is_active = TRUE
               AND last_accessed < NOW() - INTERVAL '90 days'

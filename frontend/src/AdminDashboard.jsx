@@ -2,6 +2,7 @@ import React from "react";
 import { useAuth } from "@clerk/clerk-react";
 import COLORS, { INSURANCE_COLORS } from "./colors";
 import ChatPanel from "./ChatPanel";
+import ChatMemoryPage from "./ChatMemoryPage";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -907,6 +908,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
   // Advisors go directly to their own page; admins start at the dashboard
   const [selectedUser, setSelectedUser] = React.useState(isAdmin ? null : currentUserName);
   const [clerkUsers, setClerkUsers] = React.useState({});  // keyed by display name -> { id, role }
+  const [showMemory, setShowMemory] = React.useState(false);
 
   // Mouse-tracking orbs
   const containerRef = React.useRef(null);
@@ -1067,6 +1069,10 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
 
   const periodLabel = PERIODS.find((p) => p.value === period)?.label || period;
 
+  if (showMemory) {
+    return <ChatMemoryPage onBack={() => setShowMemory(false)} />;
+  }
+
   return (
     <div
       ref={containerRef}
@@ -1182,7 +1188,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
             {/* AI Chatbot */}
-            <ChatPanel period={period} userName={currentUserName} />
+            <ChatPanel period={period} userName={currentUserName} onOpenMemory={() => setShowMemory(true)} />
 
             {/* Stat cards */}
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>

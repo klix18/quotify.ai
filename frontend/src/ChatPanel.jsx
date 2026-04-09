@@ -226,7 +226,7 @@ function RainbowBorder({ children, borderRadius = 20, borderWidth = 2 }) {
 
 /* ── Main ChatPanel ──────────────────────────────────────────────── */
 
-export default function ChatPanel({ period, userName }) {
+export default function ChatPanel({ period, userName, onOpenMemory }) {
   const { getToken } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -484,11 +484,20 @@ export default function ChatPanel({ period, userName }) {
                 color: COLORS.text,
                 transition: `font-size ${dur} ${ease}`,
               }}>Snappy</span>
-              {expanded && (
-                <span style={{
-                  fontSize: 11, fontWeight: 600, color: COLORS.blue,
-                  background: COLORS.blueSoft, padding: "2px 8px", borderRadius: 10,
-                }}>AI for Admins</span>
+              {expanded && onOpenMemory && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenMemory(); }}
+                  style={{
+                    fontSize: 11, fontWeight: 600, color: COLORS.blue,
+                    background: COLORS.blueSoft, padding: "2px 10px", borderRadius: 10,
+                    border: "none", cursor: "pointer", fontFamily: "inherit",
+                    transition: "background 0.15s",
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = COLORS.blueBorder}
+                  onMouseLeave={(e) => e.currentTarget.style.background = COLORS.blueSoft}
+                >
+                  See Memory
+                </button>
               )}
             </div>
             {expanded && (
