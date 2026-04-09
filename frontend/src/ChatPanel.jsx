@@ -305,11 +305,12 @@ export default function ChatPanel({ period, userName }) {
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "Unknown error");
+        console.error("[Snappy] Server error:", res.status, errText);
         setMessages((prev) => {
           const updated = [...prev];
           const last = updated[updated.length - 1];
           if (last?.role === "assistant") {
-            updated[updated.length - 1] = { ...last, content: `{red}Server error (${res.status}). Please try again.{/red}`, streaming: false };
+            updated[updated.length - 1] = { ...last, content: `{red}Server error (${res.status}): ${errText}{/red}`, streaming: false };
           }
           return updated;
         });
@@ -365,11 +366,12 @@ export default function ChatPanel({ period, userName }) {
                 return updated;
               });
             } else if (event.type === "error") {
+              console.error("[Snappy] Stream error:", event.content);
               setMessages((prev) => {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
                 if (last?.role === "assistant") {
-                  updated[updated.length - 1] = { ...last, content: "{red}Something went wrong. Please try again.{/red}", streaming: false };
+                  updated[updated.length - 1] = { ...last, content: `{red}Error: ${event.content || "Something went wrong. Please try again."}{/red}`, streaming: false };
                 }
                 return updated;
               });
