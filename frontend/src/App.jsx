@@ -5,9 +5,11 @@ import {
   SignInButton,
   useUser,
 } from "@clerk/clerk-react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import COLORS from "./colors";
 import QuotifyHome from "./QuotifyHome";
 import AdminDashboard from "./AdminDashboard";
+import ChatMemoryPage from "./ChatMemoryPage";
 
 function SignInPage() {
   const mainRef = React.useRef(null);
@@ -253,29 +255,42 @@ function SignInPage() {
 
 function AuthenticatedApp() {
   const { user } = useUser();
-  const [showActivity, setShowActivity] = React.useState(false);
+  const navigate = useNavigate();
   const isAdmin = user?.publicMetadata?.role === "admin";
   const userName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "";
   const userEmail = user?.primaryEmailAddress?.emailAddress || "";
   const userImageUrl = user?.imageUrl || "";
 
-  if (showActivity) {
-    return (
-      <AdminDashboard
-        onBack={() => setShowActivity(false)}
-        isAdmin={isAdmin}
-        currentUserName={userName}
-        currentUserEmail={userEmail}
-        currentUserImageUrl={userImageUrl}
-      />
-    );
-  }
-
   return (
-    <QuotifyHome
-      isAdmin={isAdmin}
-      onOpenActivity={() => setShowActivity(true)}
-    />
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <QuotifyHome
+            isAdmin={isAdmin}
+            onOpenActivity={() => navigate("/dashboard")}
+          />
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <AdminDashboard
+            onBack={() => navigate("/")}
+            isAdmin={isAdmin}
+            currentUserName={userName}
+            currentUserEmail={userEmail}
+            currentUserImageUrl={userImageUrl}
+          />
+        }
+      />
+      <Route
+        path="/dashboard/memory"
+        element={
+          <ChatMemoryPage onBack={() => navigate("/dashboard")} />
+        }
+      />
+    </Routes>
   );
 }
 
