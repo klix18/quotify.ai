@@ -922,6 +922,21 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
   const rafId = React.useRef(null);
   const mouseInside = React.useRef(false);
 
+  // Lock body scroll while dashboard is mounted
+  React.useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.height = "100%";
+    document.body.style.overflow = "hidden";
+    document.body.style.height = "100%";
+    return () => {
+      document.documentElement.style.overflow = "";
+      document.documentElement.style.height = "";
+      document.body.style.overflow = prev;
+      document.body.style.height = "";
+    };
+  }, []);
+
   React.useEffect(() => {
     const lerp = (a, b, t) => a + (b - a) * t;
     const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
@@ -1066,13 +1081,6 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
         overflow: "auto",
       }}
     >
-      <style>{`
-        html, body { overflow: hidden; height: 100%; }
-        * { scrollbar-width: thin; scrollbar-color: #D4E2F4 transparent; }
-        *::-webkit-scrollbar { width: 8px; height: 8px; }
-        *::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
-        *::-webkit-scrollbar-track { background: transparent; }
-      `}</style>
       {/* Animated orbs */}
       <div ref={orbPrimaryRef} style={{ position: "fixed", width: 400, height: 400, borderRadius: "50%", background: "rgba(23,101,212,0.14)", filter: "blur(80px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.4s ease" }} />
       <div ref={orbCyanRef} style={{ position: "fixed", width: 500, height: 500, borderRadius: "50%", background: "rgba(201,242,255,0.22)", filter: "blur(100px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.6s ease" }} />

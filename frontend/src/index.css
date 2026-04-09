@@ -13,3 +13,39 @@ body {
   background: white;
   color: #1F2630;
 }
+
+/* ── Global scrollbar styles ─────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #D4E2F4 transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Chat panel animations ───────────────────────────────────── */
+@keyframes chatBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.chatScrollArea {
+  scrollbar-width: thin;
+  scrollbar-color: #D4E2F4 transparent;
+}
+.chatScrollArea::-webkit-scrollbar { width: 8px; height: 8px; }
+.chatScrollArea::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
+.chatScrollArea::-webkit-scrollbar-track { background: transparent; }
+
+/* ── QuotifyHome shimmer animation ───────────────────────────── */
+@keyframes quotifyShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Admin dashboard: lock body scroll when mounted ──────────── */
+.admin-dashboard-active html,
+.admin-dashboard-active body {
+  overflow: hidden;
+  height: 100%;
+}

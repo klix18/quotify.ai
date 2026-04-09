@@ -1679,19 +1679,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
     >
 
 
-      <style>
-        {`
-          @keyframes quotifyShimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-          }
-
-          * { scrollbar-width: thin; scrollbar-color: #D4E2F4 transparent; }
-          *::-webkit-scrollbar { width: 8px; height: 8px; }
-          *::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
-          *::-webkit-scrollbar-track { background: transparent; }
-        `}
-      </style>
+      {/* Global styles (scrollbar, shimmer) now in index.css */}
 
       <div
         ref={mainRef}
