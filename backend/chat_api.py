@@ -205,7 +205,7 @@ async def _fetch_full_context(period: str) -> str:
 
 # ── System prompt ────────────────────────────────────────────────────
 
-ADMIN_SYSTEM_PROMPT = """You are the AI analytics assistant for the Quotify AI admin dashboard at Sizemore Insurance. Your name is Snapshot AI.
+ADMIN_SYSTEM_PROMPT = """You are the AI analytics assistant for the Quotify AI admin dashboard at Sizemore Insurance. Your name is Snappy.
 
 ## YOUR ROLE
 You help admins understand their team's performance, insurance quote generation patterns, and areas that need attention. All your answers must be grounded in the analytics data provided below — never make up numbers or statistics.
@@ -225,6 +225,7 @@ You help admins understand their team's performance, insurance quote generation 
 ## RESPONSE FORMAT — RICH TEXT
 Use these markup tags to make responses scannable and visually clear:
 - **bold text** for emphasis, key numbers, and user names
+- _italic text_ for secondary labels, descriptions, and supporting context
 - {{green}}text{{/green}} for positive metrics, improvements, good performance
 - {{red}}text{{/red}} for areas needing attention, declines, high manual change frequency
 - {{blue}}text{{/blue}} for neutral highlights, insurance types, general labels
@@ -295,12 +296,16 @@ def _build_system_prompt(
 @router.get("/greeting")
 async def get_greeting(
     period: str = Query("month", regex="^(week|month|6months|year|all)$"),
+    user_name: str = Query(""),
     admin: dict = Depends(require_admin),
 ):
     """Get the auto-greeting for the admin chatbot (no LLM call)."""
     pool = await get_pool()
     cutoff = _period_start(period)
     period_label = _PERIOD_LABELS.get(period, period)
+
+    # Extract first name for the greeting
+    first_name = user_name.split()[0] if user_name.strip() else ""
 
     async with pool.acquire() as conn:
         totals = await conn.fetchrow("""
@@ -332,27 +337,25 @@ async def get_greeting(
 
     events = totals["total_events"] if totals else 0
     quotes = totals["total_quotes"] if totals else 0
-    pdfs = totals["total_pdfs"] if totals else 0
 
+    name_part = f" {first_name}" if first_name else ""
     greeting = (
-        f"Hey! Here's your **{period_label}** snapshot:\n\n"
-        f"{{blue}}**{events}**{{/blue}} total events · "
-        f"{{green}}**{quotes}**{{/green}} quotes generated · "
-        f"{{blue}}**{pdfs}**{{/blue}} PDFs uploaded"
+        f"Hey{name_part}! Here's your **{period_label}** snapshot:\n\n"
+        f"**{events}** total events · "
+        f"{{green}}**{quotes}**{{/green}} quotes generated"
     )
 
     if top_user:
         greeting += f"\n\nTop performer: **{top_user['user_name']}** with {{green}}**{top_user['total']}**{{/green}} events"
 
     if top_type:
-        greeting += f"\nMost generated: {{blue}}**{top_type['insurance_type'].title()}**{{/blue}} insurance ({top_type['count']} quotes)"
+        greeting += f"\nMost quoted: **{top_type['insurance_type'].title()}** insurance ({top_type['count']} quotes)"
 
     greeting += (
-        "\n\n{{dim}}Ask me things like:{{/dim}}"
+        '\n\n_Try asking:_'
         '\n· "Who\'s the top performer?"'
         '\n· "Which insurance type gets the most quotes?"'
         '\n· "What fields need the most manual fixes?"'
-        '\n· "Tell me about Kevin Li\'s activity"'
     )
 
     return {"greeting": greeting}

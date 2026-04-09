@@ -10,7 +10,7 @@ function parseRichText(text) {
   if (!text) return [{ type: "text", content: text || "" }];
 
   const tokens = [];
-  const regex = /(\*\*(.+?)\*\*|\{(green|red|blue|orange|dim)\}([\s\S]*?)\{\/\3\})/g;
+  const regex = /(\*\*(.+?)\*\*|_(.+?)_|\{(green|red|blue|orange|dim)\}([\s\S]*?)\{\/\4\})/g;
 
   let lastIndex = 0;
   let match;
@@ -22,8 +22,10 @@ function parseRichText(text) {
     }
     if (match[2] !== undefined) {
       tokens.push({ type: "bold", content: match[2] });
-    } else if (match[3] && match[4] !== undefined) {
-      tokens.push({ type: match[3], content: match[4] });
+    } else if (match[3] !== undefined) {
+      tokens.push({ type: "italic", content: match[3] });
+    } else if (match[4] && match[5] !== undefined) {
+      tokens.push({ type: match[4], content: match[5] });
     }
     lastIndex = match.index + match[0].length;
   }
@@ -57,6 +59,8 @@ function RichText({ text }) {
               {inner.map((t, j) =>
                 t.type === "text" ? (
                   <span key={j}>{t.content}</span>
+                ) : t.type === "italic" ? (
+                  <em key={j} style={{ fontStyle: "italic" }}>{t.content}</em>
                 ) : (
                   <span key={j} style={{ color: COLOR_MAP[t.type] || "inherit", fontWeight: t.type === "bold" ? 700 : "inherit" }}>
                     {t.content}
@@ -64,6 +68,22 @@ function RichText({ text }) {
                 )
               )}
             </strong>
+          );
+        }
+        if (tok.type === "italic") {
+          const inner = parseRichText(tok.content);
+          return (
+            <em key={i} style={{ fontStyle: "italic" }}>
+              {inner.map((t, j) =>
+                t.type === "text" ? (
+                  <span key={j}>{t.content}</span>
+                ) : t.type === "bold" ? (
+                  <strong key={j} style={{ fontWeight: 700 }}>{t.content}</strong>
+                ) : (
+                  <span key={j} style={{ color: COLOR_MAP[t.type] || "inherit" }}>{t.content}</span>
+                )
+              )}
+            </em>
           );
         }
         const inner = parseRichText(tok.content);
@@ -74,6 +94,8 @@ function RichText({ text }) {
                 <span key={j}>{t.content}</span>
               ) : t.type === "bold" ? (
                 <strong key={j} style={{ fontWeight: 700 }}>{t.content}</strong>
+              ) : t.type === "italic" ? (
+                <em key={j} style={{ fontStyle: "italic" }}>{t.content}</em>
               ) : (
                 <span key={j} style={{ color: COLOR_MAP[t.type] || "inherit" }}>{t.content}</span>
               )
@@ -163,6 +185,7 @@ export default function ChatPanel({ period, userName }) {
   const [sessionId] = useState(() => crypto.randomUUID());
   const [greeting, setGreeting] = useState(null);
   const [isOpen, setIsOpen] = useState(true);
+  const [animState, setAnimState] = useState("open"); // "open" | "closing" | "closed" | "opening"
   const scrollAreaRef = useRef(null);
   const inputRef = useRef(null);
   const abortRef = useRef(null);
@@ -185,7 +208,7 @@ export default function ChatPanel({ period, userName }) {
       try {
         const token = await getToken();
         const res = await fetch(
-          `${API_BASE_URL}/api/chat/greeting?period=${period}`,
+          `${API_BASE_URL}/api/chat/greeting?period=${period}&user_name=${encodeURIComponent(userName || "")}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!cancelled && res.ok) {
@@ -195,7 +218,7 @@ export default function ChatPanel({ period, userName }) {
       } catch (e) {
         if (!cancelled) {
           setGreeting(
-            "Hey! I'm **Snapshot AI**, your analytics assistant. Ask me about team performance, insurance breakdowns, or manual change patterns."
+            "Hey! I'm **Snappy**, your analytics assistant. Ask me about team performance, insurance breakdowns, or manual change patterns."
           );
         }
       }
@@ -366,12 +389,28 @@ export default function ChatPanel({ period, userName }) {
     }
   };
 
+  /* ── Zoom animation handlers ─── */
+  const handleClose = () => {
+    setAnimState("closing");
+    setTimeout(() => {
+      setIsOpen(false);
+      setAnimState("closed");
+    }, 250);
+  };
+  const handleOpen = () => {
+    setIsOpen(true);
+    setAnimState("opening");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setAnimState("open"));
+    });
+  };
+
   /* ── Collapsed state ─────────── */
   if (!isOpen) {
     return (
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
         <button
-          onClick={() => setIsOpen(true)}
+          onClick={handleOpen}
           style={{
             display: "flex", alignItems: "center", gap: 8,
             padding: "10px 24px", borderRadius: 50,
@@ -387,15 +426,24 @@ export default function ChatPanel({ period, userName }) {
           onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)")}
         >
           <span style={{ fontSize: 18 }}>✦</span>
-          Snapshot AI
+          Snappy
         </button>
       </div>
     );
   }
 
   /* ── Expanded state ──────────── */
+  const zoomScale = animState === "opening" ? 0.92 : animState === "closing" ? 0.92 : 1;
+  const zoomOpacity = (animState === "opening" || animState === "closing") ? 0 : 1;
+
   return (
-    <div style={{ display: "flex", justifyContent: "center", width: "100%", marginBottom: 24 }}>
+    <div style={{
+      display: "flex", justifyContent: "center", width: "100%", marginBottom: 24,
+      transform: `scale(${zoomScale})`,
+      opacity: zoomOpacity,
+      transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1), opacity 0.25s cubic-bezier(0.4,0,0.2,1)",
+      transformOrigin: "center center",
+    }}>
       {/* Keyframes — scoped names to avoid collisions */}
       <style>{`
         @keyframes chatRainbow {
@@ -407,6 +455,12 @@ export default function ChatPanel({ period, userName }) {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
         }
+      `}</style>
+      {/* Scrollbar styles scoped via parent class */}
+      <style>{`
+        .chatScrollArea::-webkit-scrollbar { width: 10px; height: 10px; }
+        .chatScrollArea::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
+        .chatScrollArea::-webkit-scrollbar-track { background: transparent; }
       `}</style>
 
       <div style={{ maxWidth: "52vw", width: "100%" }}>
@@ -423,14 +477,14 @@ export default function ChatPanel({ period, userName }) {
                 background: "conic-gradient(from 0deg, #ff6b6b, #ffa500, #ffd93d, #6bcb77, #4d96ff, #9b59b6, #ff6b6b)",
                 WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
               }}>✦</span>
-              <span style={{ fontWeight: 700, fontSize: 16, color: COLORS.text }}>Snapshot AI</span>
+              <span style={{ fontWeight: 700, fontSize: 16, color: COLORS.text }}>Snappy</span>
               <span style={{
                 fontSize: 11, fontWeight: 600, color: COLORS.blue,
                 background: COLORS.blueSoft, padding: "2px 8px", borderRadius: 10,
               }}>Admin</span>
             </div>
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={handleClose}
               style={{
                 background: "none", border: "none", cursor: "pointer",
                 fontSize: 18, color: COLORS.mutedText, padding: "4px 8px",
@@ -446,6 +500,7 @@ export default function ChatPanel({ period, userName }) {
           <div style={{ position: "relative" }}>
             <div
               ref={scrollAreaRef}
+              className="chatScrollArea"
               style={{
                 height: 320,
                 overflowY: "auto",
@@ -483,13 +538,14 @@ export default function ChatPanel({ period, userName }) {
                   fontFamily: "inherit",
                   lineHeight: 1.5,
                   outline: "none",
-                  background: "rgba(255,255,255,0.92)",
+                  background: "#FFFFFF",
                   color: COLORS.text,
-                  boxShadow: "0 2px 12px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)",
-                  transition: "box-shadow 0.2s",
+                  border: `1.5px solid ${COLORS.borderGrey}`,
+                  boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
                 }}
-                onFocus={(e) => (e.target.style.boxShadow = `0 2px 16px rgba(23,101,212,0.12), 0 0 0 2px ${COLORS.blue}33`)}
-                onBlur={(e) => (e.target.style.boxShadow = "0 2px 12px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)")}
+                onFocus={(e) => { e.target.style.borderColor = COLORS.blue; e.target.style.boxShadow = `0 2px 16px rgba(23,101,212,0.10)`; }}
+                onBlur={(e) => { e.target.style.borderColor = COLORS.borderGrey; e.target.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)"; }}
               />
               <button
                 onClick={handleSend}
@@ -499,7 +555,7 @@ export default function ChatPanel({ period, userName }) {
                   borderRadius: "50%",
                   border: "none",
                   background: !input.trim() || isStreaming
-                    ? COLORS.lightGrey
+                    ? COLORS.disabledBg
                     : "linear-gradient(135deg, #1765D4, #0F4EAA)",
                   color: !input.trim() || isStreaming ? COLORS.disabledText : "#fff",
                   cursor: !input.trim() || isStreaming ? "default" : "pointer",

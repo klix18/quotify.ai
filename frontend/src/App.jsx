@@ -256,6 +256,8 @@ function AuthenticatedApp() {
   const [showActivity, setShowActivity] = React.useState(false);
   const isAdmin = user?.publicMetadata?.role === "admin";
   const userName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "";
+  const userEmail = user?.primaryEmailAddress?.emailAddress || "";
+  const userImageUrl = user?.imageUrl || "";
 
   if (showActivity) {
     return (
@@ -263,6 +265,8 @@ function AuthenticatedApp() {
         onBack={() => setShowActivity(false)}
         isAdmin={isAdmin}
         currentUserName={userName}
+        currentUserEmail={userEmail}
+        currentUserImageUrl={userImageUrl}
       />
     );
   }

@@ -86,14 +86,14 @@ function HoverButton({ children, onClick, disabled, variant = "primary", style: 
   };
   const variants = {
     primary: {
-      background: disabled ? "#DFE3E8" : COLORS.blue, color: disabled ? "#B0B7C3" : COLORS.white,
-      border: `1px solid ${disabled ? "#DFE3E8" : COLORS.blue}`,
+      background: disabled ? COLORS.disabledBg : COLORS.blue, color: disabled ? COLORS.disabledText : COLORS.white,
+      border: `1px solid ${disabled ? COLORS.disabledBg : COLORS.blue}`,
       boxShadow: hovered && !disabled ? `0 0 28px ${COLORS.hoverShadow}` : "0 0 0 rgba(0,0,0,0)",
     },
     outline: {
       background: "rgba(255,255,255,0.5)", color: COLORS.black,
-      border: `1px solid rgba(220,230,245,0.6)`,
-      boxShadow: "none",
+      border: `1px solid ${hovered ? COLORS.blue : "rgba(220,230,245,0.6)"}`,
+      boxShadow: hovered ? `0 0 24px ${COLORS.hoverShadow}` : "none",
     },
     danger: {
       background: COLORS.dangerSoft, color: COLORS.danger,
@@ -522,8 +522,8 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
         </div>
       </div>
 
-      {/* Role toggle — inline below profile */}
-      {isAdmin && clerkUser?.id && (
+      {/* Role toggle for admins, static badge for advisors */}
+      {isAdmin && clerkUser?.id ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <RoleToggle
             clerkUserId={clerkUser.id}
@@ -531,6 +531,10 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
             getToken={getToken}
             onRoleChanged={() => onRefresh()}
           />
+        </div>
+      ) : !isAdmin && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <RoleBadge role="advisor" />
         </div>
       )}
 
@@ -547,46 +551,126 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
         <InsuranceBreakdown data={data.by_insurance_type} />
       </Section>
 
-      {/* User recent events */}
-      <Section title="Recent Activity">
-        {data.recent_events && data.recent_events.length > 0 ? (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "Poppins, sans-serif" }}>
-              <thead>
-                <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)` }}>
-                  {["Date", "Insurance", "Advisor", "Uploaded PDF", "Manual Changes", "Quote", "Generated PDF"].map((h) => (
-                    <th key={h} style={{ padding: "8px 10px", color: COLORS.mutedText, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", textAlign: "left", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.recent_events.map((e) => (
-                  <tr key={e.id} style={{ borderBottom: `1px solid rgba(180,200,230,0.15)` }}>
-                    <td style={{ padding: "8px 10px", fontSize: 12 }}>{new Date(e.created_at).toLocaleString()}</td>
-                    <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>
-                      <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: `${typeColors[e.insurance_type] || COLORS.blue}15`, color: typeColors[e.insurance_type] || COLORS.blue }}>{e.insurance_type}</span>
-                    </td>
-                    <td style={{ padding: "8px 10px" }}>{e.advisor || "—"}</td>
-                    <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.uploaded_pdf || "—"}</td>
-                    <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.manually_changed_fields || "—"}</td>
-                    <td style={{ padding: "8px 10px", textAlign: "center" }}>
-                      <span style={{
-                        display: "inline-block", padding: "2px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-                        background: e.created_quote ? COLORS.greenSoft : COLORS.dangerSoft,
-                        color: e.created_quote ? COLORS.green : COLORS.danger,
-                      }}>{e.created_quote ? "Yes" : "No"}</span>
-                    </td>
-                    <td style={{ padding: "8px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.generated_pdf || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No events yet</div>
-        )}
+      {/* User snapshot history */}
+      <Section title="Snapshot History">
+        <UserSnapshotHistory events={data.recent_events} getToken={getToken} />
       </Section>
     </div>
+  );
+}
+
+/* ── User Snapshot History (detail view — with filters + PDF downloads, no delete) ── */
+function UserSnapshotHistory({ events, getToken }) {
+  const [filterInsurance, setFilterInsurance] = React.useState("");
+  const [filterDate, setFilterDate] = React.useState("");
+
+  const handlePdfDownload = async (fileName, type) => {
+    if (!fileName || fileName === "—") return;
+    try {
+      const token = await getToken();
+      const listResp = await fetch(`${API_BASE_URL}/api/pdfs?doc_type=${type}&limit=200`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!listResp.ok) return;
+      const listData = await listResp.json();
+      const doc = listData.documents?.find((d) =>
+        d.file_name === fileName || fileName.startsWith(d.file_name?.split(".pdf")[0])
+      );
+      if (!doc) return;
+      const pdfResp = await fetch(`${API_BASE_URL}/api/pdfs/${doc.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!pdfResp.ok) return;
+      const blob = await pdfResp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.file_name || fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {}
+  };
+
+  if (!events || events.length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No events yet</div>;
+
+  const uniqueInsurance = [...new Set(events.map((e) => e.insurance_type).filter(Boolean))].sort();
+  const uniqueDates = [...new Set(events.map((e) => new Date(e.created_at).toLocaleDateString()))];
+
+  const filtered = events.filter((e) => {
+    if (filterInsurance && e.insurance_type !== filterInsurance) return false;
+    if (filterDate && new Date(e.created_at).toLocaleDateString() !== filterDate) return false;
+    return true;
+  });
+
+  const filterSelect = {
+    padding: "4px 10px", height: 32, borderRadius: 8,
+    border: `1px solid ${COLORS.borderGrey}`,
+    background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)",
+    fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
+    color: COLORS.black, cursor: "pointer",
+  };
+  const th = { padding: "8px 10px", color: COLORS.mutedText, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", textAlign: "left", whiteSpace: "nowrap" };
+  const td = { padding: "8px 10px", fontSize: 12, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+  const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginBottom: 12, flexWrap: "wrap" }}>
+        <select value={filterInsurance} onChange={(e) => setFilterInsurance(e.target.value)} style={filterSelect}>
+          <option value="">All Insurance</option>
+          {uniqueInsurance.map((t) => <option key={t} value={t} style={{ textTransform: "capitalize" }}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+        </select>
+        <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={filterSelect}>
+          <option value="">All Dates</option>
+          {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "Poppins, sans-serif" }}>
+          <thead>
+            <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)` }}>
+              {["Date", "Insurance", "Advisor", "Uploaded PDF", "Manual Changes", "Quote", "Generated PDF"].map((h) => (
+                <th key={h} style={th}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={7} style={{ padding: 20, textAlign: "center", color: COLORS.mutedText, fontSize: 12 }}>No events match the selected filters</td></tr>
+            ) : filtered.map((e) => (
+              <HoverRow key={e.id}>
+                <td style={td}>{new Date(e.created_at).toLocaleString()}</td>
+                <td style={td}>
+                  <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize", background: `${typeColors[e.insurance_type] || COLORS.blue}15`, color: typeColors[e.insurance_type] || COLORS.blue }}>{e.insurance_type}</span>
+                </td>
+                <td style={td}>{e.advisor || "—"}</td>
+                <td style={td} title={e.uploaded_pdf}>
+                  {e.uploaded_pdf ? (
+                    <span onClick={() => handlePdfDownload(e.uploaded_pdf, "uploaded")} style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}>{e.uploaded_pdf}</span>
+                  ) : "—"}
+                </td>
+                <td style={td} title={e.manually_changed_fields}>{e.manually_changed_fields || "—"}</td>
+                <td style={{ ...td, textAlign: "center" }}>
+                  <span style={{
+                    display: "inline-block", padding: "2px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+                    background: e.created_quote ? COLORS.greenSoft : COLORS.dangerSoft,
+                    color: e.created_quote ? COLORS.green : COLORS.danger,
+                    border: `1px solid ${e.created_quote ? COLORS.greenBorder : COLORS.dangerBorder}`,
+                  }}>{e.created_quote ? "Yes" : "No"}</span>
+                </td>
+                <td style={td} title={e.generated_pdf}>
+                  {e.generated_pdf ? (
+                    <span onClick={() => handlePdfDownload(e.generated_pdf, "generated")} style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}>{e.generated_pdf}</span>
+                  ) : "—"}
+                </td>
+              </HoverRow>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -786,7 +870,7 @@ function HoverRow({ children }) {
 }
 
 /* ── Main Dashboard ──────────────────────────────────────────── */
-export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
+export default function AdminDashboard({ onBack, isAdmin, currentUserName, currentUserEmail, currentUserImageUrl }) {
   const { getToken } = useAuth();
   const [period, setPeriod] = React.useState("month");
   const [data, setData] = React.useState(null);
@@ -901,6 +985,18 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
       } else {
         // Advisor: just set a minimal data object so the page renders
         setData({ _advisorMode: true });
+        // Populate clerkUsers with the advisor's own info so UserDetailView can display it
+        if (currentUserName) {
+          setClerkUsers((prev) => ({
+            ...prev,
+            [currentUserName]: {
+              id: null,
+              role: "advisor",
+              email: currentUserEmail || "",
+              image_url: currentUserImageUrl || "",
+            },
+          }));
+        }
       }
     } catch (e) {
       setError(e.message);
@@ -934,6 +1030,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
   return (
     <div
       ref={containerRef}
+      className="dashScrollArea"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{
@@ -944,6 +1041,13 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         overflow: "auto",
       }}
     >
+      <style>{`
+        html, body { overflow: hidden; height: 100%; }
+        .dashScrollArea { scrollbar-width: thin; scrollbar-color: #D4E2F4 transparent; }
+        .dashScrollArea::-webkit-scrollbar { width: 10px; height: 10px; }
+        .dashScrollArea::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
+        .dashScrollArea::-webkit-scrollbar-track { background: transparent; }
+      `}</style>
       {/* Animated orbs */}
       <div ref={orbPrimaryRef} style={{ position: "fixed", width: 400, height: 400, borderRadius: "50%", background: "rgba(23,101,212,0.14)", filter: "blur(80px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.4s ease" }} />
       <div ref={orbCyanRef} style={{ position: "fixed", width: 500, height: 500, borderRadius: "50%", background: "rgba(201,242,255,0.22)", filter: "blur(100px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.6s ease" }} />
@@ -1024,7 +1128,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
       </div>
 
       {/* Content area — padded at top to sit below the fixed header */}
-      <div style={{ position: "relative", zIndex: 1, padding: "80px 28px 24px 28px" }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "100px 28px 24px 28px" }}>
 
         {/* Error */}
         {error && (

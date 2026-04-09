@@ -2253,9 +2253,9 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
                 }}
                 onMouseLeave={() => setIsGenerateHovered(false)}
                 style={{
-                  background: allReady ? COLORS.blue : "#DFE3E8",
-                  color: allReady ? COLORS.white : "#B0B7C3",
-                  border: `1px solid ${allReady ? COLORS.blue : "#DFE3E8"}`,
+                  background: allReady ? COLORS.blue : COLORS.disabledBg,
+                  color: allReady ? COLORS.white : COLORS.disabledText,
+                  border: `1px solid ${allReady ? COLORS.blue : COLORS.disabledBg}`,
                   borderRadius: 14,
                   height: 48,
                   width: 160,
