@@ -72,7 +72,7 @@ async def get_analytics_summary(
                 COUNT(*) AS total,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created,
                 COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded,
-                COUNT(DISTINCT DATE(created_at AT TIME ZONE 'UTC')) AS days_active
+                COUNT(DISTINCT DATE(created_at AT TIME ZONE 'America/New_York')) AS days_active
             FROM analytics_events
             WHERE created_at >= $1
             GROUP BY user_name
@@ -217,7 +217,7 @@ async def get_user_detail(
 
         # Distinct active days (one per calendar date)
         active_day_rows = await conn.fetch("""
-            SELECT DISTINCT DATE(created_at AT TIME ZONE 'UTC') AS active_date
+            SELECT DISTINCT DATE(created_at AT TIME ZONE 'America/New_York') AS active_date
             FROM analytics_events
             WHERE created_at >= $1 AND user_name = $2
             ORDER BY active_date DESC
@@ -325,7 +325,7 @@ async def get_my_stats(
         """, cutoff, user_name)
 
         active_day_rows = await conn.fetch("""
-            SELECT DISTINCT DATE(created_at AT TIME ZONE 'UTC') AS active_date
+            SELECT DISTINCT DATE(created_at AT TIME ZONE 'America/New_York') AS active_date
             FROM analytics_events
             WHERE created_at >= $1 AND user_name = $2
             ORDER BY active_date DESC

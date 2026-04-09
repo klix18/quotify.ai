@@ -1779,6 +1779,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
+              paddingRight: 2,
             }}
           >
             <div
@@ -1788,7 +1789,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
                 overflowY: "auto",
                 minHeight: 0,
                 flex: 1,
-                paddingRight: 10,
+                paddingRight: 2,
               }}
             >
               {INSURANCE_OPTIONS.map((item) => {

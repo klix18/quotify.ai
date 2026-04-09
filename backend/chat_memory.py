@@ -10,19 +10,18 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+from openai import OpenAI
 
 from database import get_pool
 
 load_dotenv()
 
 
-def _get_client() -> genai.Client:
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+def _get_client() -> OpenAI:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
-        raise ValueError("GEMINI_API_KEY is not set.")
-    return genai.Client(api_key=api_key)
+        raise ValueError("OPENAI_API_KEY is not set.")
+    return OpenAI(api_key=api_key)
 
 
 # ── In-memory session store ──────────────────────────────────────────
@@ -103,26 +102,21 @@ async def save_session_summary(
 
     try:
         client = _get_client()
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=types.Content(
-                role="user",
-                parts=[types.Part(text=f"""Summarize this analytics dashboard conversation in 2-3 concise sentences.
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": f"""Summarize this analytics dashboard conversation in 2-3 concise sentences.
 Extract the key topics discussed as a JSON array of short strings.
 
 Conversation:
 {convo_text}
 
 Respond in this exact JSON format:
-{{"summary": "...", "key_topics": ["topic1", "topic2"]}}""")]
-            ),
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                max_output_tokens=300,
-            ),
+{{"summary": "...", "key_topics": ["topic1", "topic2"]}}"""}],
+            temperature=0.2,
+            max_tokens=300,
         )
 
-        text = response.text.strip()
+        text = response.choices[0].message.content.strip()
         # Parse JSON from response (handle markdown code blocks)
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
@@ -175,11 +169,9 @@ async def _extract_memories(user_id: str, convo_text: str):
     """Use LLM to extract durable memories from a conversation."""
     try:
         client = _get_client()
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=types.Content(
-                role="user",
-                parts=[types.Part(text=f"""Based on this analytics dashboard conversation, extract any lasting preferences, insights, or patterns worth remembering for future conversations.
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": f"""Based on this analytics dashboard conversation, extract any lasting preferences, insights, or patterns worth remembering for future conversations.
 
 Only extract truly durable information — NOT ephemeral queries like "who's the top performer this week".
 Good examples: "Admin prefers seeing percentages over raw counts", "Admin is particularly interested in homeowners insurance trends", "Admin noticed NationWide quotes always need client_phone fixed".
@@ -190,15 +182,12 @@ Conversation:
 {convo_text}
 
 Respond in this exact JSON format:
-[{{"type": "preference|insight|pattern", "content": "...", "context": "..."}}]""")]
-            ),
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                max_output_tokens=500,
-            ),
+[{{"type": "preference|insight|pattern", "content": "...", "context": "..."}}]"""}],
+            temperature=0.2,
+            max_tokens=500,
         )
 
-        text = response.text.strip()
+        text = response.choices[0].message.content.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         memories = json.loads(text)

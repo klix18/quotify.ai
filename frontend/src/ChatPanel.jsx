@@ -150,20 +150,41 @@ function ChatMessage({ role, content, isStreaming }) {
 
 /* ── Rainbow Border Wrapper ──────────────────────────────────────── */
 
+// Inject rainbow border CSS once at module level
+const _rainbowStyleId = "rainbow-border-css";
+if (typeof document !== "undefined" && !document.getElementById(_rainbowStyleId)) {
+  const style = document.createElement("style");
+  style.id = _rainbowStyleId;
+  style.textContent = `
+    @property --rainbow-angle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @keyframes rainbowRotate {
+      to { --rainbow-angle: 360deg; }
+    }
+    .rainbowBorderOuter {
+      --rainbow-angle: 0deg;
+      animation: rainbowRotate 6s linear infinite;
+      background: conic-gradient(from var(--rainbow-angle), #ff6b6b, #ffa500, #ffd93d, #6bcb77, #4d96ff, #9b59b6, #ff6b6b);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 function RainbowBorder({ children, borderRadius = 20, borderWidth = 2 }) {
   const dur = "0.4s";
   const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
   return (
-    <div style={{
-      position: "relative",
-      borderRadius: borderRadius + borderWidth,
-      padding: borderWidth,
-      background:
-        "conic-gradient(from 0deg, #ff6b6b, #ffa500, #ffd93d, #6bcb77, #4d96ff, #9b59b6, #ff6b6b)",
-      backgroundSize: "200% 200%",
-      animation: "chatRainbow 4s linear infinite",
-      transition: `border-radius ${dur} ${ease}`,
-    }}>
+    <div
+      className="rainbowBorderOuter"
+      style={{
+        borderRadius: borderRadius + borderWidth,
+        padding: borderWidth,
+        transition: `border-radius ${dur} ${ease}`,
+      }}
+    >
       <div style={{
         borderRadius,
         overflow: "hidden",
@@ -406,11 +427,6 @@ export default function ChatPanel({ period, userName }) {
     <div style={{ display: "flex", justifyContent: "center", width: "100%", marginBottom: expanded ? 24 : 20 }}>
       {/* Keyframes */}
       <style>{`
-        @keyframes chatRainbow {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
         @keyframes chatBlink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
@@ -481,78 +497,80 @@ export default function ChatPanel({ period, userName }) {
             opacity: expanded ? 1 : 0,
             overflow: "hidden",
             transition: `max-height ${dur} ${ease}, opacity ${expanded ? "0.35s 0.1s" : "0.15s"} ${ease}`,
+            display: "flex",
+            flexDirection: "column",
           }}>
-            <div style={{ position: "relative" }}>
-              <div
-                ref={scrollAreaRef}
-                className="chatScrollArea"
-                style={{
-                  height: 320,
-                  overflowY: "auto",
-                  padding: "16px 20px 80px 20px",
-                }}
-              >
-                {greeting && <ChatMessage role="assistant" content={greeting} isStreaming={false} />}
-                {messages.map((msg, i) => (
-                  <ChatMessage key={i} role={msg.role} content={msg.content} isStreaming={msg.streaming} />
-                ))}
-              </div>
+            {/* Messages scroll area */}
+            <div
+              ref={scrollAreaRef}
+              className="chatScrollArea"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: "auto",
+                padding: "16px 20px 12px 20px",
+              }}
+            >
+              {greeting && <ChatMessage role="assistant" content={greeting} isStreaming={false} />}
+              {messages.map((msg, i) => (
+                <ChatMessage key={i} role={msg.role} content={msg.content} isStreaming={msg.streaming} />
+              ))}
+            </div>
 
-              {/* Floating input bar */}
-              <div style={{
-                position: "absolute",
-                bottom: 16, left: 16, right: 16,
-                display: "flex", gap: 10, alignItems: "center",
-              }}>
-                <input
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask about your analytics..."
-                  style={{
-                    flex: 1,
-                    height: 44,
-                    borderRadius: 50,
-                    padding: "0 20px",
-                    fontSize: 14,
-                    fontFamily: "inherit",
-                    lineHeight: 1.5,
-                    outline: "none",
-                    background: "#FFFFFF",
-                    color: COLORS.text,
-                    border: `1.5px solid ${COLORS.borderGrey}`,
-                    boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-                    transition: "border-color 0.2s, box-shadow 0.2s",
-                    boxSizing: "border-box",
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = COLORS.blue; e.target.style.boxShadow = "0 2px 16px rgba(23,101,212,0.10)"; }}
-                  onBlur={(e) => { e.target.style.borderColor = COLORS.borderGrey; e.target.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)"; }}
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || isStreaming}
-                  style={{
-                    width: 44, height: 44,
-                    borderRadius: "50%",
-                    border: "none",
-                    background: !input.trim() || isStreaming
-                      ? COLORS.disabledBg
-                      : "linear-gradient(135deg, #1765D4, #0F4EAA)",
-                    color: !input.trim() || isStreaming ? COLORS.disabledText : "#fff",
-                    cursor: !input.trim() || isStreaming ? "default" : "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 18,
-                    boxShadow: !input.trim() || isStreaming
-                      ? "none"
-                      : "0 2px 12px rgba(23,101,212,0.25)",
-                    transition: "all 0.2s",
-                    flexShrink: 0,
-                    boxSizing: "border-box",
-                  }}
-                  title="Send"
-                >↑</button>
-              </div>
+            {/* Input bar — in normal flow, pinned below messages */}
+            <div style={{
+              padding: "10px 16px 14px 16px",
+              display: "flex", gap: 10, alignItems: "center",
+              flexShrink: 0,
+            }}>
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about your analytics..."
+                style={{
+                  flex: 1,
+                  height: 44,
+                  borderRadius: 50,
+                  padding: "0 20px",
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  lineHeight: 1.5,
+                  outline: "none",
+                  background: "#FFFFFF",
+                  color: COLORS.text,
+                  border: `1.5px solid ${COLORS.borderGrey}`,
+                  boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => { e.target.style.borderColor = COLORS.blue; e.target.style.boxShadow = "0 2px 16px rgba(23,101,212,0.10)"; }}
+                onBlur={(e) => { e.target.style.borderColor = COLORS.borderGrey; e.target.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)"; }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || isStreaming}
+                style={{
+                  width: 44, height: 44,
+                  borderRadius: "50%",
+                  border: "none",
+                  background: !input.trim() || isStreaming
+                    ? COLORS.disabledBg
+                    : "linear-gradient(135deg, #1765D4, #0F4EAA)",
+                  color: !input.trim() || isStreaming ? COLORS.disabledText : "#fff",
+                  cursor: !input.trim() || isStreaming ? "default" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 18,
+                  boxShadow: !input.trim() || isStreaming
+                    ? "none"
+                    : "0 2px 12px rgba(23,101,212,0.25)",
+                  transition: "all 0.2s",
+                  flexShrink: 0,
+                  boxSizing: "border-box",
+                }}
+                title="Send"
+              >↑</button>
             </div>
           </div>
         </RainbowBorder>

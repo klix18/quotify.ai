@@ -9,11 +9,11 @@ import os
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
-from google import genai
-from google.genai import types
+from openai import AsyncOpenAI
 
 from auth import require_admin
 from database import get_pool
@@ -35,11 +35,11 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-def _get_client() -> genai.Client:
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+def _get_client() -> AsyncOpenAI:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
-        raise ValueError("GEMINI_API_KEY is not set.")
-    return genai.Client(api_key=api_key)
+        raise ValueError("OPENAI_API_KEY is not set.")
+    return AsyncOpenAI(api_key=api_key)
 
 
 def _period_start(period: str) -> datetime:
@@ -67,6 +67,74 @@ _PERIOD_LABELS = {
     "year": "the past year",
     "all": "all time",
 }
+
+
+# ── Insurance type knowledge ─────────────────────────────────────────
+
+INSURANCE_TYPE_KNOWLEDGE = """
+--- Insurance Type Directory ---
+ACTIVE (fully built, in production):
+  • Homeowners — Full quote extraction & generation. Production-ready.
+  • Auto — Full quote extraction & generation. Production-ready.
+
+BETA (built but still being refined):
+  • Bundle (Homeowners + Auto combined) — Functional but in beta testing.
+  • Dwelling (DP1/DP2/DP3 forms) — Functional but in beta testing.
+  • Commercial (property, GL, workers comp, cyber, wind, excess) — Functional but in beta testing.
+
+NOT YET BUILT (planned, coming soon):
+  • Motorcycle — Not yet available. Coming soon.
+  • Boat — Not yet available. Coming soon.
+  • Renters — Not yet available. Coming soon.
+  • RV — Not yet available. Coming soon.
+  • Umbrella — Not yet available. Coming soon.
+  • Flood — Not yet available. Coming soon.
+"""
+
+
+# ── Clerk user fetching ──────────────────────────────────────────────
+
+async def _fetch_clerk_users() -> list[dict]:
+    """Fetch all registered users from Clerk."""
+    secret = os.getenv("CLERK_SECRET_KEY", "")
+    if not secret:
+        return []
+    headers = {"Authorization": f"Bearer {secret}", "Content-Type": "application/json"}
+    users = []
+    offset = 0
+    limit = 100
+    try:
+        async with httpx.AsyncClient() as client:
+            while True:
+                resp = await client.get(
+                    "https://api.clerk.com/v1/users",
+                    headers=headers,
+                    params={"limit": limit, "offset": offset, "order_by": "-created_at"},
+                )
+                if resp.status_code != 200:
+                    break
+                data = resp.json()
+                if not data:
+                    break
+                for u in data:
+                    meta = u.get("public_metadata") or {}
+                    first = u.get("first_name") or ""
+                    last = u.get("last_name") or ""
+                    full_name = f"{first} {last}".strip() or "Unknown"
+                    email = ""
+                    if u.get("email_addresses"):
+                        email = u["email_addresses"][0].get("email_address", "")
+                    users.append({
+                        "name": full_name,
+                        "email": email,
+                        "role": meta.get("role", "advisor"),
+                    })
+                if len(data) < limit:
+                    break
+                offset += limit
+    except Exception:
+        pass
+    return users
 
 
 # ── Data fetching (skills) ───────────────────────────────────────────
@@ -104,7 +172,7 @@ async def _fetch_full_context(period: str) -> str:
                 COUNT(*) AS total,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created,
                 COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded,
-                COUNT(DISTINCT DATE(created_at AT TIME ZONE 'UTC')) AS days_active
+                COUNT(DISTINCT DATE(created_at AT TIME ZONE 'America/New_York')) AS days_active
             FROM analytics_events
             WHERE created_at >= $1
             GROUP BY user_name
@@ -199,6 +267,35 @@ async def _fetch_full_context(period: str) -> str:
             f"quote: {'Yes' if row['created_quote'] else 'No'}"
         )
 
+    # ── Registered users from Clerk ──
+    clerk_users = await _fetch_clerk_users()
+    # Build a set of user names that have analytics activity
+    active_names = {row["user_name"] for row in user_rows}
+
+    lines.append("")
+    lines.append("--- All Registered Team Members (from Clerk) ---")
+    admins = [u for u in clerk_users if u["role"] == "admin"]
+    advisors = [u for u in clerk_users if u["role"] != "admin"]
+
+    lines.append(f"  Admins ({len(admins)}):")
+    for u in admins:
+        status = "has activity" if u["name"] in active_names else "NO activity in this period"
+        lines.append(f"    • {u['name']} ({u['email']}) — {status}")
+
+    lines.append(f"  Advisors ({len(advisors)}):")
+    for u in advisors:
+        status = "has activity" if u["name"] in active_names else "NO activity in this period"
+        lines.append(f"    • {u['name']} ({u['email']}) — {status}")
+
+    inactive_advisors = [u for u in advisors if u["name"] not in active_names]
+    if inactive_advisors:
+        lines.append(f"  ⚠ {len(inactive_advisors)} advisor(s) with ZERO activity: "
+                      + ", ".join(u["name"] for u in inactive_advisors))
+
+    # ── Insurance type knowledge ──
+    lines.append("")
+    lines.append(INSURANCE_TYPE_KNOWLEDGE)
+
     lines.append("=== END DATA ===")
     return "\n".join(lines)
 
@@ -212,7 +309,9 @@ You help admins understand their team's performance, insurance quote generation 
 
 ## WHAT YOU CAN ANSWER
 - Team member performance and rankings (who's processing the most quotes, who's most active)
+- All registered team members — including advisors who have NOT taken any action yet (pulled from Clerk)
 - Insurance type distribution and trends (which types are most popular, breakdowns)
+- Insurance type status — which types are active/production, which are in beta, and which are not yet built
 - Manual field change patterns (which fields need human correction most often after AI extraction)
 - Activity trends and recent events
 - Specific user deep-dives
@@ -430,36 +529,31 @@ async def chat_message(
     # Build system prompt
     system_prompt = _build_system_prompt(data_context, memories, summaries)
 
-    # Build conversation messages for the LLM
+    # Build conversation messages for the LLM (OpenAI format)
     history = get_conversation_history(session_id)
-    llm_messages = []
+    llm_messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
-        role = "user" if msg["role"] == "user" else "model"
-        llm_messages.append(types.Content(
-            role=role,
-            parts=[types.Part(text=msg["content"])],
-        ))
+        role = "user" if msg["role"] == "user" else "assistant"
+        llm_messages.append({"role": role, "content": msg["content"]})
 
     async def stream_response():
-        """Generator that yields SSE events."""
+        """Async generator that yields SSE events token-by-token."""
         full_response = ""
         try:
             client = _get_client()
-            response = client.models.generate_content_stream(
-                model="gemini-2.5-flash",
-                contents=llm_messages,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=0.4,
-                    max_output_tokens=1500,
-                ),
+            response = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=llm_messages,
+                temperature=0.4,
+                max_tokens=1500,
+                stream=True,
             )
 
-            for chunk in response:
-                if chunk.text:
-                    full_response += chunk.text
-                    # SSE format: data: {json}\n\n
-                    event_data = json.dumps({"type": "token", "content": chunk.text})
+            async for chunk in response:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    full_response += delta.content
+                    event_data = json.dumps({"type": "token", "content": delta.content})
                     yield f"data: {event_data}\n\n"
 
             # Send done event

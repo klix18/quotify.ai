@@ -67,7 +67,7 @@ async def _gather_report_data(cutoff: datetime) -> dict:
                 COUNT(*) AS total,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes,
                 COUNT(*) FILTER (WHERE uploaded_pdf != '') AS uploads,
-                COUNT(DISTINCT DATE(created_at AT TIME ZONE 'UTC')) AS days_active
+                COUNT(DISTINCT DATE(created_at AT TIME ZONE 'America/New_York')) AS days_active
             FROM analytics_events
             WHERE created_at >= $1
             GROUP BY user_name

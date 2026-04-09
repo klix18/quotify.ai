@@ -189,15 +189,18 @@ function Section({ title, children, action = null, expandable = false, defaultEx
               <button
                 onClick={() => setExpanded(!expanded)}
                 style={{
-                  background: "none", border: `1px solid ${COLORS.borderGrey}`, borderRadius: 8,
-                  padding: "4px 12px", fontSize: 11, fontWeight: 600, color: COLORS.mutedText,
-                  cursor: "pointer", transition: "all 150ms ease",
-                  fontFamily: "Poppins, sans-serif",
+                  background: "none", border: `1px solid ${COLORS.borderGrey}`, borderRadius: "50%",
+                  width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 14, color: COLORS.mutedText,
+                  cursor: "pointer", transition: "all 200ms ease",
+                  padding: 0, lineHeight: 1,
+                  transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.blue; e.currentTarget.style.color = COLORS.blue; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.borderGrey; e.currentTarget.style.color = COLORS.mutedText; }}
+                title={expanded ? "Show less" : "Show more"}
               >
-                {expanded ? "Show Less" : "Show More"}
+                &#9662;
               </button>
             )}
           </div>
