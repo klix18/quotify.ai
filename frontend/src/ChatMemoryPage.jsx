@@ -198,7 +198,7 @@ export default function ChatMemoryPage({ onBack }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {memories.length === 0 && (
             <div style={{ color: COLORS.mutedText, fontSize: 14, padding: 24 }}>
-              No long-term memories yet. Snappy extracts durable insights from your conversations over time.
+              No memories yet. Snappy learns about you — your preferences, background, and behavior — as you chat over time.
             </div>
           )}
           {memories.map((m) => (
@@ -212,11 +212,13 @@ export default function ChatMemoryPage({ onBack }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{
                     fontSize: 11, fontWeight: 600, textTransform: "uppercase",
-                    color: m.memory_type === "preference" ? COLORS.blue
-                         : m.memory_type === "pattern" ? COLORS.green
+                    color: m.memory_type === "bio" ? "#8E44AD"
+                         : m.memory_type === "preference" ? COLORS.blue
+                         : m.memory_type === "behavior" ? COLORS.green
                          : "#E67E22",
-                    background: m.memory_type === "preference" ? COLORS.blueSoft
-                              : m.memory_type === "pattern" ? COLORS.greenSoft
+                    background: m.memory_type === "bio" ? "#F4ECF7"
+                              : m.memory_type === "preference" ? COLORS.blueSoft
+                              : m.memory_type === "behavior" ? COLORS.greenSoft
                               : "#FEF3E2",
                     padding: "2px 10px", borderRadius: 8,
                   }}>

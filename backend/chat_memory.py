@@ -178,18 +178,24 @@ async def _extract_memories(user_id: str, convo_text: str):
         client = _get_client()
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": f"""Based on this analytics dashboard conversation, extract any lasting preferences, insights, or patterns worth remembering for future conversations.
+            messages=[{"role": "user", "content": f"""Based on this conversation, extract what you learned about the USER (the human) — not the data they looked at.
 
-Only extract truly durable information — NOT ephemeral queries like "who's the top performer this week".
-Good examples: "Admin prefers seeing percentages over raw counts", "Admin is particularly interested in homeowners insurance trends", "Admin noticed NationWide quotes always need client_phone fixed".
+The goal is to build a profile of WHO this person is so the assistant can personalize future conversations. Focus exclusively on the person, not on the analytics or data.
 
-If there's nothing durable to remember, respond with an empty array.
+Types of things to extract:
+- **bio**: Facts about the user — their name, job title, role, team, company, background (e.g. "Kevin is an AI engineer", "Works at Sizemore Insurance", "Has been in insurance for 5 years")
+- **preference**: How they like to interact, communicate, or consume information (e.g. "Prefers concise bullet-point answers", "Likes seeing percentages over raw counts", "Usually asks about homeowners first")
+- **behavior**: Recurring habits, workflows, or patterns in how they use the tool (e.g. "Checks team performance every morning", "Always asks follow-up questions about manual corrections", "Tends to ask broad questions then drill down")
+
+DO NOT extract facts about the data itself (e.g. "Homeowners is 50% of quotes" or "Kevin Li is the only active member"). Those are data observations, not user memories. Only extract things that describe the person's identity, preferences, or behavior.
+
+Be generous — extract at least 1-2 items from any meaningful conversation. Only return an empty array if nothing about the user can be inferred.
 
 Conversation:
 {convo_text}
 
 Respond in this exact JSON format:
-[{{"type": "preference|insight|pattern", "content": "...", "context": "..."}}]"""}],
+[{{"type": "bio|preference|behavior", "content": "...", "context": "..."}}]"""}],
             temperature=0.2,
             max_tokens=500,
         )

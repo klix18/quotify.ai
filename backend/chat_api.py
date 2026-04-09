@@ -368,9 +368,9 @@ def _build_system_prompt(
         mem_lines = []
         for m in memories:
             mem_lines.append(f"- [{m['memory_type']}] {m['content']}")
-        memory_context = "Things I remember about this admin:\n" + "\n".join(mem_lines)
+        memory_context = "What I know about this user (their identity, preferences, and behavior):\n" + "\n".join(mem_lines)
     else:
-        memory_context = "No prior memories about this admin."
+        memory_context = "No prior knowledge about this user yet."
 
     # Format summaries
     if summaries:
