@@ -1,6 +1,7 @@
 import React from "react";
 import { useAuth } from "@clerk/clerk-react";
 import COLORS from "./colors";
+import ChatPanel from "./ChatPanel";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -1042,6 +1043,9 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName }) {
         {/* Data */}
         {data && !selectedUser && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+            {/* AI Chatbot */}
+            <ChatPanel period={period} userName={currentUserName} />
 
             {/* Stat cards */}
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>

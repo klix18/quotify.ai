@@ -21,9 +21,9 @@ async def get_pool() -> asyncpg.Pool:
     """Return the global connection pool, creating it on first call."""
     global _pool
     if _pool is None:
-        database_url = os.getenv("DATABASE_URL")
+        database_url = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL")
         if not database_url:
-            raise RuntimeError("DATABASE_URL is not set. Add a PostgreSQL database on Railway.")
+            raise RuntimeError("DATABASE_URL or DATABASE_PUBLIC_URL is not set. Add a PostgreSQL database on Railway.")
         _pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
     return _pool
 
@@ -75,6 +75,39 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_pdf_user_id ON pdf_documents (user_id);
             CREATE INDEX IF NOT EXISTS idx_pdf_insurance_type ON pdf_documents (insurance_type);
             CREATE INDEX IF NOT EXISTS idx_pdf_doc_type ON pdf_documents (doc_type);
+        """)
+
+        # Chat tables (separate execute to avoid multi-statement issues)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id              TEXT PRIMARY KEY,
+                user_id         TEXT NOT NULL,
+                user_role       TEXT NOT NULL DEFAULT 'admin',
+                started_at      TEXT NOT NULL DEFAULT '',
+                ended_at        TEXT,
+                summary         TEXT,
+                key_topics      TEXT[] DEFAULT ARRAY[]::TEXT[],
+                message_count   INTEGER DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_chat_sessions_user
+                ON chat_sessions (user_id);
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_memories (
+                id              TEXT PRIMARY KEY,
+                user_id         TEXT NOT NULL,
+                memory_type     TEXT NOT NULL DEFAULT 'insight',
+                content         TEXT NOT NULL,
+                context         TEXT DEFAULT '',
+                created_at      TIMESTAMPTZ DEFAULT NOW(),
+                last_accessed   TIMESTAMPTZ DEFAULT NOW(),
+                access_count    INTEGER DEFAULT 0,
+                relevance_score FLOAT DEFAULT 1.0,
+                is_active       BOOLEAN DEFAULT TRUE
+            );
+            CREATE INDEX IF NOT EXISTS idx_chat_memories_user
+                ON chat_memories (user_id, is_active);
         """)
 
 

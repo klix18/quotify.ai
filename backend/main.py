@@ -22,6 +22,8 @@ from analytics_api import router as analytics_router, self_router as analytics_s
 from track_api import router as track_router
 from pdf_storage_api import router as pdf_storage_router
 from clerk_users_api import router as clerk_users_router
+from chat_api import router as chat_router
+from report_generator import router as report_router
 
 from browser_manager import get_browser, close_browser
 from database import init_db, close_pool
@@ -77,3 +79,7 @@ app.include_router(pdf_storage_router)
 
 # Clerk user management router
 app.include_router(clerk_users_router)
+
+# Chat & reports
+app.include_router(chat_router)
+app.include_router(report_router)
