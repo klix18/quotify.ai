@@ -416,7 +416,7 @@ export default function ChatPanel({ period, userName }) {
           50% { opacity: 0; }
         }
         .chatScrollArea { scrollbar-width: thin; scrollbar-color: #D4E2F4 transparent; }
-        .chatScrollArea::-webkit-scrollbar { width: 10px; height: 10px; }
+        .chatScrollArea::-webkit-scrollbar { width: 8px; height: 8px; }
         .chatScrollArea::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
         .chatScrollArea::-webkit-scrollbar-track { background: transparent; }
       `}</style>
@@ -489,7 +489,7 @@ export default function ChatPanel({ period, userName }) {
                 style={{
                   height: 320,
                   overflowY: "auto",
-                  padding: "16px 20px 72px 20px",
+                  padding: "16px 20px 80px 20px",
                 }}
               >
                 {greeting && <ChatMessage role="assistant" content={greeting} isStreaming={false} />}
@@ -501,7 +501,7 @@ export default function ChatPanel({ period, userName }) {
               {/* Floating input bar */}
               <div style={{
                 position: "absolute",
-                bottom: 12, left: 16, right: 16,
+                bottom: 16, left: 16, right: 16,
                 display: "flex", gap: 10, alignItems: "center",
               }}>
                 <input
@@ -512,8 +512,9 @@ export default function ChatPanel({ period, userName }) {
                   placeholder="Ask about your analytics..."
                   style={{
                     flex: 1,
+                    height: 44,
                     borderRadius: 50,
-                    padding: "12px 20px",
+                    padding: "0 20px",
                     fontSize: 14,
                     fontFamily: "inherit",
                     lineHeight: 1.5,
@@ -523,6 +524,7 @@ export default function ChatPanel({ period, userName }) {
                     border: `1.5px solid ${COLORS.borderGrey}`,
                     boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
                     transition: "border-color 0.2s, box-shadow 0.2s",
+                    boxSizing: "border-box",
                   }}
                   onFocus={(e) => { e.target.style.borderColor = COLORS.blue; e.target.style.boxShadow = "0 2px 16px rgba(23,101,212,0.10)"; }}
                   onBlur={(e) => { e.target.style.borderColor = COLORS.borderGrey; e.target.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)"; }}
@@ -531,7 +533,7 @@ export default function ChatPanel({ period, userName }) {
                   onClick={handleSend}
                   disabled={!input.trim() || isStreaming}
                   style={{
-                    width: 42, height: 42,
+                    width: 44, height: 44,
                     borderRadius: "50%",
                     border: "none",
                     background: !input.trim() || isStreaming
@@ -546,6 +548,7 @@ export default function ChatPanel({ period, userName }) {
                       : "0 2px 12px rgba(23,101,212,0.25)",
                     transition: "all 0.2s",
                     flexShrink: 0,
+                    boxSizing: "border-box",
                   }}
                   title="Send"
                 >↑</button>

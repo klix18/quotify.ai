@@ -176,28 +176,46 @@ function StatCard({ label, value, sub, color }) {
 }
 
 /* ── Section wrapper with glass ──────────────────────────────── */
-function Section({ title, children, action = null }) {
+function Section({ title, children, action = null, expandable = false, defaultExpanded = false }) {
+  const [expanded, setExpanded] = React.useState(defaultExpanded);
   return (
     <GlassPanel>
       <div style={{ padding: "24px 28px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 18 }}>
           <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, lineHeight: 1, letterSpacing: "-0.02em", color: COLORS.black }}>{title}</div>
-          {action}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {action}
+            {expandable && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                style={{
+                  background: "none", border: `1px solid ${COLORS.borderGrey}`, borderRadius: 8,
+                  padding: "4px 12px", fontSize: 11, fontWeight: 600, color: COLORS.mutedText,
+                  cursor: "pointer", transition: "all 150ms ease",
+                  fontFamily: "Poppins, sans-serif",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.blue; e.currentTarget.style.color = COLORS.blue; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.borderGrey; e.currentTarget.style.color = COLORS.mutedText; }}
+              >
+                {expanded ? "Show Less" : "Show More"}
+              </button>
+            )}
+          </div>
         </div>
-        {children}
+        {typeof children === "function" ? children(expanded) : children}
       </div>
     </GlassPanel>
   );
 }
 
 /* ── Insurance type bar chart ────────────────────────────────── */
-function InsuranceBreakdown({ data }) {
+function InsuranceBreakdown({ data, limit = 15 }) {
   if (!data || Object.keys(data).length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No data yet</div>;
   const total = Object.values(data).reduce((a, b) => a + b, 0);
   const typeColors = INSURANCE_COLORS;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {Object.entries(data).sort(([, a], [, b]) => b - a).map(([type, count]) => {
+      {Object.entries(data).sort(([, a], [, b]) => b - a).slice(0, limit).map(([type, count]) => {
         const pct = total > 0 ? (count / total) * 100 : 0;
         return (
           <div key={type}>
@@ -216,13 +234,13 @@ function InsuranceBreakdown({ data }) {
 }
 
 /* ── Manual Changes Leaderboard ──────────────────────────────── */
-function ManualChangesLeaderboard({ data }) {
+function ManualChangesLeaderboard({ data, limit = 15 }) {
   if (!data || data.length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No manual changes recorded</div>;
   const typeColors = INSURANCE_COLORS;
   const maxCount = data[0]?.count || 1;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {data.slice(0, 15).map((item, i) => (
+      {data.slice(0, limit).map((item, i) => (
         <div key={`${item.field}-${item.insurance_type}`}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -312,7 +330,7 @@ function UserRow({ user, role, onClick, rank, imageUrl }) {
   );
 }
 
-function UserTable({ users, clerkUsers, onSelectUser }) {
+function UserTable({ users, clerkUsers, onSelectUser, limit = 15 }) {
   // Merge analytics users with all Clerk users so everyone appears
   const analyticsMap = {};
   for (const u of (users || [])) {
@@ -350,7 +368,7 @@ function UserTable({ users, clerkUsers, onSelectUser }) {
           </tr>
         </thead>
         <tbody>
-          {allUsers.map((u, idx) => (
+          {allUsers.slice(0, limit).map((u, idx) => (
             <UserRow
               key={u.user_name}
               user={u}
@@ -679,7 +697,7 @@ function UserSnapshotHistory({ events, getToken }) {
 }
 
 /* ── Snapshot History (Event Log with delete) ────────────────── */
-function SnapshotHistory({ events, getToken, onRefresh }) {
+function SnapshotHistory({ events, getToken, onRefresh, limit = 30 }) {
   const [deleteTarget, setDeleteTarget] = React.useState(null);
   const [deleting, setDeleting] = React.useState(false);
   const [filterUser, setFilterUser] = React.useState("");
@@ -739,7 +757,7 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
   const uniqueInsurance = [...new Set(events.map((e) => e.insurance_type).filter(Boolean))].sort();
   const uniqueDates = [...new Set(events.map((e) => new Date(e.created_at).toLocaleDateString()))];
 
-  // Apply filters
+  // Apply filters and limit
   const filtered = events.filter((e) => {
     if (filterUser && e.user_name !== filterUser) return false;
     if (filterInsurance && e.insurance_type !== filterInsurance) return false;
@@ -804,7 +822,7 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={9} style={{ padding: 20, textAlign: "center", color: COLORS.mutedText, fontSize: 12 }}>No events match the selected filters</td></tr>
-            ) : filtered.map((e) => (
+            ) : filtered.slice(0, limit).map((e) => (
               <HoverRow key={e.id}>
                 <td style={td}>{new Date(e.created_at).toLocaleString()}</td>
                 <td style={{ ...td, fontWeight: 500 }}>{e.user_name}</td>
@@ -1047,10 +1065,10 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
     >
       <style>{`
         html, body { overflow: hidden; height: 100%; }
-        .dashScrollArea { scrollbar-width: thin; scrollbar-color: #D4E2F4 transparent; }
-        .dashScrollArea::-webkit-scrollbar { width: 10px; height: 10px; }
-        .dashScrollArea::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
-        .dashScrollArea::-webkit-scrollbar-track { background: transparent; }
+        * { scrollbar-width: thin; scrollbar-color: #D4E2F4 transparent; }
+        *::-webkit-scrollbar { width: 8px; height: 8px; }
+        *::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
+        *::-webkit-scrollbar-track { background: transparent; }
       `}</style>
       {/* Animated orbs */}
       <div ref={orbPrimaryRef} style={{ position: "fixed", width: 400, height: 400, borderRadius: "50%", background: "rgba(23,101,212,0.14)", filter: "blur(80px)", pointerEvents: "none", zIndex: 0, willChange: "transform, opacity", opacity: 0, transition: "opacity 0.4s ease" }} />
@@ -1163,25 +1181,25 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
             </div>
 
             {/* User Leaderboard — full width, prominent */}
-            <Section title="Team Leaderboard" action={
+            <Section title="Team Leaderboard" expandable action={
               <div style={{ fontSize: 12, color: COLORS.mutedText }}>Click a user for details</div>
             }>
-              <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} onSelectUser={setSelectedUser} />
+              {(expanded) => <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} onSelectUser={setSelectedUser} limit={expanded ? 15 : 5} />}
             </Section>
 
             {/* Two-column: insurance breakdown + manual changes */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-              <Section title="Insurance Type Leaderboard">
-                <InsuranceBreakdown data={data.usage_by_insurance_type} />
+              <Section title="Insurance Type Leaderboard" expandable>
+                {(expanded) => <InsuranceBreakdown data={data.usage_by_insurance_type} limit={expanded ? 15 : 5} />}
               </Section>
-              <Section title="Manual Changes Leaderboard">
-                <ManualChangesLeaderboard data={manualChanges?.leaderboard} />
+              <Section title="Manual Changes Leaderboard" expandable>
+                {(expanded) => <ManualChangesLeaderboard data={manualChanges?.leaderboard} limit={expanded ? 15 : 5} />}
               </Section>
             </div>
 
             {/* Snapshot History */}
-            <Section title="Snapshot History">
-              <SnapshotHistory events={data.recent_events} getToken={getToken} onRefresh={fetchAnalytics} />
+            <Section title="Snapshot History" expandable>
+              {(expanded) => <SnapshotHistory events={data.recent_events} getToken={getToken} onRefresh={fetchAnalytics} limit={expanded ? 30 : 5} />}
             </Section>
           </div>
         )}

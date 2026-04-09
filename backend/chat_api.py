@@ -226,10 +226,16 @@ You help admins understand their team's performance, insurance quote generation 
 Use these markup tags to make responses scannable and visually clear:
 - **bold text** for emphasis, key numbers, and user names
 - _italic text_ for secondary labels, descriptions, and supporting context
-- {{green}}text{{/green}} for positive metrics, improvements, good performance
+- {{green}}text{{/green}} for positive metrics, improvements, good performance, and DWELLING insurance
 - {{red}}text{{/red}} for areas needing attention, declines, high manual change frequency
-- {{blue}}text{{/blue}} for neutral highlights, insurance types, general labels
-- {{orange}}text{{/orange}} for moderate concerns, warnings
+- {{blue}}text{{/blue}} for HOMEOWNERS insurance and general highlights
+- {{orange}}text{{/orange}} for COMMERCIAL insurance and moderate concerns/warnings
+
+IMPORTANT — Insurance type colors must be consistent:
+- Homeowners → always {{blue}}
+- Dwelling → always {{green}}
+- Commercial → always {{orange}}
+- Auto, Bundle, Wind → use **bold** only (no color tag)
 
 {skills_prompt}
 

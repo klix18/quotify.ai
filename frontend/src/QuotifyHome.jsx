@@ -1686,19 +1686,10 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
             100% { background-position: -200% 0; }
           }
 
-          *::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
-          }
-
-          *::-webkit-scrollbar-thumb {
-            background: #D4E2F4;
-            border-radius: 999px;
-          }
-
-          *::-webkit-scrollbar-track {
-            background: transparent;
-          }
+          * { scrollbar-width: thin; scrollbar-color: #D4E2F4 transparent; }
+          *::-webkit-scrollbar { width: 8px; height: 8px; }
+          *::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
+          *::-webkit-scrollbar-track { background: transparent; }
         `}
       </style>
 
