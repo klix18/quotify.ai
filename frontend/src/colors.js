@@ -26,5 +26,15 @@ const COLORS = {
     dangerSoft: "#FEECEC",
     dangerBorder: "#F6C7C2",
   };
-  
+
+  // Pastel insurance type colors — shared across dashboard & chat
+  export const INSURANCE_COLORS = {
+    homeowners: "#7EB4E8",   // soft blue
+    auto:       "#6DC8E8",   // pastel cyan
+    dwelling:   "#7ED6A5",   // pastel green
+    commercial: "#F2B872",   // pastel orange
+    bundle:     "#C4A1E0",   // pastel purple
+    wind:       "#A8B5C4",   // pastel slate
+  };
+
   export default COLORS;

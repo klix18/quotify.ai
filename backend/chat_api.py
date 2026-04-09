@@ -230,7 +230,6 @@ Use these markup tags to make responses scannable and visually clear:
 - {{red}}text{{/red}} for areas needing attention, declines, high manual change frequency
 - {{blue}}text{{/blue}} for neutral highlights, insurance types, general labels
 - {{orange}}text{{/orange}} for moderate concerns, warnings
-- {{dim}}text{{/dim}} for secondary/supporting information
 
 {skills_prompt}
 

@@ -1,6 +1,6 @@
 import React from "react";
 import { useAuth } from "@clerk/clerk-react";
-import COLORS from "./colors";
+import COLORS, { INSURANCE_COLORS } from "./colors";
 import ChatPanel from "./ChatPanel";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -41,19 +41,22 @@ function GlassPanel({ children, borderRadius = 24, style = {} }) {
 
 /* ── Hover Button ────────────────────────────────────────────── */
 /* ── Blur Aura — smooth gradient backdrop blur that fades outward ── */
-function BlurAura({ children, spread = 50, blur = 18, style = {} }) {
-  // 6 concentric rings. Each ring gets a CSS mask (single linear-gradient, no composite)
-  // that fades its edges. Outer rings fade more aggressively → blur dissolves smoothly.
-  const steps = 6;
+function BlurAura({ children, spread = 60, blur = 22, style = {} }) {
+  // 8 concentric rings with masks that fade in BOTH directions (vertical + horizontal).
+  // Pure blur only — no frosted glass overlay.
+  const steps = 8;
   const rings = Array.from({ length: steps }, (_, i) => {
-    const t = i / (steps - 1); // 0 = innermost, 1 = outermost
-    const fadePct = Math.round(10 + t * 50); // edge fade: inner 10%, outer 60%
+    const t = i / (steps - 1);
+    const fadePct = Math.round(8 + t * 45);
+    const vMask = `linear-gradient(to bottom, transparent 0%, black ${fadePct}%, black ${100 - fadePct}%, transparent 100%)`;
+    const hMask = `linear-gradient(to right, transparent 0%, black ${fadePct}%, black ${100 - fadePct}%, transparent 100%)`;
     return {
       inset: -(spread * t),
       br: 14 + spread * t,
-      blurAmt: blur * (1 - t),              // full blur → 0 at outer edge
-      opacity: 0.35 * (1 - t * 0.92),       // 0.35 → ~0.03
-      mask: `linear-gradient(to bottom, transparent 0%, black ${fadePct}%, black ${100 - fadePct}%, transparent 100%)`,
+      blurAmt: blur * (1 - t * 0.85),
+      maskImage: `${vMask}, ${hMask}`,
+      maskComposite: "intersect",
+      WebkitMaskComposite: "source-in",
     };
   });
   return (
@@ -63,11 +66,12 @@ function BlurAura({ children, spread = 50, blur = 18, style = {} }) {
           position: "absolute",
           top: r.inset, left: r.inset, right: r.inset, bottom: r.inset,
           borderRadius: r.br,
-          backdropFilter: `blur(${r.blurAmt}px) saturate(${1 + 0.3 * (1 - i / (steps - 1))})`,
-          WebkitBackdropFilter: `blur(${r.blurAmt}px) saturate(${1 + 0.3 * (1 - i / (steps - 1))})`,
-          background: `rgba(239,242,247,${r.opacity})`,
-          maskImage: r.mask,
-          WebkitMaskImage: r.mask,
+          backdropFilter: `blur(${r.blurAmt}px)`,
+          WebkitBackdropFilter: `blur(${r.blurAmt}px)`,
+          maskImage: r.maskImage,
+          WebkitMaskImage: r.maskImage,
+          maskComposite: r.maskComposite,
+          WebkitMaskComposite: r.WebkitMaskComposite,
           pointerEvents: "none",
           zIndex: 0,
         }} />
@@ -190,7 +194,7 @@ function Section({ title, children, action = null }) {
 function InsuranceBreakdown({ data }) {
   if (!data || Object.keys(data).length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No data yet</div>;
   const total = Object.values(data).reduce((a, b) => a + b, 0);
-  const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
+  const typeColors = INSURANCE_COLORS;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {Object.entries(data).sort(([, a], [, b]) => b - a).map(([type, count]) => {
@@ -214,7 +218,7 @@ function InsuranceBreakdown({ data }) {
 /* ── Manual Changes Leaderboard ──────────────────────────────── */
 function ManualChangesLeaderboard({ data }) {
   if (!data || data.length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No manual changes recorded</div>;
-  const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
+  const typeColors = INSURANCE_COLORS;
   const maxCount = data[0]?.count || 1;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -498,7 +502,7 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: COLORS.mutedText, fontSize: 13 }}>Loading user data...</div>;
   if (!data) return <div style={{ padding: 40, textAlign: "center", color: COLORS.mutedText, fontSize: 13 }}>Failed to load user data.</div>;
 
-  const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
+  const typeColors = INSURANCE_COLORS;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -613,7 +617,7 @@ function UserSnapshotHistory({ events, getToken }) {
   };
   const th = { padding: "8px 10px", color: COLORS.mutedText, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", textAlign: "left", whiteSpace: "nowrap" };
   const td = { padding: "8px 10px", fontSize: 12, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-  const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
+  const typeColors = INSURANCE_COLORS;
 
   return (
     <>
@@ -753,7 +757,7 @@ function SnapshotHistory({ events, getToken, onRefresh }) {
 
   const th = { padding: "10px 14px", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", textAlign: "left" };
   const td = { padding: "12px 14px", fontSize: 13, fontWeight: 400, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-  const typeColors = { homeowners: "#1765D4", auto: "#0B91E6", dwelling: "#1F9D55", commercial: "#E6850B", bundle: "#9B59B6", wind: "#6F7D90" };
+  const typeColors = INSURANCE_COLORS;
 
   return (
     <>

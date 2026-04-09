@@ -10,7 +10,7 @@ function parseRichText(text) {
   if (!text) return [{ type: "text", content: text || "" }];
 
   const tokens = [];
-  const regex = /(\*\*(.+?)\*\*|_(.+?)_|\{(green|red|blue|orange|dim)\}([\s\S]*?)\{\/\4\})/g;
+  const regex = /(\*\*(.+?)\*\*|_(.+?)_|\{(green|red|blue|orange)\}([\s\S]*?)\{\/\4\})/g;
 
   let lastIndex = 0;
   let match;
@@ -43,7 +43,6 @@ const COLOR_MAP = {
   red: "#D92D20",
   blue: "#1765D4",
   orange: "#E67E22",
-  dim: "#98A6B8",
 };
 
 function RichText({ text }) {
@@ -152,6 +151,8 @@ function ChatMessage({ role, content, isStreaming }) {
 /* ── Rainbow Border Wrapper ──────────────────────────────────────── */
 
 function RainbowBorder({ children, borderRadius = 20, borderWidth = 2 }) {
+  const dur = "0.4s";
+  const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
   return (
     <div style={{
       position: "relative",
@@ -161,6 +162,7 @@ function RainbowBorder({ children, borderRadius = 20, borderWidth = 2 }) {
         "conic-gradient(from 0deg, #ff6b6b, #ffa500, #ffd93d, #6bcb77, #4d96ff, #9b59b6, #ff6b6b)",
       backgroundSize: "200% 200%",
       animation: "chatRainbow 4s linear infinite",
+      transition: `border-radius ${dur} ${ease}`,
     }}>
       <div style={{
         borderRadius,
@@ -168,6 +170,7 @@ function RainbowBorder({ children, borderRadius = 20, borderWidth = 2 }) {
         background: "rgba(250, 252, 255, 0.97)",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
+        transition: `border-radius ${dur} ${ease}`,
       }}>
         {children}
       </div>
@@ -185,7 +188,6 @@ export default function ChatPanel({ period, userName }) {
   const [sessionId] = useState(() => crypto.randomUUID());
   const [greeting, setGreeting] = useState(null);
   const [isOpen, setIsOpen] = useState(true);
-  const [animState, setAnimState] = useState("open"); // "open" | "closing" | "closed" | "opening"
   const scrollAreaRef = useRef(null);
   const inputRef = useRef(null);
   const abortRef = useRef(null);
@@ -389,62 +391,20 @@ export default function ChatPanel({ period, userName }) {
     }
   };
 
-  /* ── Zoom animation handlers ─── */
-  const handleClose = () => {
-    setAnimState("closing");
-    setTimeout(() => {
-      setIsOpen(false);
-      setAnimState("closed");
-    }, 250);
-  };
-  const handleOpen = () => {
-    setIsOpen(true);
-    setAnimState("opening");
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => setAnimState("open"));
-    });
+  /* ── Morph animation handlers ─── */
+  const expanded = isOpen;
+  const handleToggle = () => {
+    setIsOpen((prev) => !prev);
   };
 
-  /* ── Collapsed state ─────────── */
-  if (!isOpen) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-        <button
-          onClick={handleOpen}
-          style={{
-            display: "flex", alignItems: "center", gap: 8,
-            padding: "10px 24px", borderRadius: 50,
-            border: "2px solid transparent",
-            backgroundImage:
-              "linear-gradient(rgba(250,252,255,0.97), rgba(250,252,255,0.97)), conic-gradient(from 0deg, #ff6b6b, #ffa500, #ffd93d, #6bcb77, #4d96ff, #9b59b6, #ff6b6b)",
-            backgroundOrigin: "border-box",
-            backgroundClip: "padding-box, border-box",
-            cursor: "pointer", fontSize: 14, fontWeight: 600, color: COLORS.text,
-            boxShadow: "0 2px 12px rgba(0,0,0,0.06)", transition: "box-shadow 0.2s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(23,101,212,0.15)")}
-          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)")}
-        >
-          <span style={{ fontSize: 18 }}>✦</span>
-          Snappy
-        </button>
-      </div>
-    );
-  }
-
-  /* ── Expanded state ──────────── */
-  const zoomScale = animState === "opening" ? 0.92 : animState === "closing" ? 0.92 : 1;
-  const zoomOpacity = (animState === "opening" || animState === "closing") ? 0 : 1;
+  /* ── Single morphing container ── */
+  // Transition durations
+  const dur = "0.4s";
+  const ease = "cubic-bezier(0.4, 0, 0.2, 1)";
 
   return (
-    <div style={{
-      display: "flex", justifyContent: "center", width: "100%", marginBottom: 24,
-      transform: `scale(${zoomScale})`,
-      opacity: zoomOpacity,
-      transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1), opacity 0.25s cubic-bezier(0.4,0,0.2,1)",
-      transformOrigin: "center center",
-    }}>
-      {/* Keyframes — scoped names to avoid collisions */}
+    <div style={{ display: "flex", justifyContent: "center", width: "100%", marginBottom: expanded ? 24 : 20 }}>
+      {/* Keyframes */}
       <style>{`
         @keyframes chatRainbow {
           0% { background-position: 0% 50%; }
@@ -455,120 +415,141 @@ export default function ChatPanel({ period, userName }) {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
         }
-      `}</style>
-      {/* Scrollbar styles scoped via parent class */}
-      <style>{`
+        .chatScrollArea { scrollbar-width: thin; scrollbar-color: #D4E2F4 transparent; }
         .chatScrollArea::-webkit-scrollbar { width: 10px; height: 10px; }
         .chatScrollArea::-webkit-scrollbar-thumb { background: #D4E2F4; border-radius: 999px; }
         .chatScrollArea::-webkit-scrollbar-track { background: transparent; }
       `}</style>
 
-      <div style={{ maxWidth: "52vw", width: "100%" }}>
-        <RainbowBorder>
-          {/* Header */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "14px 20px",
-            borderBottom: `1px solid ${COLORS.borderGrey}`,
-          }}>
+      {/* Outer morph shell — rainbow border adapts shape */}
+      <div style={{
+        position: "relative",
+        maxWidth: expanded ? "52vw" : 180,
+        width: "100%",
+        transition: `max-width ${dur} ${ease}`,
+      }}>
+        <RainbowBorder borderRadius={expanded ? 20 : 50} borderWidth={2}>
+          {/* Pill header — always visible, clickable when collapsed */}
+          <div
+            onClick={expanded ? undefined : handleToggle}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: expanded ? "14px 20px" : "10px 20px",
+              borderBottom: expanded ? `1px solid ${COLORS.borderGrey}` : "none",
+              cursor: expanded ? "default" : "pointer",
+              transition: `padding ${dur} ${ease}, border-color ${dur} ${ease}`,
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{
-                fontSize: 20,
+                fontSize: expanded ? 20 : 18,
                 background: "conic-gradient(from 0deg, #ff6b6b, #ffa500, #ffd93d, #6bcb77, #4d96ff, #9b59b6, #ff6b6b)",
                 WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                transition: `font-size ${dur} ${ease}`,
               }}>✦</span>
-              <span style={{ fontWeight: 700, fontSize: 16, color: COLORS.text }}>Snappy</span>
               <span style={{
-                fontSize: 11, fontWeight: 600, color: COLORS.blue,
-                background: COLORS.blueSoft, padding: "2px 8px", borderRadius: 10,
-              }}>Admin</span>
+                fontWeight: expanded ? 700 : 600,
+                fontSize: expanded ? 16 : 14,
+                color: COLORS.text,
+                transition: `font-size ${dur} ${ease}`,
+              }}>Snappy</span>
+              {expanded && (
+                <span style={{
+                  fontSize: 11, fontWeight: 600, color: COLORS.blue,
+                  background: COLORS.blueSoft, padding: "2px 8px", borderRadius: 10,
+                }}>Admin</span>
+              )}
             </div>
-            <button
-              onClick={handleClose}
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                fontSize: 18, color: COLORS.mutedText, padding: "4px 8px",
-                borderRadius: 6, transition: "background 0.15s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.lightGrey)}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-              title="Minimize"
-            >✕</button>
+            {expanded && (
+              <button
+                onClick={handleToggle}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: 18, color: COLORS.mutedText, padding: "4px 8px",
+                  borderRadius: 6, transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.lightGrey)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                title="Minimize"
+              >✕</button>
+            )}
           </div>
 
-          {/* Messages area — contained scroll */}
-          <div style={{ position: "relative" }}>
-            <div
-              ref={scrollAreaRef}
-              className="chatScrollArea"
-              style={{
-                height: 320,
-                overflowY: "auto",
-                padding: "16px 20px 72px 20px",
-              }}
-            >
-              {greeting && <ChatMessage role="assistant" content={greeting} isStreaming={false} />}
-              {messages.map((msg, i) => (
-                <ChatMessage key={i} role={msg.role} content={msg.content} isStreaming={msg.streaming} />
-              ))}
-            </div>
+          {/* Chat body — height morphs to 0 when collapsed */}
+          <div style={{
+            maxHeight: expanded ? 400 : 0,
+            opacity: expanded ? 1 : 0,
+            overflow: "hidden",
+            transition: `max-height ${dur} ${ease}, opacity ${expanded ? "0.35s 0.1s" : "0.15s"} ${ease}`,
+          }}>
+            <div style={{ position: "relative" }}>
+              <div
+                ref={scrollAreaRef}
+                className="chatScrollArea"
+                style={{
+                  height: 320,
+                  overflowY: "auto",
+                  padding: "16px 20px 72px 20px",
+                }}
+              >
+                {greeting && <ChatMessage role="assistant" content={greeting} isStreaming={false} />}
+                {messages.map((msg, i) => (
+                  <ChatMessage key={i} role={msg.role} content={msg.content} isStreaming={msg.streaming} />
+                ))}
+              </div>
 
-            {/* Floating input bar — pinned to bottom of messages area */}
-            <div style={{
-              position: "absolute",
-              bottom: 12,
-              left: 16,
-              right: 16,
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-            }}>
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about your analytics..."
-                style={{
-                  flex: 1,
-                  border: "none",
-                  borderRadius: 50,
-                  padding: "12px 20px",
-                  fontSize: 14,
-                  fontFamily: "inherit",
-                  lineHeight: 1.5,
-                  outline: "none",
-                  background: "#FFFFFF",
-                  color: COLORS.text,
-                  border: `1.5px solid ${COLORS.borderGrey}`,
-                  boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-                  transition: "border-color 0.2s, box-shadow 0.2s",
-                }}
-                onFocus={(e) => { e.target.style.borderColor = COLORS.blue; e.target.style.boxShadow = `0 2px 16px rgba(23,101,212,0.10)`; }}
-                onBlur={(e) => { e.target.style.borderColor = COLORS.borderGrey; e.target.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)"; }}
-              />
-              <button
-                onClick={handleSend}
-                disabled={!input.trim() || isStreaming}
-                style={{
-                  width: 42, height: 42,
-                  borderRadius: "50%",
-                  border: "none",
-                  background: !input.trim() || isStreaming
-                    ? COLORS.disabledBg
-                    : "linear-gradient(135deg, #1765D4, #0F4EAA)",
-                  color: !input.trim() || isStreaming ? COLORS.disabledText : "#fff",
-                  cursor: !input.trim() || isStreaming ? "default" : "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 18,
-                  boxShadow: !input.trim() || isStreaming
-                    ? "none"
-                    : "0 2px 12px rgba(23,101,212,0.25)",
-                  transition: "all 0.2s",
-                  flexShrink: 0,
-                }}
-                title="Send"
-              >↑</button>
+              {/* Floating input bar */}
+              <div style={{
+                position: "absolute",
+                bottom: 12, left: 16, right: 16,
+                display: "flex", gap: 10, alignItems: "center",
+              }}>
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask about your analytics..."
+                  style={{
+                    flex: 1,
+                    borderRadius: 50,
+                    padding: "12px 20px",
+                    fontSize: 14,
+                    fontFamily: "inherit",
+                    lineHeight: 1.5,
+                    outline: "none",
+                    background: "#FFFFFF",
+                    color: COLORS.text,
+                    border: `1.5px solid ${COLORS.borderGrey}`,
+                    boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+                    transition: "border-color 0.2s, box-shadow 0.2s",
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = COLORS.blue; e.target.style.boxShadow = "0 2px 16px rgba(23,101,212,0.10)"; }}
+                  onBlur={(e) => { e.target.style.borderColor = COLORS.borderGrey; e.target.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)"; }}
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || isStreaming}
+                  style={{
+                    width: 42, height: 42,
+                    borderRadius: "50%",
+                    border: "none",
+                    background: !input.trim() || isStreaming
+                      ? COLORS.disabledBg
+                      : "linear-gradient(135deg, #1765D4, #0F4EAA)",
+                    color: !input.trim() || isStreaming ? COLORS.disabledText : "#fff",
+                    cursor: !input.trim() || isStreaming ? "default" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 18,
+                    boxShadow: !input.trim() || isStreaming
+                      ? "none"
+                      : "0 2px 12px rgba(23,101,212,0.25)",
+                    transition: "all 0.2s",
+                    flexShrink: 0,
+                  }}
+                  title="Send"
+                >↑</button>
+              </div>
             </div>
           </div>
         </RainbowBorder>
