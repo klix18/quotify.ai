@@ -6,22 +6,25 @@ and LLM-powered summarization/deduplication.
 
 import os
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from database import get_pool
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
 
-def _get_client() -> OpenAI:
+
+def _get_client() -> AsyncOpenAI:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise ValueError("OPENAI_API_KEY is not set.")
-    return OpenAI(api_key=api_key)
+    return AsyncOpenAI(api_key=api_key)
 
 
 # ── In-memory session store ──────────────────────────────────────────
@@ -100,9 +103,12 @@ async def save_session_summary(
         f"{m['role'].upper()}: {m['content']}" for m in messages
     )
 
+    summary = ""
+    key_topics = []
+
     try:
         client = _get_client()
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": f"""Summarize this analytics dashboard conversation in 2-3 concise sentences.
 Extract the key topics discussed as a JSON array of short strings.
@@ -123,9 +129,10 @@ Respond in this exact JSON format:
         parsed = json.loads(text)
         summary = parsed.get("summary", "")
         key_topics = parsed.get("key_topics", [])
+        logger.info(f"[chat_memory] Summarized session {session_id}: {summary[:80]}...")
 
-    except Exception:
-        # Fallback: simple summary
+    except Exception as e:
+        logger.error(f"[chat_memory] Failed to summarize session {session_id}: {e}")
         summary = f"Conversation with {len(messages)} messages."
         key_topics = []
 
@@ -169,7 +176,7 @@ async def _extract_memories(user_id: str, convo_text: str):
     """Use LLM to extract durable memories from a conversation."""
     try:
         client = _get_client()
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": f"""Based on this analytics dashboard conversation, extract any lasting preferences, insights, or patterns worth remembering for future conversations.
 
@@ -193,7 +200,10 @@ Respond in this exact JSON format:
         memories = json.loads(text)
 
         if not memories or not isinstance(memories, list):
+            logger.info(f"[chat_memory] No durable memories extracted for user {user_id}")
             return
+
+        logger.info(f"[chat_memory] Extracted {len(memories)} memories for user {user_id}")
 
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -229,8 +239,8 @@ Respond in this exact JSON format:
                         mem.get("context", ""),
                     )
 
-    except Exception:
-        pass  # Memory extraction is best-effort
+    except Exception as e:
+        logger.error(f"[chat_memory] Failed to extract memories for user {user_id}: {e}")
 
 
 def _content_similar(a: str, b: str) -> bool:
