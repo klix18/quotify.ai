@@ -22,6 +22,7 @@ closest analogue to Gemini's ``client.files.upload`` + reference-by-file
 flow. We don't need to base64-inline the PDF or split it.
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -129,12 +130,51 @@ def _upload_pdf(client: OpenAI, pdf_path: Path) -> str:
     return file_id
 
 
+def _build_system_with_schema(
+    system_instruction: str,
+    json_schema: Optional[dict],
+) -> str:
+    """
+    Parity patch for the Gemini → OpenAI fallback path.
+
+    Gemini's Pass 2 gets the field list via ``response_schema=<SCHEMA>`` on
+    ``GenerateContentConfig``, which OpenAI's Responses API has no direct
+    equivalent for. The parser ``SYSTEM_PROMPT`` values are rules-only
+    (they deliberately say "return the requested JSON fields" and rely on
+    the schema argument to enumerate what "requested" means). If we don't
+    inline the schema into the system instruction here, gpt-4o-mini has
+    no idea which keys to produce and output quality collapses.
+
+    When a schema is supplied we append it to the system instruction as
+    JSON text plus an explicit "output must match this exact schema"
+    directive. The word "json" is required in the prompt for OpenAI's
+    ``json_object`` response format, so this also satisfies that API
+    contract as a side effect.
+    """
+    if not json_schema:
+        return system_instruction
+
+    schema_text = json.dumps(json_schema, indent=2)
+    return (
+        f"{system_instruction}\n\n"
+        "── OUTPUT FORMAT ─────────────────────────────────────────────\n"
+        "Your output MUST be a single valid JSON object that matches "
+        "this exact JSON schema. Every property listed under "
+        '"required" must appear as a key in your output. Use "" (empty '
+        "string) for any field you cannot find in the document. Do NOT "
+        "wrap the JSON in markdown code fences. Do NOT emit any prose, "
+        "commentary, or explanation — only the JSON object.\n\n"
+        f"JSON schema:\n{schema_text}\n"
+    )
+
+
 def stream_openai_extraction(
     pdf_path: Path,
     system_instruction: str,
     user_prompt: str,
     *,
     models: Optional[List[str]] = None,
+    json_schema: Optional[dict] = None,
 ) -> Iterator[Any]:
     """
     Stream a PDF extraction pass using OpenAI's Responses API.
@@ -146,6 +186,17 @@ def stream_openai_extraction(
     Walks the ``models`` chain (default: gpt-4o-mini → gpt-4o) and
     re-attempts on transient errors. Non-retryable errors (auth, quota
     exceeded, invalid input) raise immediately.
+
+    If ``json_schema`` is provided, the schema is appended to the system
+    instruction (so gpt-4o-mini actually knows which keys to emit — see
+    ``_build_system_with_schema``) and the Responses API is asked for
+    ``json_object`` format so the output is guaranteed-valid JSON. This
+    is what Pass 2 callers should use to match Gemini's schema-enforced
+    behavior.
+
+    ``temperature`` is hard-set to 0 to match Gemini's determinism (our
+    Gemini ``GenerateContentConfig`` also uses ``temperature=0``). Any
+    drift here directly shows up as extraction quality regression.
 
     This is intended as the *last-resort* fallback after the full Gemini
     chain has failed. Because it re-uploads the PDF to OpenAI, it's
@@ -164,19 +215,21 @@ def stream_openai_extraction(
         _log(f"PDF upload FAIL: err={str(exc)[:200]}")
         raise
 
-    _log(f"stream chain = {models}")
+    effective_system = _build_system_with_schema(system_instruction, json_schema)
+    has_schema = json_schema is not None
+    _log(f"stream chain = {models}  json_schema={has_schema}")
     last_exc: Optional[Exception] = None
 
     for idx, model in enumerate(models):
         is_last = idx == len(models) - 1
         try:
             _log(f"stream attempt {idx + 1}/{len(models)}: model={model}")
-            stream = client.responses.create(
-                model=model,
-                input=[
+            create_kwargs: dict = {
+                "model": model,
+                "input": [
                     {
                         "role": "system",
-                        "content": system_instruction,
+                        "content": effective_system,
                     },
                     {
                         "role": "user",
@@ -186,8 +239,14 @@ def stream_openai_extraction(
                         ],
                     },
                 ],
-                stream=True,
-            )
+                "temperature": 0,
+                "stream": True,
+            }
+            if has_schema:
+                # Force valid-JSON output so parser JSON loaders don't
+                # have to scrub prose/markdown off the response.
+                create_kwargs["text"] = {"format": {"type": "json_object"}}
+            stream = client.responses.create(**create_kwargs)
 
             committed = False
             for event in stream:
@@ -230,6 +289,7 @@ def generate_openai_extraction(
     user_prompt: str,
     *,
     models: Optional[List[str]] = None,
+    json_schema: Optional[dict] = None,
 ) -> str:
     """
     Non-streaming counterpart — returns the full output_text as a single string.
@@ -237,6 +297,10 @@ def generate_openai_extraction(
     If ``pdf_path`` is None, the call is text-only (no file attachment),
     which is how non-parser consumers (why-selected generator, report
     generator) can use this helper.
+
+    If ``json_schema`` is provided, the schema is inlined into the system
+    instruction and the Responses API is asked for ``json_object`` format
+    (same parity reasoning as ``stream_openai_extraction``).
 
     Walks the same model chain with the same retry semantics.
     """
@@ -253,20 +317,26 @@ def generate_openai_extraction(
     if file_id is not None:
         user_content.append({"type": "input_file", "file_id": file_id})
 
-    _log(f"gen chain = {models}")
+    effective_system = _build_system_with_schema(system_instruction, json_schema)
+    has_schema = json_schema is not None
+    _log(f"gen chain = {models}  json_schema={has_schema}")
     last_exc: Optional[Exception] = None
 
     for idx, model in enumerate(models):
         is_last = idx == len(models) - 1
         try:
             _log(f"gen attempt {idx + 1}/{len(models)}: model={model}")
-            resp = client.responses.create(
-                model=model,
-                input=[
-                    {"role": "system", "content": system_instruction},
+            create_kwargs: dict = {
+                "model": model,
+                "input": [
+                    {"role": "system", "content": effective_system},
                     {"role": "user", "content": user_content},
                 ],
-            )
+                "temperature": 0,
+            }
+            if has_schema:
+                create_kwargs["text"] = {"format": {"type": "json_object"}}
+            resp = client.responses.create(**create_kwargs)
             text = getattr(resp, "output_text", "") or ""
             _log(f"gen OK: model={model} chars={len(text)}")
             return text

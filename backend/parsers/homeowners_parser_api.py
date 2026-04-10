@@ -355,6 +355,7 @@ def stream_homeowners_quote_with_gemini(
                     "described in the system prompt. No prose, no markdown "
                     "code fences — just the JSON object."
                 ),
+                json_schema=HOMEOWNERS_SCHEMA,
             ),
         )
 

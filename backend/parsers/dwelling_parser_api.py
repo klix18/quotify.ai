@@ -818,6 +818,7 @@ def stream_dwelling_quote_with_gemini(
                     "described in the system prompt. No prose, no markdown "
                     "code fences — just the JSON object."
                 ),
+                json_schema=DWELLING_SCHEMA,
             ),
         )
 

@@ -640,6 +640,7 @@ def stream_commercial_quote_with_gemini(
                     "described in the system prompt. No prose, no markdown "
                     "code fences — just the JSON object."
                 ),
+                json_schema=COMMERCIAL_SCHEMA,
             ),
         )
 
