@@ -29,6 +29,7 @@ from parsers._model_fallback import (
     stream_with_fallback,
     upload_with_retry,
 )
+from parsers._openai_fallback import stream_openai_extraction
 
 load_dotenv()
 
@@ -604,17 +605,20 @@ def stream_bundle_quote_with_gemini(
 
         # ── PASS 1: quick draft extraction (key:value lines) ─────
         quick_text = ""
+        quick_user_prompt = "Quickly extract likely fields from this bundle (homeowners + auto) insurance quote PDF."
         quick_stream = stream_with_fallback(
             client,
             model_quick,
             model_quick_fallback,
-            contents=[
-                "Quickly extract likely fields from this bundle (homeowners + auto) insurance quote PDF.",
-                uploaded_file,
-            ],
+            contents=[quick_user_prompt, uploaded_file],
             config=types.GenerateContentConfig(
                 system_instruction=QUICK_PASS_PROMPT,
                 temperature=0,
+            ),
+            openai_fallback=lambda: stream_openai_extraction(
+                pdf_path,
+                system_instruction=QUICK_PASS_PROMPT,
+                user_prompt=quick_user_prompt,
             ),
         )
 
@@ -648,19 +652,27 @@ def stream_bundle_quote_with_gemini(
         full_text = ""
         sent_final_json = ""
 
+        final_user_prompt = "Extract the bundle (homeowners + auto) insurance quote fields from this PDF."
         final_stream = stream_with_fallback(
             client,
             model_final,
             model_final_fallback,
-            contents=[
-                "Extract the bundle (homeowners + auto) insurance quote fields from this PDF.",
-                uploaded_file,
-            ],
+            contents=[final_user_prompt, uploaded_file],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0,
                 response_mime_type="application/json",
                 response_schema=BUNDLE_SCHEMA,
+            ),
+            openai_fallback=lambda: stream_openai_extraction(
+                pdf_path,
+                system_instruction=SYSTEM_PROMPT,
+                user_prompt=(
+                    final_user_prompt
+                    + " Return ONLY a valid JSON object matching the schema "
+                    "described in the system prompt. No prose, no markdown "
+                    "code fences — just the JSON object."
+                ),
             ),
         )
 

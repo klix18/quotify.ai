@@ -26,6 +26,7 @@ from parsers._model_fallback import (
     stream_with_fallback,
     upload_with_retry,
 )
+from parsers._openai_fallback import stream_openai_extraction
 
 load_dotenv()
 
@@ -733,21 +734,26 @@ def stream_dwelling_quote_with_gemini(
 
         # ── PASS 1: quick draft extraction (key:value lines) ─────
         quick_text = ""
+        quick_user_prompt = (
+            "Read ALL pages of this dwelling insurance quote PDF carefully. "
+            "Extract every field you can find. Pay special attention to "
+            "Rating Characteristics, Rating Factors, Underwriting, and Location Details "
+            "sections — these contain year built, construction type, roof year, occupancy, "
+            "and policy form. Only output values you can actually see in the document."
+        )
         quick_stream = stream_with_fallback(
             client,
             model_quick,
             model_quick_fallback,
-            contents=[
-                "Read ALL pages of this dwelling insurance quote PDF carefully. "
-                "Extract every field you can find. Pay special attention to "
-                "Rating Characteristics, Rating Factors, Underwriting, and Location Details "
-                "sections — these contain year built, construction type, roof year, occupancy, "
-                "and policy form. Only output values you can actually see in the document.",
-                uploaded_file,
-            ],
+            contents=[quick_user_prompt, uploaded_file],
             config=types.GenerateContentConfig(
                 system_instruction=QUICK_PASS_PROMPT,
                 temperature=0,
+            ),
+            openai_fallback=lambda: stream_openai_extraction(
+                pdf_path,
+                system_instruction=QUICK_PASS_PROMPT,
+                user_prompt=quick_user_prompt,
             ),
         )
 
@@ -781,27 +787,37 @@ def stream_dwelling_quote_with_gemini(
         full_text = ""
         sent_final_json = ""
 
+        final_user_prompt = (
+            "Read ALL pages of this dwelling insurance quote PDF thoroughly. "
+            "Extract every field into the JSON schema. "
+            "IMPORTANT: Check the Rating Characteristics, Rating Factors & Underwriting, "
+            "Location Details, and Dwelling Details sections (often at the bottom of "
+            "pages or on later pages) for year_built, construction_type, roof_year, "
+            "occupancy, and policy_form. "
+            "For coverages, look for Coverage A/B/C/D labels or Dwelling/Other Structures/"
+            "Personal Property/Fair Rental Value line items. "
+            "NEVER guess — only extract values explicitly shown in the document."
+        )
         final_stream = stream_with_fallback(
             client,
             model_final,
             model_final_fallback,
-            contents=[
-                "Read ALL pages of this dwelling insurance quote PDF thoroughly. "
-                "Extract every field into the JSON schema. "
-                "IMPORTANT: Check the Rating Characteristics, Rating Factors & Underwriting, "
-                "Location Details, and Dwelling Details sections (often at the bottom of "
-                "pages or on later pages) for year_built, construction_type, roof_year, "
-                "occupancy, and policy_form. "
-                "For coverages, look for Coverage A/B/C/D labels or Dwelling/Other Structures/"
-                "Personal Property/Fair Rental Value line items. "
-                "NEVER guess — only extract values explicitly shown in the document.",
-                uploaded_file,
-            ],
+            contents=[final_user_prompt, uploaded_file],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 temperature=0,
                 response_mime_type="application/json",
                 response_schema=DWELLING_SCHEMA,
+            ),
+            openai_fallback=lambda: stream_openai_extraction(
+                pdf_path,
+                system_instruction=SYSTEM_PROMPT,
+                user_prompt=(
+                    final_user_prompt
+                    + " Return ONLY a valid JSON object matching the schema "
+                    "described in the system prompt. No prose, no markdown "
+                    "code fences — just the JSON object."
+                ),
             ),
         )
 

@@ -32,9 +32,15 @@ written this way, so callers can drop this helper in directly.
 import logging
 import sys
 import time
-from typing import Any, Iterable, Iterator, List, Union
+from typing import Any, Callable, Iterable, Iterator, List, Optional, Union
 
 ModelSpec = Union[str, Iterable[str]]
+# A callable that, when invoked with no args, yields replacement chunks —
+# used as the cross-provider (OpenAI) fallback path after the Gemini model
+# chain has been exhausted. Parsers capture their pdf_path, prompts, etc.
+# in a closure and pass it in.
+StreamFallbackFn = Callable[[], Iterator[Any]]
+GenFallbackFn = Callable[[], Any]
 
 # ── Diagnostic logging ──────────────────────────────────────────
 # Prints one line per model attempt to stdout so you can see in the
@@ -62,27 +68,27 @@ print(
     file=sys.stderr,
 )
 
-# Full fallback chains. Order matters — we walk left-to-right, hopping to
-# the next model whenever the current one returns a transient error. Each
-# chain touches several distinct capacity pools (different model families,
-# different generations) so that a broad outage on one tier doesn't take
-# the whole pipeline down.
-DEFAULT_QUICK_FALLBACKS: List[str] = [
-    "gemini-2.0-flash-lite",  # lighter, prior-gen, separate pool
-    "gemini-2.0-flash",        # prior-gen flash, still relatively light
-    "gemini-2.5-flash",        # last resort: the Pass 2 primary
-]
-
-DEFAULT_FINAL_FALLBACKS: List[str] = [
-    "gemini-2.5-pro",          # more capable, different tier
-    "gemini-2.0-flash",        # prior-gen flash (good schema compliance)
-    "gemini-2.5-flash-lite",   # last resort: the Pass 1 primary
-]
+# Gemini fallback chains are intentionally EMPTY.
+#
+# History: we used to walk within the Gemini family (2.5-flash → 2.5-pro →
+# 2.0-flash → 2.5-flash-lite) but on 2026-04-10 we observed that during a
+# demand spike on 2.5-flash, 2.5-pro is hit by the same wave, 2.0-flash
+# returns 404 "no longer available to new users" for this account, and the
+# chain never reaches 2.5-flash-lite. Cross-provider (OpenAI) fallback is
+# the only reliable recovery path, and it's handled via the
+# ``openai_fallback`` parameter on ``stream_with_fallback`` / ``generate_with_fallback``.
+#
+# Parsers should therefore pass these empty lists as the fallback argument
+# and supply an ``openai_fallback=`` closure. See ``_openai_fallback.py``.
+DEFAULT_QUICK_FALLBACKS: List[str] = []
+DEFAULT_FINAL_FALLBACKS: List[str] = []
 
 # Backwards-compatible singular aliases — kept so older call sites that
-# imported ``DEFAULT_QUICK_FALLBACK`` (singular) still work.
-DEFAULT_QUICK_FALLBACK: str = DEFAULT_QUICK_FALLBACKS[0]
-DEFAULT_FINAL_FALLBACK: str = DEFAULT_FINAL_FALLBACKS[0]
+# imported ``DEFAULT_QUICK_FALLBACK`` (singular) still work. Empty string
+# now that the Gemini fallback lists are empty (OpenAI is the fallback
+# path instead), but still importable so we don't break old callers.
+DEFAULT_QUICK_FALLBACK: str = ""
+DEFAULT_FINAL_FALLBACK: str = ""
 
 # Substrings (lower-cased) that indicate a transient / retryable error.
 # We match on the stringified exception because google-genai raises several
@@ -150,28 +156,33 @@ def stream_with_fallback(
     *,
     contents: Any,
     config: Any,
+    openai_fallback: Optional[StreamFallbackFn] = None,
 ) -> Iterator[Any]:
     """
     Call ``client.models.generate_content_stream`` on ``primary_model`` and
     transparently walk down ``fallback_model`` (a single model name or an
-    ordered list of names) if the call fails with a transient error before
-    any chunks are yielded.
+    ordered list of names) if the call fails before any chunks are yielded.
 
-    Non-retryable errors (auth failures, bad input, schema errors, etc.) are
-    re-raised immediately without attempting any fallback.
+    If ``openai_fallback`` is provided, it's a zero-arg callable that
+    returns an iterator of chunks — this is invoked as the *final* fallback
+    after the entire Gemini chain has failed. The callable is responsible
+    for producing chunks that match Gemini's shape (objects with a ``.text``
+    attribute) so parser loops work unchanged. See ``_openai_fallback.py``.
 
     If the primary starts yielding chunks and *then* fails mid-stream, the
-    error propagates — we don't try to splice a half-done primary stream onto
-    a fresh fallback stream because that would double-count tokens in
+    error propagates — we don't splice a half-done primary stream onto a
+    fresh fallback stream because that would double-count tokens in parser
     accumulators like ``full_text``. The 503 demand-spike case we actually
     care about always fails on the very first chunk, so this is fine.
     """
     chain = _build_chain(primary_model, fallback_model)
-    _log(f"stream chain = {chain}")
+    has_openai = openai_fallback is not None
+    _log(f"stream chain = {chain}  openai_fallback={has_openai}")
     last_exc: Exception | None = None
+    gemini_exhausted = False
 
     for idx, model in enumerate(chain):
-        is_last = idx == len(chain) - 1
+        is_last_gemini = idx == len(chain) - 1
         try:
             _log(f"stream attempt {idx + 1}/{len(chain)}: model={model}")
             stream = client.models.generate_content_stream(
@@ -201,14 +212,42 @@ def stream_with_fallback(
             retryable = _is_retryable(exc)
             _log(
                 f"stream FAIL: model={model} retryable={retryable} "
-                f"is_last={is_last} err={str(exc)[:200]}"
+                f"is_last_gemini={is_last_gemini} err={str(exc)[:200]}"
             )
-            if is_last or not retryable:
+            # If an OpenAI fallback is available, ANY Gemini failure
+            # (retryable or not) should fall through to OpenAI — that's
+            # the point of the cross-provider safety net. A 404 "model
+            # no longer available" is specific to that Gemini model and
+            # doesn't tell us anything about OpenAI.
+            if has_openai:
+                gemini_exhausted = True
+                break
+            # Otherwise (no openai fallback): only retry on retryable
+            # errors, and raise when we hit the last chain entry or a
+            # non-retryable error.
+            if is_last_gemini or not retryable:
                 raise
-            # Otherwise: swallow and try the next model in the chain.
             continue
 
-    # Shouldn't reach here, but just in case.
+    # Also mark exhausted if we simply walked the whole chain without
+    # finding a working model (e.g. chain=[] which is the new default).
+    if not gemini_exhausted:
+        gemini_exhausted = True
+
+    if has_openai:
+        _log(
+            f"stream Gemini chain exhausted — falling through to OpenAI "
+            f"(last_err={str(last_exc)[:160] if last_exc else 'none'})"
+        )
+        try:
+            yield from openai_fallback()  # type: ignore[misc]
+            return
+        except Exception as openai_exc:
+            _log(f"stream OpenAI fallback FAIL: err={str(openai_exc)[:200]}")
+            raise
+
+    # Shouldn't reach here (either we returned from Gemini success or
+    # raised on Gemini failure), but just in case.
     if last_exc is not None:
         raise last_exc
 
@@ -220,18 +259,24 @@ def generate_with_fallback(
     *,
     contents: Any,
     config: Any,
+    openai_fallback: Optional[GenFallbackFn] = None,
 ) -> Any:
     """
     Non-streaming counterpart to ``stream_with_fallback`` — used for one-shot
-    calls like classifiers and summary generators. Same retry semantics,
-    minus the stream plumbing.
+    calls like classifiers and summary generators.
+
+    If ``openai_fallback`` is provided, it's a zero-arg callable invoked as
+    the final fallback after the Gemini chain fails. Its return value is
+    passed back to the caller as-is, so the callable should return a value
+    the caller already knows how to handle (typically a string).
     """
     chain = _build_chain(primary_model, fallback_model)
-    _log(f"gen chain = {chain}")
+    has_openai = openai_fallback is not None
+    _log(f"gen chain = {chain}  openai_fallback={has_openai}")
     last_exc: Exception | None = None
 
     for idx, model in enumerate(chain):
-        is_last = idx == len(chain) - 1
+        is_last_gemini = idx == len(chain) - 1
         try:
             _log(f"gen attempt {idx + 1}/{len(chain)}: model={model}")
             resp = client.models.generate_content(
@@ -246,11 +291,25 @@ def generate_with_fallback(
             retryable = _is_retryable(exc)
             _log(
                 f"gen FAIL: model={model} retryable={retryable} "
-                f"is_last={is_last} err={str(exc)[:200]}"
+                f"is_last_gemini={is_last_gemini} err={str(exc)[:200]}"
             )
-            if is_last or not retryable:
+            if has_openai:
+                # Any Gemini failure → jump straight to OpenAI.
+                break
+            if is_last_gemini or not retryable:
                 raise
             continue
+
+    if has_openai:
+        _log(
+            f"gen Gemini chain exhausted — falling through to OpenAI "
+            f"(last_err={str(last_exc)[:160] if last_exc else 'none'})"
+        )
+        try:
+            return openai_fallback()  # type: ignore[misc]
+        except Exception as openai_exc:
+            _log(f"gen OpenAI fallback FAIL: err={str(openai_exc)[:200]}")
+            raise
 
     if last_exc is not None:
         raise last_exc
