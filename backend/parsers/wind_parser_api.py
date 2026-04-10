@@ -16,6 +16,13 @@ from google.genai import types
 
 from pdf_storage_helpers import store_uploaded_pdf
 
+from parsers._model_fallback import (
+    DEFAULT_FINAL_FALLBACKS,
+    DEFAULT_QUICK_FALLBACKS,
+    stream_with_fallback,
+    upload_with_retry,
+)
+
 load_dotenv()
 
 router = APIRouter()
@@ -167,12 +174,15 @@ def stream_wind_quote_with_gemini(
     pdf_path: Path,
     model_quick: str = "gemini-2.5-flash-lite",
     model_final: str = "gemini-2.5-flash",
+    model_quick_fallback=DEFAULT_QUICK_FALLBACKS,
+    model_final_fallback=DEFAULT_FINAL_FALLBACKS,
 ) -> Iterator[str]:
     client = get_gemini_client()
     uploaded_file = None
 
     try:
-        uploaded_file = client.files.upload(
+        uploaded_file = upload_with_retry(
+            client,
             file=str(pdf_path),
             config={"mime_type": "application/pdf"},
         )
@@ -183,8 +193,10 @@ def stream_wind_quote_with_gemini(
 
         # ── PASS 1: quick draft ──────────────────────────────────
         quick_text = ""
-        quick_stream = client.models.generate_content_stream(
-            model=model_quick,
+        quick_stream = stream_with_fallback(
+            client,
+            model_quick,
+            model_quick_fallback,
             contents=[
                 "Read this wind insurance PDF carefully. "
                 "Extract all wind coverage and wind buydown fields you can find.",
@@ -214,8 +226,10 @@ def stream_wind_quote_with_gemini(
         full_text = ""
         sent_final_json = ""
 
-        final_stream = client.models.generate_content_stream(
-            model=model_final,
+        final_stream = stream_with_fallback(
+            client,
+            model_final,
+            model_final_fallback,
             contents=[
                 "Read this wind insurance PDF thoroughly. "
                 "Extract all wind coverage and wind buydown fields into the JSON schema. "

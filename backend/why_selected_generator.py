@@ -13,6 +13,11 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from parsers._model_fallback import (
+    DEFAULT_QUICK_FALLBACKS,
+    generate_with_fallback,
+)
+
 load_dotenv()
 
 
@@ -88,11 +93,18 @@ Rules:
 
 
 def _call_gemini(prompt: str, content: str, model: str) -> list:
-    """Call Gemini and return parsed bullet list, or empty list on failure."""
+    """Call Gemini and return parsed bullet list, or empty list on failure.
+
+    Uses the shared fallback helper so a Gemini demand spike on the primary
+    model (typically ``gemini-2.5-flash-lite``) transparently hops down the
+    quick-pass fallback chain instead of silently dropping the bullets.
+    """
     try:
         client = _get_client()
-        response = client.models.generate_content(
-            model=model,
+        response = generate_with_fallback(
+            client,
+            model,
+            DEFAULT_QUICK_FALLBACKS,
             contents=[content],
             config=types.GenerateContentConfig(
                 system_instruction=prompt,

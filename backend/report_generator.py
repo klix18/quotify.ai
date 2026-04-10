@@ -15,6 +15,10 @@ from google.genai import types
 
 from auth import require_admin
 from database import get_pool
+from parsers._model_fallback import (
+    DEFAULT_FINAL_FALLBACKS,
+    generate_with_fallback,
+)
 
 load_dotenv()
 
@@ -160,8 +164,10 @@ async def _generate_report_html(data: dict, period_label: str) -> str:
 
     data_str = json.dumps(data, indent=2, default=str)
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
+    response = generate_with_fallback(
+        client,
+        "gemini-2.5-flash",
+        DEFAULT_FINAL_FALLBACKS,
         contents=types.Content(
             role="user",
             parts=[types.Part(text=f"""Generate a professional HTML email report for the Sizemore Insurance analytics dashboard.

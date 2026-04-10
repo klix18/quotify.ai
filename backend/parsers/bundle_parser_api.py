@@ -22,6 +22,14 @@ from google.genai import types
 
 from pdf_storage_helpers import store_uploaded_pdf
 
+from parsers._model_fallback import (
+    DEFAULT_FINAL_FALLBACKS,
+    DEFAULT_QUICK_FALLBACKS,
+    generate_with_fallback,
+    stream_with_fallback,
+    upload_with_retry,
+)
+
 load_dotenv()
 
 router = APIRouter()
@@ -577,12 +585,15 @@ def stream_bundle_quote_with_gemini(
     pdf_path: Path,
     model_quick: str = "gemini-2.5-flash-lite",
     model_final: str = "gemini-2.5-flash",
+    model_quick_fallback=DEFAULT_QUICK_FALLBACKS,
+    model_final_fallback=DEFAULT_FINAL_FALLBACKS,
 ) -> Iterator[str]:
     client = get_gemini_client()
     uploaded_file = None
 
     try:
-        uploaded_file = client.files.upload(
+        uploaded_file = upload_with_retry(
+            client,
             file=str(pdf_path),
             config={"mime_type": "application/pdf"},
         )
@@ -593,8 +604,10 @@ def stream_bundle_quote_with_gemini(
 
         # ── PASS 1: quick draft extraction (key:value lines) ─────
         quick_text = ""
-        quick_stream = client.models.generate_content_stream(
-            model=model_quick,
+        quick_stream = stream_with_fallback(
+            client,
+            model_quick,
+            model_quick_fallback,
             contents=[
                 "Quickly extract likely fields from this bundle (homeowners + auto) insurance quote PDF.",
                 uploaded_file,
@@ -635,8 +648,10 @@ def stream_bundle_quote_with_gemini(
         full_text = ""
         sent_final_json = ""
 
-        final_stream = client.models.generate_content_stream(
-            model=model_final,
+        final_stream = stream_with_fallback(
+            client,
+            model_final,
+            model_final_fallback,
             contents=[
                 "Extract the bundle (homeowners + auto) insurance quote fields from this PDF.",
                 uploaded_file,
@@ -693,8 +708,10 @@ def stream_bundle_quote_with_gemini(
 
 def classify_pdf(client, uploaded_file) -> str:
     """Ask Gemini to classify a PDF as 'homeowners' or 'auto'."""
-    resp = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
+    resp = generate_with_fallback(
+        client,
+        "gemini-2.5-flash-lite",
+        DEFAULT_QUICK_FALLBACKS,
         contents=[
             "What type of insurance quote is this PDF? Reply with ONLY one word: 'homeowners' or 'auto'.",
             uploaded_file,
@@ -916,8 +933,8 @@ async def parse_bundle_quote(files: List[UploadFile] = File(...)):
             client = get_gemini_client()
 
             # Upload both for classification
-            uploaded_a = client.files.upload(file=str(temp_paths[0]), config={"mime_type": "application/pdf"})
-            uploaded_b = client.files.upload(file=str(temp_paths[1]), config={"mime_type": "application/pdf"})
+            uploaded_a = upload_with_retry(client, file=str(temp_paths[0]), config={"mime_type": "application/pdf"})
+            uploaded_b = upload_with_retry(client, file=str(temp_paths[1]), config={"mime_type": "application/pdf"})
 
             yield json.dumps({"type": "status", "message": "Identifying PDF types..."}) + "\n"
 
