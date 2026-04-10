@@ -71,7 +71,7 @@ function BlurAura({ children, spread = 60, blur = 22, style = {} }) {
 function HoverButton({ children, onClick, disabled, variant = "primary", style: extraStyle }) {
   const [hovered, setHovered] = React.useState(false);
   const base = {
-    borderRadius: 14, height: 48, padding: "0 24px", fontSize: 14, fontWeight: 600,
+    borderRadius: 14, height: 48, padding: "0 24px", fontSize: 14, fontWeight: 500,
     fontFamily: "Poppins, sans-serif", cursor: disabled ? "not-allowed" : "pointer",
     transition: "all 200ms ease", border: "none", ...extraStyle,
   };
@@ -882,7 +882,7 @@ function HoverRow({ children }) {
 }
 
 /* ── Main Dashboard ──────────────────────────────────────────── */
-export default function AdminDashboard({ onBack, isAdmin, currentUserName, currentUserEmail, currentUserImageUrl }) {
+export default function AdminDashboard({ isAdmin, currentUserName, currentUserEmail, currentUserImageUrl }) {
   const { getToken } = useAuth();
   const [period, setPeriod] = React.useState("month");
   const [data, setData] = React.useState(null);
@@ -1062,11 +1062,12 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{
-        height: "100vh",
+        height: "calc(100vh - 48px)",
         background: `linear-gradient(160deg, rgba(230,240,255,0.7) 0%, ${COLORS.pageBg} 30%, rgba(220,235,255,0.5) 60%, ${COLORS.pageBg} 80%, rgba(200,225,255,0.4) 100%)`,
         fontFamily: "Poppins, sans-serif",
         position: "relative",
-        overflow: "auto",
+        overflowY: "auto",
+        overflowX: "hidden",
       }}
     >
       {/* Animated orbs */}
@@ -1086,22 +1087,26 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
 
       {/* Fixed header — overlaps scrollable content so BlurAura can blur it */}
       <div style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 20,
+        position: "sticky", top: 0, left: 0, right: 0, zIndex: 20,
         padding: "18px 28px 14px 28px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         flexWrap: "wrap", gap: 12,
         pointerEvents: "none",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, pointerEvents: "auto" }}>
-          <BlurAura>
-            <HoverButton
-              variant="outline"
-              onClick={isAdmin && selectedUser ? () => setSelectedUser(null) : onBack}
-              style={{ height: 44, padding: "0 22px" }}
-            >
-              {isAdmin && selectedUser ? "Back" : "Close"}
-            </HoverButton>
-          </BlurAura>
+          {/* Back button — only shown when viewing a specific user's page */}
+          {isAdmin && selectedUser && (
+            <BlurAura>
+              <HoverButton
+                variant="outline"
+                onClick={() => setSelectedUser(null)}
+                style={{ height: 48, padding: "0 22px" }}
+              >
+                Back
+              </HoverButton>
+            </BlurAura>
+          )}
+          {!selectedUser && (
           <BlurAura>
             <div style={{ padding: "4px 8px" }}>
               <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 2 }}>
@@ -1112,6 +1117,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
               </div>
             </div>
           </BlurAura>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", pointerEvents: "auto" }}>
@@ -1120,7 +1126,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
               style={{
-                padding: "0 14px", height: 44, borderRadius: 14,
+                padding: "0 14px", height: 48, borderRadius: 14,
                 border: `1px solid rgba(220,230,245,0.6)`,
                 background: "rgba(255,255,255,0.5)",
                 boxShadow: "none",
@@ -1133,14 +1139,14 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
           </BlurAura>
           {isAdmin && (
             <BlurAura>
-              <HoverButton variant="primary" onClick={fetchAnalytics} disabled={loading} style={{ height: 44 }}>
+              <HoverButton variant="outline" onClick={fetchAnalytics} disabled={loading} style={{ height: 48 }}>
                 {loading ? "Loading..." : "Refresh"}
               </HoverButton>
             </BlurAura>
           )}
           {isAdmin && (
             <BlurAura>
-              <HoverButton variant="danger" onClick={() => setResetConfirm(true)} style={{ height: 44 }}>
+              <HoverButton variant="danger" onClick={() => setResetConfirm(true)} style={{ height: 48 }}>
                 Clear Data
               </HoverButton>
             </BlurAura>
@@ -1149,7 +1155,7 @@ export default function AdminDashboard({ onBack, isAdmin, currentUserName, curre
       </div>
 
       {/* Content area — padded at top to sit below the fixed header */}
-      <div style={{ position: "relative", zIndex: 1, padding: "100px 28px 24px 28px" }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "16px 28px 24px 28px" }}>
 
         {/* Error */}
         {error && (

@@ -3,9 +3,10 @@ import {
   SignedIn,
   SignedOut,
   SignInButton,
+  UserButton,
   useUser,
 } from "@clerk/clerk-react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import COLORS from "./colors";
 import QuotifyHome from "./QuotifyHome";
 import AdminDashboard from "./AdminDashboard";
@@ -253,6 +254,94 @@ function SignInPage() {
   );
 }
 
+/* ── Shared Top Nav ────────────────────────────────────────────── */
+function TopNav({ isAdmin }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isSnapshot = location.pathname === "/";
+  const isDashboard = location.pathname.startsWith("/dashboard");
+
+  const tabRef0 = React.useRef(null);
+  const tabRef1 = React.useRef(null);
+  const containerRef = React.useRef(null);
+  const [indicator, setIndicator] = React.useState({ left: 0, width: 0 });
+
+  React.useEffect(() => {
+    const activeRef = isDashboard ? tabRef1 : tabRef0;
+    const tab = activeRef.current;
+    const container = containerRef.current;
+    if (tab && container) {
+      const tRect = tab.getBoundingClientRect();
+      const cRect = container.getBoundingClientRect();
+      setIndicator({ left: tRect.left - cRect.left, width: tRect.width });
+    }
+  }, [isSnapshot, isDashboard]);
+
+  const tabStyle = (active) => ({
+    background: "none",
+    border: "none",
+    borderBottom: "2.5px solid transparent",
+    padding: "14px 18px 12px 18px",
+    fontSize: 14,
+    fontWeight: 500,
+    color: active ? COLORS.blue : COLORS.mutedText,
+    cursor: "pointer",
+    fontFamily: "Poppins, sans-serif",
+    transition: "color 150ms ease",
+  });
+
+  return (
+    <nav style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+      height: 48,
+      display: "flex", alignItems: "stretch", justifyContent: "center",
+      background: "rgba(255,255,255,0.85)",
+      borderBottom: "1px solid rgba(180,200,230,0.25)",
+      fontFamily: "Poppins, sans-serif",
+    }}>
+      {/* Logo — left */}
+      <div style={{ position: "absolute", left: 18, top: 0, bottom: 0, display: "flex", alignItems: "center" }}>
+        <img src="/snapshot-logo-1.png" alt="Sizemore" style={{ height: 24 }} />
+      </div>
+      {/* Tabs — center */}
+      <div ref={containerRef} style={{ display: "flex", alignItems: "stretch", gap: 4, position: "relative" }}>
+        <button ref={tabRef0} onClick={() => navigate("/")} style={tabStyle(isSnapshot)}>Snapshot</button>
+        <button ref={tabRef1} onClick={() => navigate("/dashboard")} style={tabStyle(isDashboard)}>Dashboard</button>
+        {/* Sliding indicator */}
+        <div style={{
+          position: "absolute",
+          bottom: 0,
+          left: indicator.left,
+          width: indicator.width,
+          height: 2.5,
+          borderRadius: 2,
+          background: COLORS.blue,
+          transition: "left 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+          pointerEvents: "none",
+        }} />
+      </div>
+      {/* Role badge + profile — right */}
+      <div style={{ position: "absolute", right: 18, top: 0, bottom: 0, display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{
+          fontSize: 11, fontWeight: 600, textTransform: "capitalize",
+          color: COLORS.blue, background: COLORS.blueSoft,
+          padding: "4px 12px", borderRadius: 8,
+          border: `1px solid ${COLORS.blueBorder}`,
+        }}>
+          {isAdmin ? "Admin" : "Advisor"}
+        </span>
+        <UserButton
+          appearance={{
+            elements: {
+              avatarBox: { width: 30, height: 30 },
+            },
+          }}
+        />
+      </div>
+    </nav>
+  );
+}
+
 function AuthenticatedApp() {
   const { user } = useUser();
   const navigate = useNavigate();
@@ -262,35 +351,38 @@ function AuthenticatedApp() {
   const userImageUrl = user?.imageUrl || "";
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <QuotifyHome
-            isAdmin={isAdmin}
-            onOpenActivity={() => navigate("/dashboard")}
+    <>
+      <TopNav isAdmin={isAdmin} />
+      <div style={{ paddingTop: 48 }}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <QuotifyHome
+                isAdmin={isAdmin}
+              />
+            }
           />
-        }
-      />
-      <Route
-        path="/dashboard"
-        element={
-          <AdminDashboard
-            onBack={() => navigate("/")}
-            isAdmin={isAdmin}
-            currentUserName={userName}
-            currentUserEmail={userEmail}
-            currentUserImageUrl={userImageUrl}
+          <Route
+            path="/dashboard"
+            element={
+              <AdminDashboard
+                isAdmin={isAdmin}
+                currentUserName={userName}
+                currentUserEmail={userEmail}
+                currentUserImageUrl={userImageUrl}
+              />
+            }
           />
-        }
-      />
-      <Route
-        path="/dashboard/memory"
-        element={
-          <ChatMemoryPage onBack={() => navigate("/dashboard")} />
-        }
-      />
-    </Routes>
+          <Route
+            path="/dashboard/memory"
+            element={
+              <ChatMemoryPage onBack={() => navigate("/dashboard")} />
+            }
+          />
+        </Routes>
+      </div>
+    </>
   );
 }
 

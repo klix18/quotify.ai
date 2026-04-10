@@ -1,5 +1,5 @@
 import React from "react";
-import { UserButton, useUser, useAuth } from "@clerk/clerk-react";
+import { useUser, useAuth } from "@clerk/clerk-react";
 import COLORS from "./colors";
 import { trackEvent, getManualFieldNames } from "./trackEvent";
 import { INSURANCE_OPTIONS } from "./configs/insuranceOptions";
@@ -34,7 +34,7 @@ import { triggerSparkleFlow } from "./sparkleFlow";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-export default function QuotifyHome({ isAdmin, onOpenActivity }) {
+export default function QuotifyHome({ isAdmin }) {
   const { user } = useUser();
   const { getToken } = useAuth();
   const [selectedInsurance, setSelectedInsurance] = React.useState("homeowners");
@@ -1670,7 +1670,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
   return (
     <div
       style={{
-        height: "100vh",
+        height: "calc(100vh - 48px)",
         overflow: "hidden",
         background: "#EFF2F7",
         fontFamily: "Poppins, sans-serif",
@@ -1688,7 +1688,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
         style={{
           display: "grid",
           gridTemplateColumns: "320px minmax(0, 1fr)",
-          height: "100vh",
+          height: "100%",
           position: "relative",
         }}
       >
@@ -1701,7 +1701,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
           style={{
             position: "relative",
             borderRight: "1px solid rgba(180,200,230,0.3)",
-            height: "100vh",
+            height: "100%",
             boxSizing: "border-box",
             minHeight: 0,
             overflow: "hidden",
@@ -1724,29 +1724,11 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
               height: "100%",
               boxSizing: "border-box",
               paddingBottom: 18,
-              overflowY: "auto",
+              overflow: "hidden",
               justifyContent: "flex-start",
             }}
           >
-          <div style={{ padding: "6px 4px 10px 4px" }}>
-            <img
-              src="/Combination_Blue_Medium.png"
-              alt="Sizemore Insurance"
-              style={{ height: 30, marginBottom: 12 }}
-            />
-
-            <div
-              style={{
-                fontFamily: "SentientCustom, Georgia, serif",
-                fontSize: 34,
-                lineHeight: 0.95,
-                letterSpacing: "-0.05em",
-                marginBottom: 8,
-              }}
-            >
-              The Sizemore Snapshot
-            </div>
-
+          <div style={{ padding: "2px 4px 6px 4px" }}>
             <div
               style={{
                 fontSize: 13,
@@ -1754,7 +1736,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
                 lineHeight: 1.45,
               }}
             >
-              AI quote intake, extraction, review, and download in one workspace.
+              AI quote intake, extraction, review,{"\n"}and download in one place.
             </div>
           </div>
 
@@ -2125,104 +2107,33 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
             </div>
           </SidebarBlock>
 
-          {/* Profile */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "0 4px",
-              marginTop: "auto",
-              flexShrink: 0,
-            }}
-          >
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: { width: 32, height: 32 },
-                },
-              }}
-            />
-            <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.mutedText, flex: 1 }}>
-              {user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account"}
-            </div>
-            <button
-              onClick={onOpenActivity}
-              style={{
-                background: COLORS.blueSoft,
-                color: COLORS.blue,
-                border: `1px solid ${COLORS.blueBorder}`,
-                borderRadius: 8,
-                padding: "5px 12px",
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: "Poppins, sans-serif",
-              }}
-            >
-              Activity
-            </button>
-          </div>
           </div>
         </aside>
 
         <main
           style={{
             minWidth: 0,
-            height: "100vh",
+            height: "100%",
             display: "flex",
             flexDirection: "column",
             position: "relative",
             overflow: "hidden",
           }}
         >
-          <GlassPanel borderRadius={0} style={{ flex: "0 0 auto", zIndex: 1, borderBottom: `1px solid rgba(23,101,212,0.06)` }}>
-            <div style={{ padding: "22px 28px 18px 28px" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 20,
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontFamily: "Poppins, sans-serif",
-                    fontSize: 20,
-                    fontWeight: 600,
-                    lineHeight: 1.2,
-                    letterSpacing: "0",
-                    color: COLORS.black,
-                    marginBottom: 4,
-                  }}
-                >
-                  {selectedInsurance === "homeowners"
-                    ? "Homeowners Insurance Quote"
-                    : selectedInsurance === "auto"
-                      ? "Auto Insurance Quote"
-                      : selectedInsurance === "dwelling"
-                        ? "Dwelling Insurance Quote"
-                        : selectedInsurance === "commercial"
-                          ? "Commercial Insurance Quote"
-                          : selectedInsurance === "bundle"
-                            ? "Bundle Insurance Quote"
-                            : "Insurance Quote"}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: COLORS.mutedText,
-                    fontWeight: 400,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  The Sizemore Snapshot is an AI and can make mistakes. Please verify fields yourself, especially when marked "Double Check".
-                </div>
-              </div>
-
+          {/* Floating Create Quote button — fixed top-right with blur aura */}
+          <div style={{
+            position: "absolute", top: 16, right: 28, zIndex: 20,
+            pointerEvents: "auto",
+          }}>
+            <div style={{ position: "relative" }}>
+              {/* Blur halo behind button */}
+              <div style={{
+                position: "absolute", inset: -60, borderRadius: 80,
+                backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
+                maskImage: "radial-gradient(ellipse at center, black 30%, transparent 65%)",
+                WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 65%)",
+                pointerEvents: "none",
+              }} />
               <button
                 ref={generateBtnRef}
                 type="button"
@@ -2233,6 +2144,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
                 }}
                 onMouseLeave={() => setIsGenerateHovered(false)}
                 style={{
+                  position: "relative",
                   background: allReady ? COLORS.blue : COLORS.disabledBg,
                   color: allReady ? COLORS.white : COLORS.disabledText,
                   border: `1px solid ${allReady ? COLORS.blue : COLORS.disabledBg}`,
@@ -2254,8 +2166,7 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
                 {isGenerating ? "Creating..." : "Create Quote"}
               </button>
             </div>
-            </div>
-          </GlassPanel>
+          </div>
 
           <div
             style={{
@@ -2267,6 +2178,53 @@ export default function QuotifyHome({ isAdmin, onOpenActivity }) {
               zIndex: 1,
             }}
           >
+            {/* Insurance type title — scrolls with content, matches BigSectionHeader style */}
+            {(() => {
+              const opt = INSURANCE_OPTIONS.find(o => o.key === selectedInsurance);
+              const label = opt?.label?.replace(" (Beta)", "") || selectedInsurance;
+              const icon = opt?.icon;
+              return (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 6,
+                }}>
+                  {icon && (
+                    <img
+                      src={icon}
+                      alt={label}
+                      style={{ width: 28, height: 28, objectFit: "contain" }}
+                    />
+                  )}
+                  <div style={{
+                    fontFamily: "SentientCustom, Georgia, serif",
+                    fontSize: 26,
+                    lineHeight: 1,
+                    letterSpacing: "-0.03em",
+                    color: COLORS.blue,
+                  }}>
+                    {label}
+                  </div>
+                  <div style={{
+                    flex: 1,
+                    height: 1,
+                    background: `linear-gradient(90deg, ${COLORS.blueBorder}, transparent)`,
+                    marginLeft: 8,
+                  }} />
+                </div>
+              );
+            })()}
+            <div style={{
+              fontSize: 12,
+              color: COLORS.mutedText,
+              fontWeight: 400,
+              lineHeight: 1.4,
+              marginBottom: 22,
+              maxWidth: 600,
+            }}>
+              The Sizemore Snapshot is an AI and can make mistakes. Please verify fields yourself, especially when marked "Double Check".
+            </div>
             {selectedInsurance === "homeowners" ? (
               <HomeownersPanel
                 form={homeownersForm}
@@ -2411,6 +2369,8 @@ function UnavailablePanel({ label }) {
 }
 
 function SidebarBlock({ title, status, children, style = {} }) {
+  const borderRadius = 18;
+
   return (
     <div
       style={{
@@ -2418,7 +2378,7 @@ function SidebarBlock({ title, status, children, style = {} }) {
         backdropFilter: "blur(20px) saturate(1.6)",
         WebkitBackdropFilter: "blur(20px) saturate(1.6)",
         border: "1px solid rgba(180,200,230,0.3)",
-        borderRadius: 18,
+        borderRadius,
         padding: 14,
         boxShadow: "inset 0 1.5px 0 0 rgba(255,255,255,0.9)",
         ...style,
