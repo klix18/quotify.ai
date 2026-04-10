@@ -43,18 +43,23 @@ function GlassPanel({ children, borderRadius = 24, style = {} }) {
 }
 
 /* ── Hover Button ────────────────────────────────────────────── */
-/* ── Blur Aura — lightweight frosted halo behind fixed header items ── */
-/* Replaced 8 nested backdropFilter rings with a single radial-gradient
-   background that simulates the same soft halo without any blur
-   compositing. This eliminates 8 × backdrop-filter layers per instance. */
-function BlurAura({ children, spread = 60, style = {} }) {
+/* ── Blur Aura — frosted halo behind fixed header items ──────── */
+/* Single backdrop-filter layer with a soft radial mask that fades
+   outward. Safe to use real blur here because the nav is position:
+   fixed — its backdrop only recomputes on orb movement (mouse),
+   not on scroll like the GlassPanels were.                        */
+function BlurAura({ children, spread = 60, blur = 22, style = {} }) {
+  const mask = `radial-gradient(ellipse at center, black 40%, transparent 72%)`;
   return (
     <div style={{ position: "relative", ...style }}>
       <div style={{
         position: "absolute",
         top: -spread, left: -spread, right: -spread, bottom: -spread,
         borderRadius: 14 + spread,
-        background: "radial-gradient(ellipse at center, rgba(235,242,255,0.85) 0%, rgba(235,242,255,0.5) 40%, transparent 70%)",
+        backdropFilter: `blur(${blur}px)`,
+        WebkitBackdropFilter: `blur(${blur}px)`,
+        maskImage: mask,
+        WebkitMaskImage: mask,
         pointerEvents: "none",
         zIndex: 0,
       }} />
