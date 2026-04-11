@@ -77,10 +77,16 @@ VEHICLE_PREMIUM_KEYS = [
     "towing_premium",
 ]
 
-PAYMENT_PLAN_KEYS = ["down_payment", "amount_per_installment", "eft_reduces_fee"]
-PLAN_NAMES = ["full_pay", "semi_annual", "quarterly", "monthly"]
+FULL_PAY_KEYS = ["full_pay_amount", "eft_reduces_fee"]
+INSTALLMENT_PLAN_KEYS = ["down_payment"]
+INSTALLMENT_PLAN_NAMES = ["semi_annual", "quarterly", "monthly"]
+PLAN_NAMES = ["full_pay"] + INSTALLMENT_PLAN_NAMES
 PIF_DISCOUNT_KEYS = ["gross_premium", "discount_amount", "net_pay_in_full"]
 PREMIUM_SUMMARY_KEYS = ["total_premium", "paid_in_full_discount", "total_pay_in_full"]
+
+
+def _plan_keys(plan: str) -> list:
+    return FULL_PAY_KEYS if plan == "full_pay" else INSTALLMENT_PLAN_KEYS
 
 
 # ── Gemini structured-output schema (Pass 2) ────────────────────
@@ -147,13 +153,18 @@ AUTO_SCHEMA = {
         "payment_options": {
             "type": "object",
             "properties": {
+                "full_pay": {
+                    "type": "object",
+                    "properties": {k: {"type": "string"} for k in FULL_PAY_KEYS},
+                    "required": FULL_PAY_KEYS,
+                },
                 **{
                     plan: {
                         "type": "object",
-                        "properties": {k: {"type": "string"} for k in PAYMENT_PLAN_KEYS},
-                        "required": PAYMENT_PLAN_KEYS,
+                        "properties": {k: {"type": "string"} for k in INSTALLMENT_PLAN_KEYS},
+                        "required": INSTALLMENT_PLAN_KEYS,
                     }
-                    for plan in PLAN_NAMES
+                    for plan in INSTALLMENT_PLAN_NAMES
                 },
                 "paid_in_full_discount": {
                     "type": "object",
@@ -294,10 +305,13 @@ COVERAGES  (policy-level limits & deductibles – one value each, NOT per-vehicl
 • towing_limit       – Towing & Labor / Roadside limit. "N/A" if absent.
 
 PAYMENT OPTIONS
-For each plan (full_pay, semi_annual, quarterly, monthly):
-• down_payment           – required down payment amount.
-• amount_per_installment – per-installment amount.
-• eft_reduces_fee        – "Yes", "No", or the reduced amount if shown.
+full_pay (the pay-in-full option):
+• full_pay_amount  – the single full-pay amount the insured would pay if
+                     they pay the entire policy term up front.
+• eft_reduces_fee  – "Yes", "No", or the reduced amount if shown for EFT/
+                     Auto-Pay on the full-pay plan.
+For each installment plan (semi_annual, quarterly, monthly):
+• down_payment     – required down payment amount.
 Use "" for any plan or field not offered in the quote.
 
 paid_in_full_discount (only populate if the carrier offers a pay-in-full
@@ -369,10 +383,11 @@ For vehicles, use numbered keys:
   vehicle_1_garaging_zip_county, vehicle_1_subtotal
   vehicle_2_year_make_model_trim, ...
 
-For payment plans (full_pay, semi_annual, quarterly, monthly):
-  full_pay_down_payment, full_pay_amount_per_installment, full_pay_eft_reduces_fee
-  monthly_down_payment, monthly_amount_per_installment, monthly_eft_reduces_fee
-  ...
+For payment plans:
+  full_pay_full_pay_amount, full_pay_eft_reduces_fee
+  semi_annual_down_payment
+  quarterly_down_payment
+  monthly_down_payment
 
 Rules:
 - Skip fields you cannot identify.
@@ -446,7 +461,7 @@ def normalize_auto_result(parsed: dict) -> tuple:
     po = parsed.get("payment_options") or {}
     for plan in PLAN_NAMES:
         p = po.get(plan) or {}
-        po[plan] = {k: p.get(k, "") for k in PAYMENT_PLAN_KEYS}
+        po[plan] = {k: p.get(k, "") for k in _plan_keys(plan)}
     pif = po.get("paid_in_full_discount") or {}
     po["paid_in_full_discount"] = {k: pif.get(k, "") for k in PIF_DISCOUNT_KEYS}
     # Set show flag if any PIF discount data was extracted
@@ -555,11 +570,13 @@ def extract_quick_pass_lines(text: str) -> dict:
             })
         result["vehicles"] = vehicles
 
-    # Payment options (prefixed: full_pay_down_payment, monthly_amount_per_installment, etc.)
+    # Payment options (prefixed by plan name).
+    # full_pay  → full_pay_full_pay_amount, full_pay_eft_reduces_fee
+    # installments → <plan>_down_payment
     payment_options = {}
     for plan in PLAN_NAMES:
         plan_data = {}
-        for pk in PAYMENT_PLAN_KEYS:
+        for pk in _plan_keys(plan):
             combo_key = f"{plan}_{pk}"
             if combo_key in raw:
                 plan_data[pk] = raw[combo_key]

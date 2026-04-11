@@ -40,6 +40,9 @@ def get_gemini_client() -> genai.Client:
 
 ALL_HOMEOWNERS_KEYS = [
     "total_premium",
+    "quote_date",
+    "quote_effective_date",
+    "quote_expiration_date",
     "dwelling",
     "other_structures",
     "personal_property",
@@ -62,6 +65,9 @@ HOMEOWNERS_SCHEMA = {
     "type": "object",
     "properties": {
         "total_premium": {"type": "string"},
+        "quote_date": {"type": "string"},
+        "quote_effective_date": {"type": "string"},
+        "quote_expiration_date": {"type": "string"},
         "dwelling": {"type": "string"},
         "other_structures": {"type": "string"},
         "personal_property": {"type": "string"},
@@ -91,6 +97,9 @@ HOMEOWNERS_SCHEMA = {
     },
     "required": [
         "total_premium",
+        "quote_date",
+        "quote_effective_date",
+        "quote_expiration_date",
         "dwelling",
         "other_structures",
         "personal_property",
@@ -121,6 +130,10 @@ Rules:
   Example: "2% - $3,076".
 - replacement_cost_on_contents must be "Yes", "No", or "".
 - 25_extended_replacement_cost must be "Yes", "No", or "".
+- quote_date is the date the quote was generated/prepared (e.g., "10/01/2026").
+- quote_effective_date is when the policy/quote becomes effective.
+- quote_expiration_date is when the quote expires (often 30-60 days after the quote date).
+- Format dates as MM/DD/YYYY when possible. If only a partial date is shown, return what is present.
 - Do not infer advisor info unless clearly present.
 - client_address should be a single line string.
 - Use the quote's actual insured / prepared-for person as client_name, not the agency.
@@ -156,6 +169,9 @@ Rules:
 - One field per line
 - Only use these field keys:
   total_premium
+  quote_date
+  quote_effective_date
+  quote_expiration_date
   dwelling
   other_structures
   personal_property
