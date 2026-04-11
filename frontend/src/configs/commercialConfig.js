@@ -2,6 +2,9 @@
 export const COMMERCIAL_POLICY_FIELDS = [
   ["policy_term", "Policy Term"],
   ["total_premium", "Total Annual Premium"],
+  ["quote_date", "Quote Date"],
+  ["quote_effective_date", "Quote Effective Date"],
+  ["quote_expiration_date", "Quote Expiration Date"],
   ["additional_premiums_taxes_fees", "Additional Premiums, Taxes & Fees"],
 ];
 
@@ -117,6 +120,9 @@ export const EMPTY_COMMERCIAL_FORM = {
   // S1: Commercial Policy
   policy_term: "",
   total_premium: "",
+  quote_date: "",
+  quote_effective_date: "",
+  quote_expiration_date: "",
   additional_premiums_taxes_fees: "",
 
   // S1b: Client Information

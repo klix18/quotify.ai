@@ -339,8 +339,8 @@ export default function AutoPanel({
     const plan = form.payment_options?.[planKey] || {};
     const planFields = fieldsForPaymentPlan(planKey);
     // Full Pay shows 2 fields side-by-side (span 6 each); installment plans
-    // show only one Required Down Payment field at half-width.
-    const cellSpan = planKey === "full_pay" ? 6 : 6;
+    // show 4 fields in a single row (span 3 each on a 12-col grid).
+    const cellSpan = planKey === "full_pay" ? 6 : 3;
     return (
       <SubCard key={planKey} title={planLabel}>
         <div

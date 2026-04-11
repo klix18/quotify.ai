@@ -305,11 +305,13 @@ export default function DwellingPanel({
         {DWELLING_PAYMENT_PLAN_TYPES.map(([planKey, planLabel]) => {
           const plan = form.payment_plans?.[planKey] || {};
           const planFields = dwellingFieldsForPaymentPlan(planKey);
+          // Full Pay → 2 fields side-by-side (span 6); installments → 4 fields (span 3)
+          const cellStyle = planKey === "full_pay" ? cell6 : cell3;
           return (
             <SubCard key={planKey} title={planLabel}>
               <div style={gridRow}>
                 {planFields.map(([field, label]) => (
-                  <div key={field} style={cell6}>
+                  <div key={field} style={cellStyle}>
                     <FieldControl
                       fieldKey={`payment_plans.${planKey}.${field}`}
                       label={label}

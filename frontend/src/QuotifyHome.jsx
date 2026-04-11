@@ -2127,19 +2127,24 @@ export default function QuotifyHome({ isAdmin }) {
             overflow: "hidden",
           }}
         >
-          {/* Floating Create Quote button — fixed top-right with blur aura */}
+          {/* Floating Create Proposal button — fixed top-right with dashboard-style BlurAura */}
           <div style={{
             position: "absolute", top: 16, right: 28, zIndex: 20,
             pointerEvents: "auto",
           }}>
             <div style={{ position: "relative" }}>
-              {/* Blur halo behind button */}
+              {/* Blur halo behind button — matches AdminDashboard BlurAura
+                  (spread=60, blur=22, radial mask 40%→72%, radius 14+spread). */}
               <div style={{
-                position: "absolute", inset: -60, borderRadius: 80,
-                backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
-                maskImage: "radial-gradient(ellipse at center, black 30%, transparent 65%)",
-                WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 65%)",
+                position: "absolute",
+                top: -60, left: -60, right: -60, bottom: -60,
+                borderRadius: 74,
+                backdropFilter: "blur(22px)",
+                WebkitBackdropFilter: "blur(22px)",
+                maskImage: "radial-gradient(ellipse at center, black 40%, transparent 72%)",
+                WebkitMaskImage: "radial-gradient(ellipse at center, black 40%, transparent 72%)",
                 pointerEvents: "none",
+                zIndex: 0,
               }} />
               <button
                 ref={generateBtnRef}
@@ -2152,12 +2157,13 @@ export default function QuotifyHome({ isAdmin }) {
                 onMouseLeave={() => setIsGenerateHovered(false)}
                 style={{
                   position: "relative",
+                  zIndex: 1,
                   background: allReady ? COLORS.blue : COLORS.disabledBg,
                   color: allReady ? COLORS.white : COLORS.disabledText,
                   border: `1px solid ${allReady ? COLORS.blue : COLORS.disabledBg}`,
                   borderRadius: 14,
                   height: 48,
-                  width: 160,
+                  width: 180,
                   padding: 0,
                   fontSize: 14,
                   fontWeight: 600,
@@ -2170,7 +2176,7 @@ export default function QuotifyHome({ isAdmin }) {
                   flexShrink: 0,
                 }}
               >
-                {isGenerating ? "Creating..." : "Create Quote"}
+                {isGenerating ? "Creating..." : "Create Proposal"}
               </button>
             </div>
           </div>

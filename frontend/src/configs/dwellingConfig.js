@@ -102,9 +102,9 @@ export const DWELLING_PAYMENT_PLAN_TYPES = [
 ];
 
 // Full Pay shows a single full-pay amount + the EFT/Auto-Pay flag.
-// Installment plans (2-Pay, 4-Pay, Monthly, …) only show the required
-// down payment for now. Per-installment amounts/fees will be re-added
-// when wiring fillers/HTML.
+// Installment plans (2-Pay, 4-Pay, Monthly, …) show the required down
+// payment, the per-installment amount, the number of installments, and
+// the EFT/Auto-Pay reduces-fee flag.
 export const DWELLING_FULL_PAY_FIELDS = [
   ["full_pay_amount", "Full Pay Amount"],
   ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
@@ -112,6 +112,9 @@ export const DWELLING_FULL_PAY_FIELDS = [
 
 export const DWELLING_INSTALLMENT_PLAN_FIELDS = [
   ["down_payment", "Required Down Payment"],
+  ["amount_per_installment", "Amount per Installment"],
+  ["number_of_installments", "Number of Installments"],
+  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
 
 // Back-compat alias — defaults to installment fields.
@@ -160,6 +163,9 @@ const emptyDwellingFullPayPlan = () => ({
 
 const emptyDwellingInstallmentPlan = () => ({
   down_payment: "",
+  amount_per_installment: "",
+  number_of_installments: "",
+  eft_reduces_fee: "",
 });
 
 export const EMPTY_DWELLING_FORM = {

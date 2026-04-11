@@ -114,9 +114,9 @@ export const AUTO_COVERAGE_PREMIUM_MAP = {
 
 // ─── Section 6: Payment Options ──────────────────────────────────
 // Full Pay has its own fields (a single full-pay amount + EFT discount flag).
-// Installment plans (Semi-Annual, Quarterly, Monthly, …) only show the
-// required down payment for now. Per-installment amounts and counts will
-// be added later when we wire up the fillers/HTML.
+// Installment plans (Semi-Annual, Quarterly, Monthly, …) show the required
+// down payment, the per-installment amount, the number of installments, and
+// the EFT/Auto-Pay reduces-fee flag.
 export const FULL_PAY_FIELDS = [
   ["full_pay_amount", "Full Pay Amount"],
   ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
@@ -124,6 +124,9 @@ export const FULL_PAY_FIELDS = [
 
 export const INSTALLMENT_PLAN_FIELDS = [
   ["down_payment", "Required Down Payment"],
+  ["amount_per_installment", "Amount per Installment"],
+  ["number_of_installments", "Number of Installments"],
+  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
 
 // Back-compat alias — defaults to installment fields. Anything that
@@ -155,6 +158,9 @@ const emptyFullPayPlan = () => ({
 
 const emptyInstallmentPlan = () => ({
   down_payment: "",
+  amount_per_installment: "",
+  number_of_installments: "",
+  eft_reduces_fee: "",
 });
 
 // ─── Complete Empty Form ─────────────────────────────────────────

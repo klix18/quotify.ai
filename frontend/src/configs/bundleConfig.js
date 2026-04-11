@@ -5,6 +5,9 @@ export const BUNDLE_POLICY_FIELDS = [
   ["bundle_total_premium", "Total Premium (Home + Auto)"],
   ["home_premium", "Homeowners Premium"],
   ["auto_premium", "Auto Premium"],
+  ["quote_date", "Quote Date"],
+  ["quote_effective_date", "Quote Effective Date"],
+  ["quote_expiration_date", "Quote Expiration Date"],
 ];
 
 // ─── Section 1b: Client Information ──────────────────────────────
@@ -130,11 +133,23 @@ export const BUNDLE_AUTO_COVERAGE_FIELDS = [
 ];
 
 // ─── Auto Payment Options ────────────────────────────────────────
-export const BUNDLE_PAYMENT_PLAN_FIELDS = [
-  ["down_payment", "Required Down Payment"],
-  ["amount_per_installment", "Amount per Installment"],
+// Full Pay shows a single full-pay amount + EFT/Auto-Pay flag.
+// Installment plans show the required down payment, the per-installment
+// amount, the number of installments, and the EFT/Auto-Pay flag.
+export const BUNDLE_FULL_PAY_FIELDS = [
+  ["full_pay_amount", "Full Pay Amount"],
   ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
+
+export const BUNDLE_INSTALLMENT_PLAN_FIELDS = [
+  ["down_payment", "Required Down Payment"],
+  ["amount_per_installment", "Amount per Installment"],
+  ["number_of_installments", "Number of Installments"],
+  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
+];
+
+// Back-compat alias.
+export const BUNDLE_PAYMENT_PLAN_FIELDS = BUNDLE_INSTALLMENT_PLAN_FIELDS;
 
 export const BUNDLE_PAYMENT_PLANS = [
   ["full_pay", "Full Pay"],
@@ -143,15 +158,26 @@ export const BUNDLE_PAYMENT_PLANS = [
   ["monthly", "Monthly"],
 ];
 
+export const bundleFieldsForPaymentPlan = (planKey) =>
+  planKey === "full_pay"
+    ? BUNDLE_FULL_PAY_FIELDS
+    : BUNDLE_INSTALLMENT_PLAN_FIELDS;
+
 export const BUNDLE_PAID_IN_FULL_DISCOUNT_FIELDS = [
   ["gross_premium", "Gross Premium (Before Discount)"],
   ["discount_amount", "Discount Amount"],
   ["net_pay_in_full", "Net Pay-in-Full Total"],
 ];
 
-const emptyPaymentPlan = () => ({
+const emptyBundleFullPayPlan = () => ({
+  full_pay_amount: "",
+  eft_reduces_fee: "",
+});
+
+const emptyBundleInstallmentPlan = () => ({
   down_payment: "",
   amount_per_installment: "",
+  number_of_installments: "",
   eft_reduces_fee: "",
 });
 
@@ -164,6 +190,9 @@ export const EMPTY_BUNDLE_FORM = {
   bundle_total_premium: "",
   home_premium: "",
   auto_premium: "",
+  quote_date: "",
+  quote_effective_date: "",
+  quote_expiration_date: "",
 
   // S1b: Client Information
   client_name: "",
@@ -221,10 +250,10 @@ export const EMPTY_BUNDLE_FORM = {
 
   // ── Auto Payment Options ──
   payment_options: {
-    full_pay: emptyPaymentPlan(),
-    semi_annual: emptyPaymentPlan(),
-    quarterly: emptyPaymentPlan(),
-    monthly: emptyPaymentPlan(),
+    full_pay: emptyBundleFullPayPlan(),
+    semi_annual: emptyBundleInstallmentPlan(),
+    quarterly: emptyBundleInstallmentPlan(),
+    monthly: emptyBundleInstallmentPlan(),
     show_paid_in_full_discount: false,
     paid_in_full_discount: {
       gross_premium: "",

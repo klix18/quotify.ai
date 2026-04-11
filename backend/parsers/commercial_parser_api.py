@@ -48,6 +48,9 @@ POLICY_KEYS = [
     "client_phone",
     "policy_term",
     "total_premium",
+    "quote_date",
+    "quote_effective_date",
+    "quote_expiration_date",
     "additional_premiums_taxes_fees",
 ]
 
@@ -216,6 +219,16 @@ POLICY & CLIENT INFORMATION
 • policy_term     – the overall policy term period, e.g. "06/20/2025 - 06/20/2026".
 • total_premium   – the total annual premium across ALL lines of business combined.
     ALIASES: "Total Premium", "Total Annual Premium", "Grand Total"
+• quote_date            – the date the quote / proposal was generated or printed.
+                          Use MM/DD/YYYY format.
+    ALIASES: "Quote Date", "Proposal Date", "Print Date", "Prepared On"
+• quote_effective_date  – the date coverage / the policy becomes effective.
+                          Use MM/DD/YYYY format.
+    ALIASES: "Effective Date", "Inception Date", "Policy Effective Date"
+• quote_expiration_date – the date the quote expires (or the policy expiration
+                          date if a quote-specific expiration is not shown).
+                          Use MM/DD/YYYY format.
+    ALIASES: "Expiration Date", "Quote Expires", "Policy Expiration Date"
 • additional_premiums_taxes_fees – additional premiums, taxes, and fees total.
     ALIASES: "Additional Premiums, Taxes, Fees", "Taxes & Fees"
 
@@ -350,7 +363,8 @@ field_key: value
 
 Use these keys for policy & client info:
   named_insured, mailing_address, client_email, client_phone,
-  policy_term, total_premium, additional_premiums_taxes_fees
+  policy_term, total_premium, quote_date, quote_effective_date,
+  quote_expiration_date, additional_premiums_taxes_fees
 
 For agent/broker info:
   agent_name, agent_address, agent_phone, agent_email

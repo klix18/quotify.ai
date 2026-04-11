@@ -78,7 +78,12 @@ VEHICLE_PREMIUM_KEYS = [
 ]
 
 FULL_PAY_KEYS = ["full_pay_amount", "eft_reduces_fee"]
-INSTALLMENT_PLAN_KEYS = ["down_payment"]
+INSTALLMENT_PLAN_KEYS = [
+    "down_payment",
+    "amount_per_installment",
+    "number_of_installments",
+    "eft_reduces_fee",
+]
 INSTALLMENT_PLAN_NAMES = ["semi_annual", "quarterly", "monthly"]
 PLAN_NAMES = ["full_pay"] + INSTALLMENT_PLAN_NAMES
 PIF_DISCOUNT_KEYS = ["gross_premium", "discount_amount", "net_pay_in_full"]
@@ -311,7 +316,13 @@ full_pay (the pay-in-full option):
 • eft_reduces_fee  – "Yes", "No", or the reduced amount if shown for EFT/
                      Auto-Pay on the full-pay plan.
 For each installment plan (semi_annual, quarterly, monthly):
-• down_payment     – required down payment amount.
+• down_payment            – required down payment amount.
+• amount_per_installment  – the amount due per installment after the down
+                            payment (e.g. monthly payment).
+• number_of_installments  – the count of installments after the down payment
+                            (digits only, e.g. "5", "11").
+• eft_reduces_fee         – "Yes", "No", or the reduced amount if EFT/Auto-Pay
+                            reduces installment fees on this plan.
 Use "" for any plan or field not offered in the quote.
 
 paid_in_full_discount (only populate if the carrier offers a pay-in-full
@@ -385,9 +396,9 @@ For vehicles, use numbered keys:
 
 For payment plans:
   full_pay_full_pay_amount, full_pay_eft_reduces_fee
-  semi_annual_down_payment
-  quarterly_down_payment
-  monthly_down_payment
+  semi_annual_down_payment, semi_annual_amount_per_installment, semi_annual_number_of_installments, semi_annual_eft_reduces_fee
+  quarterly_down_payment, quarterly_amount_per_installment, quarterly_number_of_installments, quarterly_eft_reduces_fee
+  monthly_down_payment, monthly_amount_per_installment, monthly_number_of_installments, monthly_eft_reduces_fee
 
 Rules:
 - Skip fields you cannot identify.
@@ -572,7 +583,8 @@ def extract_quick_pass_lines(text: str) -> dict:
 
     # Payment options (prefixed by plan name).
     # full_pay  → full_pay_full_pay_amount, full_pay_eft_reduces_fee
-    # installments → <plan>_down_payment
+    # installments → <plan>_down_payment, <plan>_amount_per_installment,
+    #                <plan>_number_of_installments, <plan>_eft_reduces_fee
     payment_options = {}
     for plan in PLAN_NAMES:
         plan_data = {}

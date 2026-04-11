@@ -89,7 +89,12 @@ DEDUCTIBLE_V2_KEYS = ["deductible", "wind_hail_included"]
 PREMIUM_KEYS = ["total_premium", "pay_in_full_discount", "total_if_paid_in_full"]
 
 FULL_PAY_KEYS = ["full_pay_amount", "eft_reduces_fee"]
-INSTALLMENT_PLAN_KEYS = ["down_payment"]
+INSTALLMENT_PLAN_KEYS = [
+    "down_payment",
+    "amount_per_installment",
+    "number_of_installments",
+    "eft_reduces_fee",
+]
 INSTALLMENT_PLAN_NAMES = ["two_pay", "four_pay", "monthly"]
 PLAN_NAMES = ["full_pay"] + INSTALLMENT_PLAN_NAMES
 # Back-compat — used by anything that still iterates a single
@@ -345,7 +350,13 @@ full_pay (the pay-in-full option):
 • eft_reduces_fee   – "Yes", "No", or the reduced amount if shown for EFT/
                       Auto-Pay on the full-pay plan.
 For each installment plan (two_pay, four_pay, monthly):
-• down_payment      – required down payment amount.
+• down_payment            – required down payment amount.
+• amount_per_installment  – the amount due per installment after the down
+                            payment.
+• number_of_installments  – the count of installments after the down payment
+                            (digits only, e.g. "1", "3", "9").
+• eft_reduces_fee         – "Yes", "No", or the reduced amount if EFT/Auto-Pay
+                            reduces installment fees on this plan.
 Use "" for any plan or field not offered in the quote.
 ALIASES: "Full Plan"/"Full Pay"/"Pay in Full" → full_pay;
          "2-Pay Plan"/"Two Pay" → two_pay;
@@ -459,9 +470,9 @@ For premium summary (per property):
 
 For payment plans:
   full_pay_full_pay_amount, full_pay_eft_reduces_fee
-  two_pay_down_payment
-  four_pay_down_payment
-  monthly_down_payment
+  two_pay_down_payment, two_pay_amount_per_installment, two_pay_number_of_installments, two_pay_eft_reduces_fee
+  four_pay_down_payment, four_pay_amount_per_installment, four_pay_number_of_installments, four_pay_eft_reduces_fee
+  monthly_down_payment, monthly_amount_per_installment, monthly_number_of_installments, monthly_eft_reduces_fee
 
 Field aliases to look for:
 - dwelling_limit: "Dwelling", "Coverage A", "Coverage A - Dwelling"
@@ -699,7 +710,8 @@ def extract_quick_pass_lines(text: str) -> dict:
 
     # Payment plans (prefixed by plan name).
     # full_pay  → full_pay_full_pay_amount, full_pay_eft_reduces_fee
-    # installments → <plan>_down_payment
+    # installments → <plan>_down_payment, <plan>_amount_per_installment,
+    #                <plan>_number_of_installments, <plan>_eft_reduces_fee
     payment_plans = {}
     for plan in PLAN_NAMES:
         plan_data = {}

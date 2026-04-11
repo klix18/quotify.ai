@@ -20,15 +20,10 @@ async def list_documents(
     offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
 ):
-    """List PDF metadata for the current user (admins see all)."""
-    metadata = user.get("metadata", {})
-    is_admin = metadata.get("role") == "admin"
-
-    # Non-admin users can only see their own documents
-    user_id_filter = "" if is_admin else user["user_id"]
-
+    """List PDF metadata. Both admins and advisors can see all documents
+    so they can download PDFs that appear in the snapshot history."""
     docs = await list_pdfs(
-        user_id=user_id_filter,
+        user_id="",  # no per-user filter
         insurance_type=insurance_type,
         doc_type=doc_type,
         limit=limit,
@@ -49,16 +44,11 @@ async def download_document(
     doc_id: str,
     user: dict = Depends(get_current_user),
 ):
-    """Download a stored PDF by its ID."""
+    """Download a stored PDF by its ID. Both admins and advisors can download
+    any PDF (needed for advisor access to the snapshot history)."""
     doc = await get_pdf(doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-
-    # Non-admin users can only download their own documents
-    metadata = user.get("metadata", {})
-    is_admin = metadata.get("role") == "admin"
-    if not is_admin and doc["user_id"] != user["user_id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     return Response(
         content=doc["file_data"],

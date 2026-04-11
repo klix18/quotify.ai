@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 
-from auth import require_admin
+from auth import get_current_user
 from database import get_pool
 from skills import build_skills_prompt
 from chat_memory import (
@@ -411,7 +411,7 @@ def _build_system_prompt(
 async def get_greeting(
     period: str = Query("month", regex="^(week|month|6months|year|all)$"),
     user_name: str = Query(""),
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
     """Get the auto-greeting for the admin chatbot (no LLM call)."""
     pool = await get_pool()
@@ -480,21 +480,21 @@ async def get_greeting(
 @router.post("/session/start")
 async def start_session(
     request: Request,
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
     """Start a new chat session."""
     body = await request.json()
     session_id = body.get("session_id", str(uuid4()))
     user_name = body.get("user_name", "Admin")
 
-    session = create_session(session_id, admin["user_id"], user_name)
+    session = create_session(session_id, user["user_id"], user_name)
     return {"session_id": session["session_id"], "status": "created"}
 
 
 @router.post("/session/end")
 async def end_session_endpoint(
     request: Request,
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
     """End a chat session (triggers summarization + memory extraction)."""
     body = await request.json()
@@ -508,7 +508,7 @@ async def end_session_endpoint(
 
 @router.get("/memory/sessions")
 async def list_sessions(
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
     """List all saved chat session summaries for the current user."""
     pool = await get_pool()
@@ -518,27 +518,27 @@ async def list_sessions(
             FROM chat_session_memories
             WHERE user_id = $1 AND summary IS NOT NULL AND summary != ''
             ORDER BY started_at DESC
-        """, admin["user_id"])
+        """, user["user_id"])
     return [dict(r) for r in rows]
 
 
 @router.delete("/memory/sessions/{session_id}")
 async def delete_session(
     session_id: str,
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
     """Delete a saved chat session summary."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute("""
             DELETE FROM chat_session_memories WHERE id = $1 AND user_id = $2
-        """, session_id, admin["user_id"])
+        """, session_id, user["user_id"])
     return {"deleted": result == "DELETE 1"}
 
 
 @router.get("/memory/memories")
 async def list_memories(
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
     """List all long-term memories for the current user."""
     pool = await get_pool()
@@ -548,21 +548,21 @@ async def list_memories(
             FROM chat_insight_memories
             WHERE user_id = $1
             ORDER BY created_at DESC
-        """, admin["user_id"])
+        """, user["user_id"])
     return [dict(r) for r in rows]
 
 
 @router.delete("/memory/memories/{memory_id}")
 async def delete_memory(
     memory_id: str,
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
     """Delete a long-term memory."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute("""
             DELETE FROM chat_insight_memories WHERE id = $1 AND user_id = $2
-        """, memory_id, admin["user_id"])
+        """, memory_id, user["user_id"])
     return {"deleted": result == "DELETE 1"}
 
 
@@ -571,7 +571,7 @@ async def delete_memory(
 @router.post("/message")
 async def chat_message(
     request: Request,
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
 ):
     """
     Send a message to the chatbot. Returns SSE stream of tokens.
@@ -588,15 +588,15 @@ async def chat_message(
     # Ensure session exists
     session = get_session(session_id)
     if session is None:
-        session = create_session(session_id, admin["user_id"], body.get("user_name", "Admin"))
+        session = create_session(session_id, user["user_id"], body.get("user_name", "Admin"))
 
     # Add user message to session
     add_message(session_id, "user", message)
 
     # Fetch all context in parallel
     data_context = await _fetch_full_context(period)
-    memories = await get_active_memories(admin["user_id"])
-    summaries = await get_recent_summaries(admin["user_id"])
+    memories = await get_active_memories(user["user_id"])
+    summaries = await get_recent_summaries(user["user_id"])
 
     # Build system prompt
     system_prompt = _build_system_prompt(data_context, memories, summaries)

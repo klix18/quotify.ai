@@ -10,7 +10,7 @@ import {
   DRIVER_GENDER_OPTIONS,
   BUNDLE_AUTO_COVERAGE_FIELDS,
   BUNDLE_PAYMENT_PLANS,
-  BUNDLE_PAYMENT_PLAN_FIELDS,
+  bundleFieldsForPaymentPlan,
   BUNDLE_PAID_IN_FULL_DISCOUNT_FIELDS,
 } from "../configs/bundleConfig";
 
@@ -382,11 +382,14 @@ export default function BundlePanel({
      ============================================================ */
   const paymentPlansBlock = BUNDLE_PAYMENT_PLANS.map(([planKey, planLabel]) => {
     const plan = form.payment_options?.[planKey] || {};
+    const planFields = bundleFieldsForPaymentPlan(planKey);
+    // Full Pay → 2 fields side-by-side (span 6); installments → 4 fields (span 3)
+    const cellStyle = planKey === "full_pay" ? cell6 : cell3;
     return (
       <SubCard key={planKey} title={planLabel}>
         <div style={gridRow}>
-          {BUNDLE_PAYMENT_PLAN_FIELDS.map(([fk, fl]) => (
-            <div key={fk} style={cell4}>
+          {planFields.map(([fk, fl]) => (
+            <div key={fk} style={cellStyle}>
               <FieldControl
                 fieldKey={`payment_options.${planKey}.${fk}`}
                 label={fl}

@@ -50,6 +50,9 @@ BUNDLE_POLICY_KEYS = [
     "bundle_total_premium",
     "home_premium",
     "auto_premium",
+    "quote_date",
+    "quote_effective_date",
+    "quote_expiration_date",
     "client_name",
     "client_address",
     "client_email",
@@ -108,9 +111,22 @@ VEHICLE_PREMIUM_KEYS = [
     "towing_premium",
 ]
 
-PAYMENT_PLAN_KEYS = ["down_payment", "amount_per_installment", "eft_reduces_fee"]
-PLAN_NAMES = ["full_pay", "semi_annual", "quarterly", "monthly"]
+FULL_PAY_KEYS = ["full_pay_amount", "eft_reduces_fee"]
+INSTALLMENT_PLAN_KEYS = [
+    "down_payment",
+    "amount_per_installment",
+    "number_of_installments",
+    "eft_reduces_fee",
+]
+INSTALLMENT_PLAN_NAMES = ["semi_annual", "quarterly", "monthly"]
+PLAN_NAMES = ["full_pay"] + INSTALLMENT_PLAN_NAMES
+# Back-compat: union of all keys (used by old callers if any)
+PAYMENT_PLAN_KEYS = FULL_PAY_KEYS + INSTALLMENT_PLAN_KEYS
 PIF_DISCOUNT_KEYS = ["gross_premium", "discount_amount", "net_pay_in_full"]
+
+
+def _plan_keys(plan: str) -> list:
+    return FULL_PAY_KEYS if plan == "full_pay" else INSTALLMENT_PLAN_KEYS
 
 ALL_FLAT_KEYS = BUNDLE_POLICY_KEYS + HOMEOWNERS_COVERAGE_KEYS + AUTO_POLICY_KEYS
 
@@ -126,6 +142,11 @@ BUNDLE_SCHEMA = {
         "bundle_total_premium": {"type": "string"},
         "home_premium": {"type": "string"},
         "auto_premium": {"type": "string"},
+
+        # Bundle quote dates
+        "quote_date": {"type": "string"},
+        "quote_effective_date": {"type": "string"},
+        "quote_expiration_date": {"type": "string"},
 
         # Client info
         "client_name": {"type": "string"},
@@ -211,13 +232,18 @@ BUNDLE_SCHEMA = {
         "payment_options": {
             "type": "object",
             "properties": {
+                "full_pay": {
+                    "type": "object",
+                    "properties": {k: {"type": "string"} for k in FULL_PAY_KEYS},
+                    "required": FULL_PAY_KEYS,
+                },
                 **{
                     plan: {
                         "type": "object",
-                        "properties": {k: {"type": "string"} for k in PAYMENT_PLAN_KEYS},
-                        "required": PAYMENT_PLAN_KEYS,
+                        "properties": {k: {"type": "string"} for k in INSTALLMENT_PLAN_KEYS},
+                        "required": INSTALLMENT_PLAN_KEYS,
                     }
-                    for plan in PLAN_NAMES
+                    for plan in INSTALLMENT_PLAN_NAMES
                 },
                 "paid_in_full_discount": {
                     "type": "object",
@@ -237,6 +263,7 @@ BUNDLE_SCHEMA = {
     },
     "required": [
         "bundle_total_premium", "home_premium", "auto_premium",
+        "quote_date", "quote_effective_date", "quote_expiration_date",
         "client_name", "client_address", "client_email", "client_phone",
         "dwelling", "other_structures", "personal_property", "loss_of_use",
         "personal_liability", "medical_payments",
@@ -260,6 +287,14 @@ Return a single JSON object matching the schema provided.
 • bundle_total_premium – the grand total premium for both home + auto combined.
 • home_premium         – the homeowners portion of the premium.
 • auto_premium         – the auto portion of the premium.
+
+─── BUNDLE QUOTE DATES ──────────────────────────────────────────
+• quote_date            – print/quote date in MM/DD/YYYY (the date the quote
+  was generated). Aliases: "Quote Date", "Print Date", "Date".
+• quote_effective_date  – effective/start date in MM/DD/YYYY.
+• quote_expiration_date – expiration/end date in MM/DD/YYYY.
+If the bundle quote shows separate home vs auto dates, use the bundle-level
+or homeowners dates here. (Auto-specific dates still go in auto_quote_*.)
 
 ─── CLIENT INFORMATION ──────────────────────────────────────────
 • client_name    – the insured / applicant / named insured, NOT the agency.
@@ -298,8 +333,16 @@ Return a single JSON object matching the schema provided.
   rental_limit, towing_limit.
 
 ─── AUTO PAYMENT OPTIONS ────────────────────────────────────────
-For each plan (full_pay, semi_annual, quarterly, monthly):
-  down_payment, amount_per_installment, eft_reduces_fee.
+For full_pay:
+  full_pay_amount        – total amount due if paying in full.
+  eft_reduces_fee        – "Yes"/"No" or "" if not stated.
+For each installment plan (semi_annual, quarterly, monthly):
+  down_payment           – the required down payment for that plan.
+  amount_per_installment – amount due per installment after the down payment.
+  number_of_installments – count of installments after the down payment
+                           (digits only, e.g. "5", "11").
+  eft_reduces_fee        – "Yes"/"No" or the reduced amount if EFT reduces
+                           installment fees on this plan.
 paid_in_full_discount: gross_premium, discount_amount, net_pay_in_full.
 
 ─── CONFIDENCE SCORING ──────────────────────────────────────────
@@ -325,6 +368,7 @@ field_key: value
 
 Use these keys for bundle policy and homeowners:
   bundle_total_premium, home_premium, auto_premium,
+  quote_date, quote_effective_date, quote_expiration_date,
   client_name, client_address, client_email, client_phone,
   dwelling, other_structures, personal_property, loss_of_use,
   personal_liability, medical_payments, replacement_cost_on_contents,
@@ -350,9 +394,11 @@ For vehicles, use numbered keys:
   vehicle_1_garaging_zip_county, vehicle_1_subtotal
   vehicle_2_year_make_model_trim, ...
 
-For payment plans (full_pay, semi_annual, quarterly, monthly):
-  full_pay_down_payment, full_pay_amount_per_installment, full_pay_eft_reduces_fee
-  monthly_down_payment, ...
+For payment plans:
+  full_pay_full_pay_amount, full_pay_eft_reduces_fee
+  semi_annual_down_payment, semi_annual_amount_per_installment, semi_annual_number_of_installments, semi_annual_eft_reduces_fee
+  quarterly_down_payment, quarterly_amount_per_installment, quarterly_number_of_installments, quarterly_eft_reduces_fee
+  monthly_down_payment, monthly_amount_per_installment, monthly_number_of_installments, monthly_eft_reduces_fee
 
 Rules:
 - Skip fields you cannot identify.
@@ -436,7 +482,7 @@ def normalize_bundle_result(parsed: dict) -> tuple:
     po = parsed.get("payment_options") or {}
     for plan in PLAN_NAMES:
         p = po.get(plan) or {}
-        po[plan] = {k: p.get(k, "") for k in PAYMENT_PLAN_KEYS}
+        po[plan] = {k: p.get(k, "") for k in _plan_keys(plan)}
     pif = po.get("paid_in_full_discount") or {}
     po["paid_in_full_discount"] = {k: pif.get(k, "") for k in PIF_DISCOUNT_KEYS}
     has_pif = any(po["paid_in_full_discount"][k] for k in PIF_DISCOUNT_KEYS)
@@ -549,7 +595,7 @@ def extract_quick_pass_lines(text: str) -> dict:
     payment_options = {}
     for plan in PLAN_NAMES:
         plan_data = {}
-        for pk in PAYMENT_PLAN_KEYS:
+        for pk in _plan_keys(plan):
             combo_key = f"{plan}_{pk}"
             if combo_key in raw:
                 plan_data[pk] = raw[combo_key]

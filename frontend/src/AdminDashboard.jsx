@@ -19,10 +19,10 @@ const PERIODS = [
    background. The old blur was re-computed every scroll frame because
    fixed-position animated orbs behind the panels kept changing the
    backdrop content, causing content inside cards to flash/reload.    */
-function GlassPanel({ children, borderRadius = 24, style = {} }) {
+function GlassPanel({ children, borderRadius = 24, style = {}, allowOverflow = false }) {
   return (
     <div style={{
-      position: "relative", borderRadius, overflow: "hidden", border: "none",
+      position: "relative", borderRadius, overflow: allowOverflow ? "visible" : "hidden", border: "none",
       background: "rgba(255,255,255,0.88)",
       boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 4px 24px rgba(23,101,212,0.04)",
       ...style,
@@ -147,12 +147,12 @@ function ConfirmModal({ message, onConfirm, onCancel, confirming, confirmLabel =
 }
 
 /* ── Stat Card ───────────────────────────────────────────────── */
-function StatCard({ label, value, sub, color }) {
+function StatCard({ label, value, sub, color, style = {} }) {
   const [hovered, setHovered] = React.useState(false);
   return (
-    <GlassPanel borderRadius={18} style={{ flex: "1 1 200px", minWidth: 170, transition: "all 200ms ease", boxShadow: hovered ? `0 8px 32px rgba(23,101,212,0.10)` : "none" }}>
+    <GlassPanel borderRadius={18} style={{ flex: "1 1 200px", minWidth: 170, transition: "all 200ms ease", boxShadow: hovered ? `0 8px 32px rgba(23,101,212,0.10)` : "none", ...style }}>
       <div
-        style={{ padding: "24px 28px" }}
+        style={{ padding: "24px 28px", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center" }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
@@ -167,12 +167,12 @@ function StatCard({ label, value, sub, color }) {
 }
 
 /* ── Section wrapper with glass ──────────────────────────────── */
-function Section({ title, children, action = null, expandable = false, defaultExpanded = false }) {
+function Section({ title, children, action = null, expandable = false, defaultExpanded = false, allowOverflow = false, tightHeader = false }) {
   const [expanded, setExpanded] = React.useState(defaultExpanded);
   return (
-    <GlassPanel>
+    <GlassPanel allowOverflow={allowOverflow}>
       <div style={{ padding: "24px 28px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: tightHeader ? 6 : 18 }}>
           <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, lineHeight: 1, letterSpacing: "-0.02em", color: COLORS.black }}>{title}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {action}
@@ -202,27 +202,222 @@ function Section({ title, children, action = null, expandable = false, defaultEx
   );
 }
 
-/* ── Insurance type bar chart ────────────────────────────────── */
+/* ── Insurance type pie chart ────────────────────────────────── */
 function InsuranceBreakdown({ data, limit = 15 }) {
+  const [hovered, setHovered] = React.useState(null); // hovered slice type
+  const [tooltipPos, setTooltipPos] = React.useState({ x: 0, y: 0 });
+  const containerRef = React.useRef(null);
+
   if (!data || Object.keys(data).length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13 }}>No data yet</div>;
   const total = Object.values(data).reduce((a, b) => a + b, 0);
   const typeColors = INSURANCE_COLORS;
+  const entries = Object.entries(data)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, limit);
+
+  // SVG donut geometry — bigger
+  const size = 240;
+  const cx = size / 2;
+  const cy = size / 2;
+  const rOuter = 108;
+  const rInner = 68;
+
+  const polar = (r, angle) => {
+    const rad = (angle - 90) * (Math.PI / 180);
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  };
+
+  const arcPath = (startAngle, endAngle) => {
+    // Handle full-circle case (single slice at 100%) by drawing two halves
+    if (endAngle - startAngle >= 360) {
+      const [x1, y1] = polar(rOuter, 0);
+      const [x2, y2] = polar(rOuter, 180);
+      const [x3, y3] = polar(rInner, 180);
+      const [x4, y4] = polar(rInner, 0);
+      return [
+        `M ${x1} ${y1}`,
+        `A ${rOuter} ${rOuter} 0 0 1 ${x2} ${y2}`,
+        `A ${rOuter} ${rOuter} 0 0 1 ${x1} ${y1}`,
+        `M ${x4} ${y4}`,
+        `A ${rInner} ${rInner} 0 0 0 ${x3} ${y3}`,
+        `A ${rInner} ${rInner} 0 0 0 ${x4} ${y4}`,
+        "Z",
+      ].join(" ");
+    }
+    const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+    const [sxO, syO] = polar(rOuter, startAngle);
+    const [exO, eyO] = polar(rOuter, endAngle);
+    const [sxI, syI] = polar(rInner, endAngle);
+    const [exI, eyI] = polar(rInner, startAngle);
+    return [
+      `M ${sxO} ${syO}`,
+      `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${exO} ${eyO}`,
+      `L ${sxI} ${syI}`,
+      `A ${rInner} ${rInner} 0 ${largeArc} 0 ${exI} ${eyI}`,
+      "Z",
+    ].join(" ");
+  };
+
+  // Build slices
+  let cursor = 0;
+  const slices = entries.map(([type, count]) => {
+    const pct = total > 0 ? count / total : 0;
+    const sweep = pct * 360;
+    const start = cursor;
+    const end = cursor + sweep;
+    cursor = end;
+    return {
+      type,
+      count,
+      pct,
+      startAngle: start,
+      endAngle: Math.min(end, start + 359.999),
+      d: arcPath(start, Math.min(end, start + 359.999)),
+      color: typeColors[type] || COLORS.blue,
+    };
+  });
+
+  const hoveredSlice = hovered ? slices.find((s) => s.type === hovered) : null;
+
+  const handleSliceMove = (type, e) => {
+    setHovered(type);
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setTooltipPos({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+    }
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {Object.entries(data).sort(([, a], [, b]) => b - a).slice(0, limit).map(([type, count]) => {
-        const pct = total > 0 ? (count / total) * 100 : 0;
-        return (
-          <div key={type}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.black, textTransform: "capitalize" }}>{type}</span>
-              <span style={{ fontSize: 13, fontWeight: 400, color: COLORS.mutedText }}>{count} ({pct.toFixed(1)}%)</span>
+    <div
+      ref={containerRef}
+      style={{ display: "flex", alignItems: "center", gap: 28, flexWrap: "wrap", position: "relative" }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0, overflow: "visible" }}>
+        {slices.map((s) => {
+          const isHovered = hovered === s.type;
+          const isDimmed = hovered && !isHovered;
+          // Slight outward "explode" on hover
+          const midAngle = (s.startAngle + s.endAngle) / 2;
+          const rad = (midAngle - 90) * (Math.PI / 180);
+          const dx = isHovered ? Math.cos(rad) * 6 : 0;
+          const dy = isHovered ? Math.sin(rad) * 6 : 0;
+          return (
+            <path
+              key={s.type}
+              d={s.d}
+              fill={s.color}
+              stroke="#fff"
+              strokeWidth="1.5"
+              style={{
+                transform: `translate(${dx}px, ${dy}px)`,
+                transformOrigin: `${cx}px ${cy}px`,
+                opacity: isDimmed ? 0.45 : 1,
+                transition: "transform 180ms ease, opacity 180ms ease",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => handleSliceMove(s.type, e)}
+              onMouseMove={(e) => handleSliceMove(s.type, e)}
+              onMouseLeave={() => setHovered(null)}
+            />
+          );
+        })}
+        <text
+          x={cx}
+          y={cy - 4}
+          textAnchor="middle"
+          style={{ fontSize: 28, fontWeight: 700, fontFamily: "Poppins, sans-serif", fill: COLORS.black, pointerEvents: "none" }}
+        >
+          {hoveredSlice ? hoveredSlice.count : total}
+        </text>
+        <text
+          x={cx}
+          y={cy + 18}
+          textAnchor="middle"
+          style={{ fontSize: 11, fontWeight: 500, fontFamily: "Poppins, sans-serif", fill: COLORS.mutedText, textTransform: "uppercase", letterSpacing: "0.06em", pointerEvents: "none" }}
+        >
+          {hoveredSlice ? hoveredSlice.type : "Total"}
+        </text>
+      </svg>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 180, alignItems: "flex-start" }}>
+        {slices.map((s) => {
+          const isHovered = hovered === s.type;
+          const isDimmed = hovered && !isHovered;
+          return (
+            <div
+              key={s.type}
+              onMouseEnter={() => setHovered(s.type)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "12px minmax(90px, auto) auto auto",
+                alignItems: "center",
+                columnGap: 8,
+                padding: "3px 6px",
+                borderRadius: 6,
+                opacity: isDimmed ? 0.45 : 1,
+                background: isHovered ? "rgba(23,101,212,0.06)" : "transparent",
+                transition: "opacity 180ms ease, background 180ms ease",
+                cursor: "default",
+              }}
+            >
+              <span style={{
+                display: "inline-block", width: 10, height: 10, borderRadius: 3,
+                background: s.color,
+              }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.black, textTransform: "capitalize", whiteSpace: "nowrap" }}>
+                {s.type}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.black, fontVariantNumeric: "tabular-nums", textAlign: "right", paddingLeft: 16 }}>
+                {s.count}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: COLORS.mutedText, fontVariantNumeric: "tabular-nums", textAlign: "right", minWidth: 46 }}>
+                {(s.pct * 100).toFixed(1)}%
+              </span>
             </div>
-            <div style={{ height: 8, borderRadius: 4, background: "rgba(0,0,0,0.04)", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${pct}%`, borderRadius: 4, background: typeColors[type] || COLORS.blue, transition: "width 0.4s ease" }} />
-            </div>
+          );
+        })}
+      </div>
+
+      {/* Floating hover tooltip — matches the timeline style */}
+      {hoveredSlice && (
+        <div
+          style={{
+            position: "absolute",
+            left: tooltipPos.x + 14,
+            top: tooltipPos.y - 14,
+            background: "rgba(15,23,42,0.96)",
+            color: "#fff",
+            padding: "10px 14px",
+            borderRadius: 10,
+            fontSize: 12,
+            fontFamily: "Poppins, sans-serif",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
+            zIndex: 50,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{
+              display: "inline-block", width: 9, height: 9, borderRadius: 2,
+              background: hoveredSlice.color,
+            }} />
+            <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{hoveredSlice.type}</span>
           </div>
-        );
-      })}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, fontVariantNumeric: "tabular-nums" }}>
+            <span style={{ opacity: 0.7 }}>Count</span>
+            <span style={{ fontWeight: 700 }}>{hoveredSlice.count}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, fontVariantNumeric: "tabular-nums" }}>
+            <span style={{ opacity: 0.7 }}>Share</span>
+            <span style={{ fontWeight: 700 }}>{(hoveredSlice.pct * 100).toFixed(1)}%</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -567,14 +762,15 @@ function QuotesTimeline({ events, period }) {
 
 /* ── Clickable User Row ──────────────────────────────────────── */
 function RoleBadge({ role }) {
-  const isAdmin = role === "admin";
+  // Both admin and advisor badges use the brand blue palette so the
+  // advisor experience matches the admin's on their own profile.
   return (
     <span style={{
       display: "inline-block", padding: "3px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600,
       textTransform: "capitalize",
-      background: isAdmin ? "rgba(23,101,212,0.08)" : "rgba(31,157,85,0.08)",
-      color: isAdmin ? COLORS.blue : COLORS.green,
-      border: `1px solid ${isAdmin ? "rgba(23,101,212,0.15)" : "rgba(31,157,85,0.15)"}`,
+      background: "rgba(23,101,212,0.08)",
+      color: COLORS.blue,
+      border: `1px solid rgba(23,101,212,0.15)`,
     }}>{role || "advisor"}</span>
   );
 }
@@ -623,8 +819,6 @@ function UserRow({ user, role, onClick, rank, imageUrl }) {
       </td>
       <td style={{ padding: "12px 14px", textAlign: "center" }}><RoleBadge role={role} /></td>
       <td style={{ padding: "12px 14px", textAlign: "right", fontWeight: 700, color: COLORS.black }}>{user.total}</td>
-      <td style={{ padding: "12px 14px", textAlign: "right" }}>{user.quotes_created}</td>
-      <td style={{ padding: "12px 14px", textAlign: "right" }}>{user.pdfs_uploaded}</td>
       <td style={{ padding: "12px 14px", textAlign: "right", fontWeight: 600, color: "#0B91E6" }}>{user.days_active || 0}</td>
       <td style={{ padding: "12px 14px", textAlign: "right", color: COLORS.mutedText }}>
         <span style={{ fontSize: 16 }}>&#8250;</span>
@@ -633,27 +827,53 @@ function UserRow({ user, role, onClick, rank, imageUrl }) {
   );
 }
 
-function UserTable({ users, clerkUsers, onSelectUser, limit = 15 }) {
-  // Merge analytics users with all Clerk users so everyone appears
+function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15 }) {
+  // Merge analytics users with all Clerk users so everyone appears.
+  // Use the CANONICAL Clerk user list (one entry per real Clerk account)
+  // — NOT Object.keys(clerkUsers), which contains lookup aliases (first-name,
+  // last-name, email, email-local-part) and would create phantom rows.
   const analyticsMap = {};
   for (const u of (users || [])) {
     analyticsMap[u.user_name] = u;
   }
-  // Build a deduplicated set of Clerk display names (skip first-name-only fallback keys)
-  const clerkDisplayNames = new Set();
-  for (const [name, info] of Object.entries(clerkUsers)) {
-    // Only include keys that look like full names (have a space) or match exactly a clerk user with that single name
-    if (name.includes(" ") || !Object.keys(clerkUsers).some((k) => k !== name && k.startsWith(name + " "))) {
-      clerkDisplayNames.add(name);
+  // Track which analytics rows we've already matched to a Clerk user so we
+  // don't render the same person twice (once under their analytics name and
+  // once under the canonical Clerk name if they differ by case/whitespace).
+  const matchedAnalyticsKeys = new Set();
+  for (const cu of (clerkUsersList || [])) {
+    const name = cu.displayName;
+    if (!name) continue;
+    // Find a matching analytics row via alias lookup so we don't add a
+    // duplicate entry when the stored user_name differs from the canonical
+    // display name (e.g. stored as email, stored lowercased, etc.).
+    let matchedKey = null;
+    if (analyticsMap[name]) {
+      matchedKey = name;
+    } else {
+      for (const akey of Object.keys(analyticsMap)) {
+        if (matchedAnalyticsKeys.has(akey)) continue;
+        const lookup = clerkUsers[akey] || clerkUsers[(akey || "").toLowerCase()];
+        if (lookup && lookup.id === cu.id) {
+          matchedKey = akey;
+          break;
+        }
+      }
     }
-  }
-  // Add any Clerk user not already in analytics
-  for (const name of clerkDisplayNames) {
-    if (!analyticsMap[name]) {
+    if (matchedKey) {
+      matchedAnalyticsKeys.add(matchedKey);
+    } else {
+      // Clerk user has no analytics activity yet — add a zero-row under
+      // the canonical display name.
       analyticsMap[name] = { user_name: name, total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0 };
+      matchedAnalyticsKeys.add(name);
     }
   }
-  const allUsers = Object.values(analyticsMap).sort((a, b) => b.total - a.total);
+  // Drop any analytics rows that couldn't be matched to a Clerk user at all
+  // (stale legacy data from deleted Clerk accounts). The admin dashboard
+  // should mirror the Clerk user list, not show ghosts.
+  const allUsers = Object.values(analyticsMap)
+    .filter((u) => matchedAnalyticsKeys.has(u.user_name))
+    .sort((a, b) => b.total - a.total);
 
   const th = { padding: "10px 14px", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" };
   return (
@@ -663,24 +883,30 @@ function UserTable({ users, clerkUsers, onSelectUser, limit = 15 }) {
           <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)` }}>
             <th style={{ ...th, textAlign: "left" }}>User</th>
             <th style={{ ...th, textAlign: "center" }}>Role</th>
-            <th style={{ ...th, textAlign: "right" }}>Total</th>
-            <th style={{ ...th, textAlign: "right" }}>Quotes</th>
-            <th style={{ ...th, textAlign: "right" }}>Uploads</th>
+            <th style={{ ...th, textAlign: "right" }}>PDFs Generated</th>
             <th style={{ ...th, textAlign: "right" }}>Days Active</th>
             <th style={{ ...th, textAlign: "right", width: 30 }}></th>
           </tr>
         </thead>
         <tbody>
-          {allUsers.slice(0, limit).map((u, idx) => (
-            <UserRow
-              key={u.user_name}
-              user={u}
-              role={clerkUsers[u.user_name]?.role || "advisor"}
-              onClick={() => onSelectUser(u.user_name)}
-              rank={idx + 1}
-              imageUrl={clerkUsers[u.user_name]?.image_url}
-            />
-          ))}
+          {allUsers.slice(0, limit).map((u, idx) => {
+            // Match Clerk records case-insensitively so single-name users
+            // (e.g. "jj") still resolve to the right role + avatar.
+            const cu =
+              clerkUsers[u.user_name] ||
+              clerkUsers[(u.user_name || "").toLowerCase()] ||
+              null;
+            return (
+              <UserRow
+                key={u.user_name}
+                user={u}
+                role={cu?.role || "advisor"}
+                onClick={() => onSelectUser(u.user_name)}
+                rank={idx + 1}
+                imageUrl={cu?.image_url}
+              />
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -785,7 +1011,8 @@ function RoleToggle({ clerkUserId, currentRole, getToken, onRoleChanged }) {
                 padding: "6px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600,
                 textTransform: "capitalize", cursor: saving ? "not-allowed" : "pointer",
                 transition: "all 200ms ease", border: "none",
-                background: active ? (r === "admin" ? COLORS.blue : COLORS.green) : "rgba(0,0,0,0.04)",
+                // Both advisor and admin use the brand blue when selected.
+                background: active ? COLORS.blue : "rgba(0,0,0,0.04)",
                 color: active ? COLORS.white : COLORS.mutedText,
               }}
             >{r}</button>
@@ -800,7 +1027,12 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
-  const clerkUser = clerkUsers[userName] || null;
+  // Look the user up by exact key first, then a case-insensitive fallback
+  // so single-name users (e.g. "jj") still get a Clerk record + role toggle.
+  const clerkUser =
+    clerkUsers[userName] ||
+    clerkUsers[(userName || "").toLowerCase()] ||
+    null;
 
   React.useEffect(() => {
     (async () => {
@@ -861,22 +1093,52 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
         </div>
       )}
 
-      {/* User stat cards */}
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <StatCard label="Total Events" value={data.total_events} color={COLORS.blue} />
-        <StatCard label="Quotes Created" value={data.quotes_created} color={COLORS.green} />
-        <StatCard label="PDFs Uploaded" value={data.pdfs_uploaded} />
-        <DaysActiveCard daysActive={data.days_active || 0} activeDates={data.active_dates || []} />
+      {/* Top row: stacked stats (PDFs Generated + Days Active) | Insurance Type Breakdown */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "stretch" }}>
+        <div style={{ display: "grid", gridTemplateRows: "1fr 1fr", gap: 20 }}>
+          <Section title="PDFs Generated" tightHeader>
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "flex-start",
+              justifyContent: "space-between", height: "100%", minHeight: 140,
+            }}>
+              <div style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 400 }}>
+                All tracked workflows
+              </div>
+              <div style={{
+                fontSize: 90, fontWeight: 700, color: COLORS.blue,
+                lineHeight: 0.82, fontFamily: "Poppins, sans-serif",
+                letterSpacing: "-0.04em", marginTop: "auto",
+              }}>
+                {data.total_events}
+              </div>
+            </div>
+          </Section>
+          <Section title="Days Active" tightHeader>
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "flex-start",
+              justifyContent: "space-between", height: "100%", minHeight: 140,
+            }}>
+              <div style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 400 }}>
+                Distinct days with activity
+              </div>
+              <div style={{
+                fontSize: 90, fontWeight: 700, color: "#0B91E6",
+                lineHeight: 0.82, fontFamily: "Poppins, sans-serif",
+                letterSpacing: "-0.04em", marginTop: "auto",
+              }}>
+                {data.days_active || 0}
+              </div>
+            </div>
+          </Section>
+        </div>
+        <Section title="Insurance Type Breakdown" allowOverflow>
+          <InsuranceBreakdown data={data.by_insurance_type} />
+        </Section>
       </div>
 
       {/* Quotes Timeline — personal stacked bar chart */}
-      <Section title="Quotes Generated">
+      <Section title="Quotes Generated" allowOverflow tightHeader>
         <QuotesTimeline events={data.recent_events} period={period} />
-      </Section>
-
-      {/* Insurance breakdown */}
-      <Section title="Insurance Type Breakdown">
-        <InsuranceBreakdown data={data.by_insurance_type} />
       </Section>
 
       {/* User snapshot history */}
@@ -936,11 +1198,14 @@ function UserSnapshotHistory({ events, getToken }) {
   });
 
   const filterSelect = {
-    padding: "4px 10px", height: 32, borderRadius: 8,
+    padding: "4px 10px", height: 32, width: 150, borderRadius: 8,
     border: `1px solid ${COLORS.borderGrey}`,
     background: "rgba(255,255,255,0.88)",
-    fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
+    fontSize: 11, lineHeight: "22px", fontFamily: "Poppins, sans-serif", fontWeight: 500,
     color: COLORS.black, cursor: "pointer",
+    boxSizing: "border-box",
+    margin: 0,
+    outline: "none",
   };
   const th = { padding: "8px 10px", color: COLORS.mutedText, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", textAlign: "left", whiteSpace: "nowrap" };
   const td = { padding: "8px 10px", fontSize: 12, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
@@ -954,7 +1219,7 @@ function UserSnapshotHistory({ events, getToken }) {
           value={clientQuery}
           onChange={(e) => setClientQuery(e.target.value)}
           placeholder="Search client…"
-          style={{ ...filterSelect, minWidth: 150, cursor: "text" }}
+          style={{ ...filterSelect, cursor: "text" }}
         />
         <select value={filterInsurance} onChange={(e) => setFilterInsurance(e.target.value)} style={filterSelect}>
           <option value="">All Insurance</option>
@@ -1086,11 +1351,14 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
   });
 
   const filterSelect = {
-    padding: "4px 10px", height: 32, borderRadius: 8,
+    padding: "4px 10px", height: 32, width: 150, borderRadius: 8,
     border: `1px solid ${COLORS.borderGrey}`,
     background: "rgba(255,255,255,0.88)",
-    fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
+    fontSize: 11, lineHeight: "22px", fontFamily: "Poppins, sans-serif", fontWeight: 500,
     color: COLORS.black, cursor: "pointer",
+    boxSizing: "border-box",
+    margin: 0,
+    outline: "none",
   };
 
   const th = { padding: "10px 14px", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", textAlign: "left" };
@@ -1117,7 +1385,6 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
           placeholder="Search client…"
           style={{
             ...filterSelect,
-            minWidth: 160,
             cursor: "text",
           }}
         />
@@ -1237,7 +1504,8 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
   const [resetting, setResetting] = React.useState(false);
   // Both admins and advisors start at the main dashboard
   const [selectedUser, setSelectedUser] = React.useState(null);
-  const [clerkUsers, setClerkUsers] = React.useState({});  // keyed by display name -> { id, role }
+  const [clerkUsers, setClerkUsers] = React.useState({});  // lookup map (includes alias keys) -> { id, role, email, image_url }
+  const [clerkUsersList, setClerkUsersList] = React.useState([]); // canonical one-entry-per-Clerk-user list: [{ id, role, email, image_url, displayName }]
   const navigate = useNavigate();
 
   // Mouse-tracking orbs
@@ -1341,13 +1609,39 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
       if (changesResp.ok) setManualChanges(await changesResp.json());
       if (usersResp.ok) {
         const usersData = await usersResp.json();
-        const map = {};
+        const map = {};        // alias lookup map — many keys point to the same info
+        const canonical = [];  // one entry per Clerk user, in canonical display-name form
         for (const u of usersData.users || []) {
-          const displayName = `${u.first_name} ${u.last_name}`.trim();
-          map[displayName] = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
-          if (u.first_name) map[u.first_name] = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
+          const info = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
+          const first = (u.first_name || "").trim();
+          const last = (u.last_name || "").trim();
+          // Canonical display name — must mirror what trackEvent records as
+          // user_name in analytics_events (see QuotifyHome.jsx):
+          //   fullName || `${firstName} ${lastName}` || email
+          const fullName = `${first} ${last}`.trim();
+          const displayName = fullName || u.email || "Unknown";
+          canonical.push({ ...info, displayName });
+
+          // Build every plausible ALIAS key the analytics_events.user_name might
+          // contain so the role-toggle lookup never silently misses a user
+          // (e.g. jj has only a first name and was missing his role toggle).
+          // These aliases are lookup-only — they must NOT leak into the
+          // user list rendered by UserTable (that uses `canonical`).
+          const candidateKeys = [
+            fullName,
+            first,
+            last,
+            u.email,
+            (u.email || "").split("@")[0],
+          ].filter(Boolean);
+          for (const key of candidateKeys) {
+            if (!map[key]) map[key] = info;
+            const lower = key.toLowerCase();
+            if (!map[lower]) map[lower] = info;
+          }
         }
         setClerkUsers(map);
+        setClerkUsersList(canonical);
       }
     } catch (e) {
       setError(e.message);
@@ -1503,29 +1797,41 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
             {/* AI Chatbot */}
             <ChatPanel period={period} userName={currentUserName} onOpenMemory={() => navigate("/dashboard/memory")} />
 
-            {/* Stat cards */}
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <StatCard label="Total Events" value={data.total_events} sub="All tracked workflows" color={COLORS.blue} />
-              <StatCard label="Quotes Created" value={data.total_quotes_created} sub="Generated PDFs" color={COLORS.green} />
-              <StatCard label="PDFs Uploaded" value={data.total_pdfs_uploaded} sub="Parsed uploads" />
+            {/* PDFs Generated + Insurance Type Leaderboard — 50/50 */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "stretch" }}>
+              <Section title="PDFs Generated" tightHeader>
+                <div style={{
+                  display: "flex", flexDirection: "column", alignItems: "flex-start",
+                  justifyContent: "space-between", minHeight: 240, height: "100%",
+                }}>
+                  <div style={{ fontSize: 13, color: COLORS.mutedText, fontWeight: 400 }}>
+                    All tracked workflows
+                  </div>
+                  <div style={{
+                    fontSize: 220, fontWeight: 700, color: COLORS.blue,
+                    lineHeight: 0.82, fontFamily: "Poppins, sans-serif",
+                    letterSpacing: "-0.04em", marginTop: "auto",
+                  }}>
+                    {data.total_events}
+                  </div>
+                </div>
+              </Section>
+              <Section title="Insurance Type Leaderboard" expandable allowOverflow>
+                {(expanded) => <InsuranceBreakdown data={data.usage_by_insurance_type} limit={expanded ? 15 : 5} />}
+              </Section>
             </div>
 
             {/* Quotes Timeline — stacked bar chart by insurance type */}
-            <Section title="Quotes Generated">
+            <Section title="Quotes Generated" allowOverflow tightHeader>
               <QuotesTimeline events={data.recent_events} period={period} />
             </Section>
 
-            {/* User Leaderboard — full width, prominent */}
-            <Section title="Team Leaderboard" expandable action={
-              <div style={{ fontSize: 12, color: COLORS.mutedText }}>Click a user for details</div>
-            }>
-              {(expanded) => <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} onSelectUser={setSelectedUser} limit={expanded ? 15 : 5} />}
-            </Section>
-
-            {/* Two-column: insurance breakdown + manual changes */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-              <Section title="Insurance Type Leaderboard" expandable>
-                {(expanded) => <InsuranceBreakdown data={data.usage_by_insurance_type} limit={expanded ? 15 : 5} />}
+            {/* Team Leaderboard + Manual Changes — side by side */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "stretch" }}>
+              <Section title="Team Leaderboard" expandable action={
+                <div style={{ fontSize: 12, color: COLORS.mutedText }}>Click a user for details</div>
+              }>
+                {(expanded) => <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} clerkUsersList={clerkUsersList} onSelectUser={setSelectedUser} limit={expanded ? 15 : 5} />}
               </Section>
               <Section title="Manual Changes Leaderboard" expandable>
                 {(expanded) => <ManualChangesLeaderboard data={manualChanges?.leaderboard} limit={expanded ? 15 : 5} />}
