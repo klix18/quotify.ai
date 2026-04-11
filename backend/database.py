@@ -50,8 +50,13 @@ async def init_db():
                 uploaded_pdf            TEXT NOT NULL DEFAULT '',
                 manually_changed_fields TEXT NOT NULL DEFAULT '',
                 created_quote           BOOLEAN NOT NULL DEFAULT FALSE,
-                generated_pdf           TEXT NOT NULL DEFAULT ''
+                generated_pdf           TEXT NOT NULL DEFAULT '',
+                client_name             TEXT NOT NULL DEFAULT ''
             );
+
+            -- Ensure client_name exists on pre-existing databases
+            ALTER TABLE analytics_events
+                ADD COLUMN IF NOT EXISTS client_name TEXT NOT NULL DEFAULT '';
 
             CREATE INDEX IF NOT EXISTS idx_events_created_at ON analytics_events (created_at);
             CREATE INDEX IF NOT EXISTS idx_events_user_name ON analytics_events (user_name);
@@ -229,6 +234,7 @@ async def log_event(
     manually_changed_fields: str = "",
     created_quote: bool = False,
     generated_pdf: str = "",
+    client_name: str = "",
 ):
     """Insert an analytics event row."""
     pool = await get_pool()
@@ -236,8 +242,8 @@ async def log_event(
         await conn.execute(
             """
             INSERT INTO analytics_events
-                (user_name, insurance_type, advisor, uploaded_pdf, manually_changed_fields, created_quote, generated_pdf)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                (user_name, insurance_type, advisor, uploaded_pdf, manually_changed_fields, created_quote, generated_pdf, client_name)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
             user_name,
             insurance_type,
@@ -246,4 +252,5 @@ async def log_event(
             manually_changed_fields,
             created_quote,
             generated_pdf,
+            client_name,
         )

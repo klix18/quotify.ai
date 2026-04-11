@@ -21,6 +21,7 @@ class TrackEventRequest(BaseModel):
     manually_changed_fields: str = ""  # comma-separated field names
     created_quote: bool = False
     generated_pdf: str = ""
+    client_name: str = ""
 
 
 @router.post("/api/track-event")
@@ -37,5 +38,6 @@ async def track_event(
         manually_changed_fields=payload.manually_changed_fields,
         created_quote=payload.created_quote,
         generated_pdf=payload.generated_pdf,
+        client_name=payload.client_name,
     )
     return {"status": "ok"}

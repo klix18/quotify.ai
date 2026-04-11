@@ -39,7 +39,7 @@ def _period_start(period: str) -> datetime:
 @router.get("/summary")
 async def get_analytics_summary(
     period: str = Query("month", regex="^(week|month|6months|year|all)$"),
-    _admin: dict = Depends(require_admin),
+    _user: dict = Depends(get_current_user),
 ):
     """Get aggregated analytics for the given time period."""
     pool = await get_pool()
@@ -95,11 +95,33 @@ async def get_analytics_summary(
         recent_rows = await conn.fetch("""
             SELECT
                 id, created_at, user_name, insurance_type, advisor,
-                uploaded_pdf, manually_changed_fields, created_quote, generated_pdf
+                uploaded_pdf, manually_changed_fields, created_quote, generated_pdf,
+                client_name
             FROM analytics_events
             WHERE created_at >= $1
             ORDER BY created_at DESC
             LIMIT 100
+        """, cutoff)
+
+        # Timeline — quotes per bucket, broken down by insurance type.
+        # Bucket granularity depends on period.
+        if period == "year":
+            bucket_sql = "DATE_TRUNC('month', created_at AT TIME ZONE 'America/New_York')"
+        elif period == "all":
+            bucket_sql = "DATE_TRUNC('year', created_at AT TIME ZONE 'America/New_York')"
+        elif period == "6months":
+            bucket_sql = "DATE_TRUNC('week', created_at AT TIME ZONE 'America/New_York')"
+        else:
+            bucket_sql = "DATE_TRUNC('day', created_at AT TIME ZONE 'America/New_York')"
+        timeline_rows = await conn.fetch(f"""
+            SELECT
+                {bucket_sql} AS bucket,
+                insurance_type,
+                COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created
+            FROM analytics_events
+            WHERE created_at >= $1
+            GROUP BY bucket, insurance_type
+            ORDER BY bucket ASC
         """, cutoff)
 
     return {
@@ -137,8 +159,17 @@ async def get_analytics_summary(
                 "manually_changed_fields": row["manually_changed_fields"],
                 "created_quote": row["created_quote"],
                 "generated_pdf": row["generated_pdf"],
+                "client_name": row["client_name"] or "",
             }
             for row in recent_rows
+        ],
+        "timeline": [
+            {
+                "bucket": row["bucket"].isoformat() if row["bucket"] else None,
+                "insurance_type": row["insurance_type"],
+                "quotes_created": row["quotes_created"],
+            }
+            for row in timeline_rows
         ],
     }
 
@@ -146,7 +177,7 @@ async def get_analytics_summary(
 @router.get("/manual-changes")
 async def get_manual_changes_leaderboard(
     period: str = Query("month", regex="^(week|month|6months|year|all)$"),
-    _admin: dict = Depends(require_admin),
+    _user: dict = Depends(get_current_user),
 ):
     """Get leaderboard of manually changed fields across all events."""
     pool = await get_pool()
@@ -181,7 +212,7 @@ async def get_manual_changes_leaderboard(
 async def get_user_detail(
     user_name: str,
     period: str = Query("month", regex="^(week|month|6months|year|all)$"),
-    _admin: dict = Depends(require_admin),
+    _user: dict = Depends(get_current_user),
 ):
     """Get detailed analytics for a specific user."""
     pool = await get_pool()
@@ -208,7 +239,8 @@ async def get_user_detail(
         recent_rows = await conn.fetch("""
             SELECT
                 id, created_at, insurance_type, advisor,
-                uploaded_pdf, manually_changed_fields, created_quote, generated_pdf
+                uploaded_pdf, manually_changed_fields, created_quote, generated_pdf,
+                client_name
             FROM analytics_events
             WHERE created_at >= $1 AND user_name = $2
             ORDER BY created_at DESC
@@ -221,6 +253,24 @@ async def get_user_detail(
             FROM analytics_events
             WHERE created_at >= $1 AND user_name = $2
             ORDER BY active_date DESC
+        """, cutoff, user_name)
+
+        # Timeline — quotes per bucket, broken down by insurance type (user-scoped).
+        if period == "year":
+            bucket_sql = "DATE_TRUNC('month', created_at AT TIME ZONE 'America/New_York')"
+        elif period == "all":
+            bucket_sql = "DATE_TRUNC('year', created_at AT TIME ZONE 'America/New_York')"
+        else:
+            bucket_sql = "DATE_TRUNC('day', created_at AT TIME ZONE 'America/New_York')"
+        timeline_rows = await conn.fetch(f"""
+            SELECT
+                {bucket_sql} AS bucket,
+                insurance_type,
+                COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created
+            FROM analytics_events
+            WHERE created_at >= $1 AND user_name = $2
+            GROUP BY bucket, insurance_type
+            ORDER BY bucket ASC
         """, cutoff, user_name)
 
     return {
@@ -242,8 +292,17 @@ async def get_user_detail(
                 "manually_changed_fields": row["manually_changed_fields"],
                 "created_quote": row["created_quote"],
                 "generated_pdf": row["generated_pdf"],
+                "client_name": row["client_name"] or "",
             }
             for row in recent_rows
+        ],
+        "timeline": [
+            {
+                "bucket": row["bucket"].isoformat() if row["bucket"] else None,
+                "insurance_type": row["insurance_type"],
+                "quotes_created": row["quotes_created"],
+            }
+            for row in timeline_rows
         ],
     }
 
@@ -317,7 +376,8 @@ async def get_my_stats(
         recent_rows = await conn.fetch("""
             SELECT
                 id, created_at, insurance_type, advisor,
-                uploaded_pdf, manually_changed_fields, created_quote, generated_pdf
+                uploaded_pdf, manually_changed_fields, created_quote, generated_pdf,
+                client_name
             FROM analytics_events
             WHERE created_at >= $1 AND user_name = $2
             ORDER BY created_at DESC
@@ -350,6 +410,7 @@ async def get_my_stats(
                 "manually_changed_fields": row["manually_changed_fields"],
                 "created_quote": row["created_quote"],
                 "generated_pdf": row["generated_pdf"],
+                "client_name": row["client_name"] or "",
             }
             for row in recent_rows
         ],

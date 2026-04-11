@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth import require_admin
+from auth import get_current_user, require_admin
 
 load_dotenv()
 
@@ -28,7 +28,7 @@ def _clerk_headers() -> dict:
 
 @router.get("")
 async def list_clerk_users(
-    _admin: dict = Depends(require_admin),
+    _user: dict = Depends(get_current_user),
 ):
     """List all Clerk users with their roles."""
     headers = _clerk_headers()
