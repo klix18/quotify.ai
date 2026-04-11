@@ -775,17 +775,27 @@ function RoleBadge({ role }) {
   );
 }
 
+// Brushed-metal gradients: diagonal 135deg with alternating highlight and
+// midtone stops to mimic the banding you get on polished metal.
 const RANK_COLORS = {
-  1: "linear-gradient(135deg, #8B6914, #D4AF37, #7A5521, #E0C252, #6B4A1A)",
-  2: "linear-gradient(135deg, #5A5A5A, #B8B8B8, #4A4A4A, #C4C4C4, #3D3D3D)",
-  3: "linear-gradient(135deg, #7A4B1A, #CD8D42, #6A3D12, #D4994A, #5C3D18)",
+  // Gold
+  1: "linear-gradient(135deg, #C89B2E, #F5D76E, #B8891E, #F0CB5A, #A67C1A)",
+  // Silver
+  2: "linear-gradient(135deg, #929292, #E3E3E3, #7E7E7E, #E8E8E8, #707070)",
+  // Bronze
+  3: "linear-gradient(135deg, #A66A28, #E5A568, #8B5A1E, #DB9A5C, #7C4A1C)",
 };
 
 function UserRow({ user, role, onClick, rank, imageUrl }) {
   const [hovered, setHovered] = React.useState(false);
   const rankGradient = RANK_COLORS[rank];
   const nameColor = rankGradient
-    ? { backgroundImage: rankGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
+    ? {
+        backgroundImage: rankGradient,
+        WebkitBackgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+        backgroundClip: "text",
+      }
     : { color: COLORS.black };
 
   return (
@@ -1089,7 +1099,10 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
         </div>
       ) : !isAdmin && (
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <RoleBadge role="advisor" />
+          {/* Show the VIEWED user's actual role, not a hardcoded "advisor".
+              An advisor peeking at another user's dashboard still needs to
+              see whether that user is an admin or advisor. */}
+          <RoleBadge role={clerkUser?.role || "advisor"} />
         </div>
       )}
 
