@@ -1,5 +1,8 @@
 export const HOMEOWNERS_FIELDS = [
     ["total_premium", "Total Premium"],
+    ["quote_date", "Quote Date"],
+    ["quote_effective_date", "Quote Effective Date"],
+    ["quote_expiration_date", "Quote Expiration Date"],
     ["dwelling", "Dwelling"],
     ["other_structures", "Other Structures"],
     ["personal_property", "Personal Property"],
@@ -45,21 +48,26 @@ export const HOMEOWNERS_FIELDS = [
   export const HOMEOWNERS_ROWS = [
     [
       { key: "total_premium", span: 3 },
+      { key: "quote_date", span: 3 },
+      { key: "quote_effective_date", span: 3 },
+      { key: "quote_expiration_date", span: 3 },
+    ],
+    [
       { key: "dwelling", span: 3 },
       { key: "other_structures", span: 3 },
       { key: "personal_property", span: 3 },
+      { key: "loss_of_use", span: 3 },
     ],
     [
-      { key: "loss_of_use", span: 3 },
       { key: "personal_liability", span: 3 },
       { key: "medical_payments", span: 3 },
       { key: "all_perils_deductible", span: 3 },
+      { key: "wind_hail_deductible", span: 3 },
     ],
     [
+      { key: "water_and_sewer_backup", span: 3 },
       { key: "replacement_cost_on_contents", span: 3 },
       { key: "25_extended_replacement_cost", span: 3 },
-      { key: "water_and_sewer_backup", span: 3 },
-      { key: "wind_hail_deductible", span: 3 },
     ],
     [
       { key: "client_name", span: 3 },

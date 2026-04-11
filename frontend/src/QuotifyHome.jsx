@@ -1555,6 +1555,12 @@ export default function QuotifyHome({ isAdmin }) {
         || (user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : null)
         || user?.primaryEmailAddress?.emailAddress
         || "Unknown";
+      // Pull client name out of whichever form corresponds to the selected insurance.
+      // Homeowners/auto/bundle use `client_name`; dwelling/commercial use `named_insured`.
+      const formForClient = (payloadMap[selectedInsurance] || {});
+      const clientName = String(
+        formForClient.client_name || formForClient.named_insured || ""
+      ).trim();
       trackEvent({
         userName,
         insuranceType: selectedInsurance,
@@ -1563,6 +1569,7 @@ export default function QuotifyHome({ isAdmin }) {
         manuallyChangedFields: getManualFieldNames(manualMap[selectedInsurance] || {}),
         createdQuote: true,
         generatedPdf: outFileName,
+        clientName,
         getToken,
       });
     } catch (error) {

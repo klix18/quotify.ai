@@ -1,11 +1,11 @@
 // ─── Section 1: Auto Policy ─────────────────────────────────────
 export const AUTO_POLICY_FIELDS = [
-  ["quote_date", "Quote Date / Print Date"],
-  ["quote_effective_date", "Quote Effective Date"],
-  ["quote_expiration_date", "Quote Expiration Date"],
   ["policy_term", "Policy Term"],
   ["program", "Program"],
   ["total_premium", "Total Premium"],
+  ["quote_date", "Quote Date"],
+  ["quote_effective_date", "Quote Effective Date"],
+  ["quote_expiration_date", "Quote Expiration Date"],
   ["paid_in_full_discount", "Paid-in-Full Discount"],
   ["total_pay_in_full", "Total Pay-in-Full (After Discount)"],
 ];
@@ -113,11 +113,23 @@ export const AUTO_COVERAGE_PREMIUM_MAP = {
 };
 
 // ─── Section 6: Payment Options ──────────────────────────────────
-export const PAYMENT_PLAN_FIELDS = [
-  ["down_payment", "Required Down Payment"],
-  ["amount_per_installment", "Amount per Installment"],
+// Full Pay has its own fields (a single full-pay amount + EFT discount flag).
+// Installment plans (Semi-Annual, Quarterly, Monthly, …) only show the
+// required down payment for now. Per-installment amounts and counts will
+// be added later when we wire up the fillers/HTML.
+export const FULL_PAY_FIELDS = [
+  ["full_pay_amount", "Full Pay Amount"],
   ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
+
+export const INSTALLMENT_PLAN_FIELDS = [
+  ["down_payment", "Required Down Payment"],
+];
+
+// Back-compat alias — defaults to installment fields. Anything that
+// previously imported PAYMENT_PLAN_FIELDS for non-full-pay plans keeps
+// working.
+export const PAYMENT_PLAN_FIELDS = INSTALLMENT_PLAN_FIELDS;
 
 export const PAYMENT_PLANS = [
   ["full_pay", "Full Pay"],
@@ -126,16 +138,23 @@ export const PAYMENT_PLANS = [
   ["monthly", "Monthly"],
 ];
 
+// Returns the field list to render for a given payment plan key.
+export const fieldsForPaymentPlan = (planKey) =>
+  planKey === "full_pay" ? FULL_PAY_FIELDS : INSTALLMENT_PLAN_FIELDS;
+
 export const PAID_IN_FULL_DISCOUNT_FIELDS = [
   ["gross_premium", "Gross Premium (Before Discount)"],
   ["discount_amount", "Discount Amount"],
   ["net_pay_in_full", "Net Pay-in-Full Total"],
 ];
 
-const emptyPaymentPlan = () => ({
-  down_payment: "",
-  amount_per_installment: "",
+const emptyFullPayPlan = () => ({
+  full_pay_amount: "",
   eft_reduces_fee: "",
+});
+
+const emptyInstallmentPlan = () => ({
+  down_payment: "",
 });
 
 // ─── Complete Empty Form ─────────────────────────────────────────
@@ -187,10 +206,10 @@ export const EMPTY_AUTO_FORM = {
 
   // S6: Payment Options
   payment_options: {
-    full_pay: emptyPaymentPlan(),
-    semi_annual: emptyPaymentPlan(),
-    quarterly: emptyPaymentPlan(),
-    monthly: emptyPaymentPlan(),
+    full_pay: emptyFullPayPlan(),
+    semi_annual: emptyInstallmentPlan(),
+    quarterly: emptyInstallmentPlan(),
+    monthly: emptyInstallmentPlan(),
     show_paid_in_full_discount: false,
     paid_in_full_discount: {
       gross_premium: "",

@@ -87,9 +87,11 @@ function HoverButton({ children, onClick, disabled, variant = "primary", style: 
       boxShadow: hovered ? `0 0 24px ${COLORS.hoverShadow}` : "none",
     },
     danger: {
-      background: COLORS.dangerSoft, color: COLORS.danger,
-      border: `1px solid ${COLORS.dangerBorder}`,
-      boxShadow: hovered ? `0 0 20px rgba(217,45,32,0.12)` : "0 0 0 rgba(0,0,0,0)",
+      background: disabled ? "rgba(0,0,0,0.04)" : COLORS.dangerSoft,
+      color: disabled ? COLORS.mutedText : COLORS.danger,
+      border: `1px solid ${disabled ? "rgba(0,0,0,0.08)" : COLORS.dangerBorder}`,
+      boxShadow: hovered && !disabled ? `0 0 20px rgba(217,45,32,0.12)` : "0 0 0 rgba(0,0,0,0)",
+      opacity: disabled ? 0.6 : 1,
     },
     dangerConfirm: {
       background: COLORS.danger, color: COLORS.white,
@@ -102,9 +104,11 @@ function HoverButton({ children, onClick, disabled, variant = "primary", style: 
       boxShadow: hovered ? `0 0 16px ${COLORS.hoverShadow}` : "0 0 0 rgba(0,0,0,0)",
     },
     dangerSmall: {
-      background: "transparent", color: COLORS.danger,
-      border: `1px solid ${COLORS.dangerBorder}`,
-      boxShadow: hovered ? `0 0 14px rgba(217,45,32,0.10)` : "0 0 0 rgba(0,0,0,0)",
+      background: "transparent",
+      color: disabled ? COLORS.mutedText : COLORS.danger,
+      border: `1px solid ${disabled ? "rgba(0,0,0,0.08)" : COLORS.dangerBorder}`,
+      boxShadow: hovered && !disabled ? `0 0 14px rgba(217,45,32,0.10)` : "0 0 0 rgba(0,0,0,0)",
+      opacity: disabled ? 0.55 : 1,
     },
   };
   return (
@@ -248,6 +252,315 @@ function ManualChangesLeaderboard({ data, limit = 15 }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ── Quotes Timeline — stacked bar chart ─────────────────────── */
+/* Derives everything from the same `events` array that powers Snapshot
+   History, so the chart and the table are guaranteed to stay in sync. */
+function QuotesTimeline({ events, period }) {
+  const [hoveredIdx, setHoveredIdx] = React.useState(null);
+  const containerRef = React.useRef(null);
+
+  // Bucket size depends on period.
+  const bucketKind = period === "year" ? "month"
+    : period === "all" ? "year"
+    : period === "6months" ? "week"
+    : "day";
+
+  // Build a dense sequence of buckets covering the whole period so we
+  // always show a full timeline even on days with zero activity.
+  const buckets = React.useMemo(() => {
+    const now = new Date();
+    const mkDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const mkWeek = (d) => {
+      const x = mkDay(d);
+      const dow = x.getDay(); // 0=Sun
+      x.setDate(x.getDate() - dow); // start on Sunday
+      return x;
+    };
+    const mkMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+    const mkYear = (d) => new Date(d.getFullYear(), 0, 1);
+
+    const list = [];
+    if (bucketKind === "day") {
+      const count = period === "week" ? 7 : 30;
+      const end = mkDay(now);
+      const start = new Date(end);
+      start.setDate(start.getDate() - (count - 1));
+      for (let i = 0; i < count; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        list.push(d);
+      }
+    } else if (bucketKind === "week") {
+      const end = mkWeek(now);
+      const count = 26;
+      const start = new Date(end);
+      start.setDate(start.getDate() - (count - 1) * 7);
+      for (let i = 0; i < count; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i * 7);
+        list.push(d);
+      }
+    } else if (bucketKind === "month") {
+      const end = mkMonth(now);
+      const count = 12;
+      const start = new Date(end);
+      start.setMonth(start.getMonth() - (count - 1));
+      for (let i = 0; i < count; i++) {
+        const d = new Date(start);
+        d.setMonth(start.getMonth() + i);
+        list.push(d);
+      }
+    } else {
+      // year — derive span from events, fallback to current year only
+      const years = new Set(
+        (events || []).map((e) => e.created_at ? new Date(e.created_at).getFullYear() : null).filter(Boolean)
+      );
+      years.add(now.getFullYear());
+      const min = Math.min(...years);
+      const max = Math.max(...years);
+      for (let y = min; y <= max; y++) list.push(new Date(y, 0, 1));
+    }
+    return list;
+  }, [bucketKind, period, events]);
+
+  // Key each bucket by its normalized timestamp for quick lookup.
+  const bucketKey = React.useCallback((d) => {
+    if (bucketKind === "day") return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (bucketKind === "week") {
+      const x = new Date(d);
+      const dow = x.getDay();
+      x.setDate(x.getDate() - dow);
+      return `W${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+    }
+    if (bucketKind === "month") return `${d.getFullYear()}-${d.getMonth()}`;
+    return `Y${d.getFullYear()}`;
+  }, [bucketKind]);
+
+  // Collapse events into { bucketKey: { type: count, ... } }
+  // Uses the exact same `events` array that powers Snapshot History,
+  // filtering for created_quote === true so counts match the leaderboard.
+  const byBucket = React.useMemo(() => {
+    const map = {};
+    for (const e of events || []) {
+      if (!e.created_quote || !e.created_at) continue;
+      const d = new Date(e.created_at);
+      const key = bucketKey(d);
+      if (!map[key]) map[key] = {};
+      const t = e.insurance_type || "other";
+      map[key][t] = (map[key][t] || 0) + 1;
+    }
+    return map;
+  }, [events, bucketKey]);
+
+  // Build the series rendered as stacks.
+  const series = buckets.map((d) => {
+    const key = bucketKey(d);
+    const counts = byBucket[key] || {};
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    return { date: d, counts, total };
+  });
+
+  const maxTotal = Math.max(1, ...series.map((s) => s.total));
+  const totalQuotes = series.reduce((a, s) => a + s.total, 0);
+
+  // Axis label formatter.
+  const fmtLabel = (d) => {
+    if (bucketKind === "day") {
+      if (period === "week") return d.toLocaleDateString("en-US", { weekday: "short" });
+      return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+    }
+    if (bucketKind === "week") return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+    if (bucketKind === "month") return d.toLocaleDateString("en-US", { month: "short" });
+    return String(d.getFullYear());
+  };
+  const fmtFullLabel = (d) => {
+    if (bucketKind === "day") return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    if (bucketKind === "week") {
+      const end = new Date(d); end.setDate(end.getDate() + 6);
+      return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    }
+    if (bucketKind === "month") return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    return String(d.getFullYear());
+  };
+
+  if (!totalQuotes) {
+    return <div style={{ color: COLORS.mutedText, fontSize: 13, padding: "20px 0" }}>No quotes generated in this period</div>;
+  }
+
+  const typeColors = INSURANCE_COLORS;
+  // Keep stacking order stable across bars.
+  const typeOrder = ["homeowners", "auto", "dwelling", "commercial", "bundle", "wind"];
+
+  // How many x-labels to actually render — avoid crowding.
+  const labelEvery = Math.max(1, Math.ceil(series.length / 15));
+
+  const chartHeight = 220;
+  // Thicker bars when there are fewer (week) so they feel chunky.
+  const barGap = series.length <= 10 ? 10 : series.length <= 16 ? 8 : 6;
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
+      {/* Summary header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {typeOrder.filter((t) => series.some((s) => s.counts[t])).map((t) => (
+            <div key={t} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: typeColors[t] || COLORS.blue, display: "inline-block" }} />
+              <span style={{ fontSize: 11, color: COLORS.mutedText, fontWeight: 500, textTransform: "capitalize" }}>{t}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 12, color: COLORS.mutedText }}>
+          <span style={{ fontWeight: 700, color: COLORS.black }}>{totalQuotes}</span> quotes in period
+        </div>
+      </div>
+
+      {/* Chart area */}
+      <div style={{
+        position: "relative",
+        display: "flex",
+        alignItems: "flex-end",
+        gap: barGap,
+        height: chartHeight,
+        padding: "18px 4px 4px 4px",
+        borderBottom: `1px solid rgba(180,200,230,0.35)`,
+      }}>
+        {series.map((s, i) => {
+          const hovered = hoveredIdx === i;
+          const pct = (s.total / maxTotal) * 100;
+          const heightPx = Math.max(s.total > 0 ? 2 : 0, (pct / 100) * (chartHeight - 30));
+          const stacks = typeOrder
+            .filter((t) => s.counts[t])
+            .map((t) => ({ type: t, count: s.counts[t] }));
+          return (
+            <div
+              key={i}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              style={{
+                flex: "1 1 0",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                position: "relative",
+                minWidth: 0,
+                cursor: "default",
+              }}
+            >
+              {/* Auto-displayed total number above the bar */}
+              {s.total > 0 && (
+                <div style={{
+                  position: "absolute",
+                  top: -2,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: hovered ? COLORS.blue : COLORS.black,
+                  transition: "color 150ms ease",
+                  pointerEvents: "none",
+                  whiteSpace: "nowrap",
+                }}>{s.total}</div>
+              )}
+
+              {/* Stacked bar */}
+              <div style={{
+                width: "100%",
+                height: heightPx,
+                display: "flex",
+                flexDirection: "column-reverse",
+                borderRadius: 6,
+                overflow: "hidden",
+                boxShadow: hovered ? `0 0 14px rgba(23,101,212,0.18)` : "0 1px 2px rgba(0,0,0,0.04)",
+                transition: "box-shadow 160ms ease, transform 160ms ease",
+                transform: hovered ? "translateY(-2px)" : "translateY(0)",
+                background: "rgba(0,0,0,0.03)",
+              }}>
+                {stacks.map((seg, j) => {
+                  const segPct = s.total > 0 ? (seg.count / s.total) * 100 : 0;
+                  return (
+                    <div
+                      key={seg.type}
+                      style={{
+                        height: `${segPct}%`,
+                        background: typeColors[seg.type] || COLORS.blue,
+                        borderTop: j < stacks.length - 1 ? "1px solid rgba(255,255,255,0.5)" : "none",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Tooltip — absolutely positioned above the bar on hover */}
+              {hovered && s.total > 0 && (
+                <div style={{
+                  position: "absolute",
+                  bottom: `calc(100% + 8px)`,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "rgba(32, 39, 45, 0.96)",
+                  color: COLORS.white,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  fontSize: 11,
+                  fontFamily: "Poppins, sans-serif",
+                  whiteSpace: "nowrap",
+                  pointerEvents: "none",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                  zIndex: 50,
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 11 }}>{fmtFullLabel(s.date)}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {stacks.slice().reverse().map((seg) => (
+                      <div key={seg.type} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: typeColors[seg.type] || COLORS.blue }} />
+                        <span style={{ textTransform: "capitalize", opacity: 0.85 }}>{seg.type}</span>
+                        <span style={{ marginLeft: "auto", fontWeight: 700 }}>{seg.count}</span>
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.2)", display: "flex", justifyContent: "space-between", gap: 12 }}>
+                      <span style={{ opacity: 0.75 }}>Total</span>
+                      <span style={{ fontWeight: 700 }}>{s.total}</span>
+                    </div>
+                  </div>
+                  {/* Little tail */}
+                  <div style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: 0, height: 0,
+                    borderLeft: "5px solid transparent",
+                    borderRight: "5px solid transparent",
+                    borderTop: "6px solid rgba(32, 39, 45, 0.96)",
+                  }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* X-axis labels */}
+      <div style={{ display: "flex", gap: barGap, marginTop: 6, padding: "0 4px" }}>
+        {series.map((s, i) => (
+          <div key={i} style={{
+            flex: "1 1 0",
+            textAlign: "center",
+            fontSize: 10,
+            color: COLORS.mutedText,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}>
+            {i % labelEvery === 0 ? fmtLabel(s.date) : ""}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -494,10 +807,8 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
       setLoading(true);
       try {
         const token = await getToken();
-        // Admins use the admin endpoint; advisors use the self-service endpoint
-        const url = isAdmin
-          ? `${API_BASE_URL}/api/admin/analytics/user/${encodeURIComponent(userName)}?period=${period}`
-          : `${API_BASE_URL}/api/analytics/me?user_name=${encodeURIComponent(userName)}&period=${period}`;
+        // Both admins and advisors use the same endpoint (now allowed for any user)
+        const url = `${API_BASE_URL}/api/admin/analytics/user/${encodeURIComponent(userName)}?period=${period}`;
         const resp = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -505,7 +816,7 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
       } catch {}
       setLoading(false);
     })();
-  }, [userName, period, getToken, isAdmin]);
+  }, [userName, period, getToken]);
 
   if (loading) return <div style={{ padding: 40, textAlign: "center", color: COLORS.mutedText, fontSize: 13 }}>Loading user data...</div>;
   if (!data) return <div style={{ padding: 40, textAlign: "center", color: COLORS.mutedText, fontSize: 13 }}>Failed to load user data.</div>;
@@ -558,6 +869,11 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
         <DaysActiveCard daysActive={data.days_active || 0} activeDates={data.active_dates || []} />
       </div>
 
+      {/* Quotes Timeline — personal stacked bar chart */}
+      <Section title="Quotes Generated">
+        <QuotesTimeline events={data.recent_events} period={period} />
+      </Section>
+
       {/* Insurance breakdown */}
       <Section title="Insurance Type Breakdown">
         <InsuranceBreakdown data={data.by_insurance_type} />
@@ -575,6 +891,7 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
 function UserSnapshotHistory({ events, getToken }) {
   const [filterInsurance, setFilterInsurance] = React.useState("");
   const [filterDate, setFilterDate] = React.useState("");
+  const [clientQuery, setClientQuery] = React.useState("");
 
   const handlePdfDownload = async (fileName, type) => {
     if (!fileName || fileName === "—") return;
@@ -610,9 +927,11 @@ function UserSnapshotHistory({ events, getToken }) {
   const uniqueInsurance = [...new Set(events.map((e) => e.insurance_type).filter(Boolean))].sort();
   const uniqueDates = [...new Set(events.map((e) => new Date(e.created_at).toLocaleDateString()))];
 
+  const q = clientQuery.trim().toLowerCase();
   const filtered = events.filter((e) => {
     if (filterInsurance && e.insurance_type !== filterInsurance) return false;
     if (filterDate && new Date(e.created_at).toLocaleDateString() !== filterDate) return false;
+    if (q && !(e.client_name || "").toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -630,6 +949,13 @@ function UserSnapshotHistory({ events, getToken }) {
   return (
     <>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginBottom: 12, flexWrap: "wrap" }}>
+        <input
+          type="text"
+          value={clientQuery}
+          onChange={(e) => setClientQuery(e.target.value)}
+          placeholder="Search client…"
+          style={{ ...filterSelect, minWidth: 150, cursor: "text" }}
+        />
         <select value={filterInsurance} onChange={(e) => setFilterInsurance(e.target.value)} style={filterSelect}>
           <option value="">All Insurance</option>
           {uniqueInsurance.map((t) => <option key={t} value={t} style={{ textTransform: "capitalize" }}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
@@ -643,17 +969,18 @@ function UserSnapshotHistory({ events, getToken }) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "Poppins, sans-serif" }}>
           <thead>
             <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)` }}>
-              {["Date", "Insurance", "Advisor", "Uploaded PDF", "Manual Changes", "Quote", "Generated PDF"].map((h) => (
+              {["Date", "Client", "Insurance", "Advisor", "Uploaded PDF", "Manual Changes", "Quote", "Generated PDF"].map((h) => (
                 <th key={h} style={th}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ padding: 20, textAlign: "center", color: COLORS.mutedText, fontSize: 12 }}>No events match the selected filters</td></tr>
+              <tr><td colSpan={8} style={{ padding: 20, textAlign: "center", color: COLORS.mutedText, fontSize: 12 }}>No events match the selected filters</td></tr>
             ) : filtered.map((e) => (
               <HoverRow key={e.id}>
                 <td style={td}>{new Date(e.created_at).toLocaleString()}</td>
+                <td style={{ ...td, fontWeight: 500 }} title={e.client_name}>{e.client_name || "—"}</td>
                 <td style={td}>
                   <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize", background: `${typeColors[e.insurance_type] || COLORS.blue}15`, color: typeColors[e.insurance_type] || COLORS.blue }}>{e.insurance_type}</span>
                 </td>
@@ -687,12 +1014,13 @@ function UserSnapshotHistory({ events, getToken }) {
 }
 
 /* ── Snapshot History (Event Log with delete) ────────────────── */
-function SnapshotHistory({ events, getToken, onRefresh, limit = 30 }) {
+function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = false }) {
   const [deleteTarget, setDeleteTarget] = React.useState(null);
   const [deleting, setDeleting] = React.useState(false);
   const [filterUser, setFilterUser] = React.useState("");
   const [filterInsurance, setFilterInsurance] = React.useState("");
   const [filterDate, setFilterDate] = React.useState("");
+  const [clientQuery, setClientQuery] = React.useState("");
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -748,10 +1076,12 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30 }) {
   const uniqueDates = [...new Set(events.map((e) => new Date(e.created_at).toLocaleDateString()))];
 
   // Apply filters and limit
+  const q = clientQuery.trim().toLowerCase();
   const filtered = events.filter((e) => {
     if (filterUser && e.user_name !== filterUser) return false;
     if (filterInsurance && e.insurance_type !== filterInsurance) return false;
     if (filterDate && new Date(e.created_at).toLocaleDateString() !== filterDate) return false;
+    if (q && !(e.client_name || "").toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -780,6 +1110,17 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30 }) {
 
       {/* Sub-filters row */}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginBottom: 12, flexWrap: "wrap" }}>
+        <input
+          type="text"
+          value={clientQuery}
+          onChange={(e) => setClientQuery(e.target.value)}
+          placeholder="Search client…"
+          style={{
+            ...filterSelect,
+            minWidth: 160,
+            cursor: "text",
+          }}
+        />
         <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)} style={filterSelect}>
           <option value="">All Users</option>
           {uniqueUsers.map((u) => <option key={u} value={u}>{u}</option>)}
@@ -800,6 +1141,7 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30 }) {
             <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)` }}>
               <th style={th}>Date</th>
               <th style={th}>User</th>
+              <th style={th}>Client</th>
               <th style={th}>Insurance</th>
               <th style={th}>Advisor</th>
               <th style={th}>Uploaded PDF</th>
@@ -811,11 +1153,12 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30 }) {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} style={{ padding: 20, textAlign: "center", color: COLORS.mutedText, fontSize: 12 }}>No events match the selected filters</td></tr>
+              <tr><td colSpan={10} style={{ padding: 20, textAlign: "center", color: COLORS.mutedText, fontSize: 12 }}>No events match the selected filters</td></tr>
             ) : filtered.slice(0, limit).map((e) => (
               <HoverRow key={e.id}>
                 <td style={td}>{new Date(e.created_at).toLocaleString()}</td>
                 <td style={{ ...td, fontWeight: 500 }}>{e.user_name}</td>
+                <td style={{ ...td, fontWeight: 500 }} title={e.client_name}>{e.client_name || "—"}</td>
                 <td style={td}>
                   <span style={{
                     padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize",
@@ -852,7 +1195,8 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30 }) {
                 <td style={{ ...td, textAlign: "center" }}>
                   <HoverButton
                     variant="dangerSmall"
-                    onClick={() => setDeleteTarget(e.id)}
+                    onClick={() => { if (isAdmin) setDeleteTarget(e.id); }}
+                    disabled={!isAdmin}
                     style={{ height: 28, padding: "0 10px", fontSize: 11, borderRadius: 8 }}
                   >Delete</HoverButton>
                 </td>
@@ -891,8 +1235,8 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
   const [error, setError] = React.useState("");
   const [resetConfirm, setResetConfirm] = React.useState(false);
   const [resetting, setResetting] = React.useState(false);
-  // Advisors go directly to their own page; admins start at the dashboard
-  const [selectedUser, setSelectedUser] = React.useState(isAdmin ? null : currentUserName);
+  // Both admins and advisors start at the main dashboard
+  const [selectedUser, setSelectedUser] = React.useState(null);
   const [clerkUsers, setClerkUsers] = React.useState({});  // keyed by display name -> { id, role }
   const navigate = useNavigate();
 
@@ -983,55 +1327,34 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
     try {
       const token = await getToken();
 
-      if (isAdmin) {
-        // Admin: fetch full dashboard data
-        const [summaryResp, changesResp, usersResp] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/admin/analytics/summary?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_BASE_URL}/api/admin/analytics/manual-changes?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-        if (summaryResp.status === 403) {
-          setError("You don't have admin access. Set role: 'admin' in your Clerk user's public metadata.");
-          return;
+      // Both admins and advisors fetch the same dashboard data
+      const [summaryResp, changesResp, usersResp] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/admin/analytics/summary?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/api/admin/analytics/manual-changes?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (!summaryResp.ok) {
+        const detail = await summaryResp.json().catch(() => ({}));
+        throw new Error(detail?.detail || `HTTP ${summaryResp.status}`);
+      }
+      setData(await summaryResp.json());
+      if (changesResp.ok) setManualChanges(await changesResp.json());
+      if (usersResp.ok) {
+        const usersData = await usersResp.json();
+        const map = {};
+        for (const u of usersData.users || []) {
+          const displayName = `${u.first_name} ${u.last_name}`.trim();
+          map[displayName] = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
+          if (u.first_name) map[u.first_name] = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
         }
-        if (!summaryResp.ok) {
-          const detail = await summaryResp.json().catch(() => ({}));
-          throw new Error(detail?.detail || `HTTP ${summaryResp.status}`);
-        }
-        setData(await summaryResp.json());
-        if (changesResp.ok) setManualChanges(await changesResp.json());
-        if (usersResp.ok) {
-          const usersData = await usersResp.json();
-          const map = {};
-          for (const u of usersData.users || []) {
-            const displayName = `${u.first_name} ${u.last_name}`.trim();
-            map[displayName] = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
-            if (u.first_name) map[u.first_name] = { id: u.id, role: u.role, email: u.email, image_url: u.image_url || "" };
-          }
-          setClerkUsers(map);
-        }
-      } else {
-        // Advisor: just set a minimal data object so the page renders
-        setData({ _advisorMode: true });
-        // Populate clerkUsers with the advisor's own info so UserDetailView can display it
-        if (currentUserName) {
-          setClerkUsers((prev) => ({
-            ...prev,
-            [currentUserName]: {
-              id: null,
-              role: "advisor",
-              email: currentUserEmail || "",
-              image_url: currentUserImageUrl || "",
-            },
-          }));
-        }
+        setClerkUsers(map);
       }
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [period, getToken, isAdmin]);
+  }, [period, getToken]);
 
   React.useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
 
@@ -1094,8 +1417,8 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
         pointerEvents: "none",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, pointerEvents: "auto" }}>
-          {/* Back button — only shown when viewing a specific user's page */}
-          {isAdmin && selectedUser && (
+          {/* Back button — shown when viewing a specific user's page (admin or advisor) */}
+          {selectedUser && (
             <BlurAura>
               <HoverButton
                 variant="outline"
@@ -1110,7 +1433,7 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
           <BlurAura>
             <div style={{ padding: "4px 8px" }}>
               <div style={{ fontFamily: "SentientCustom, Georgia, serif", fontSize: 20, fontWeight: 600, lineHeight: 1.2, color: COLORS.black, marginBottom: 2 }}>
-                {isAdmin ? "Analytics Dashboard" : "My Activity"}
+                Analytics Dashboard
               </div>
               <div style={{ fontSize: 12, color: COLORS.mutedText, fontWeight: 400, lineHeight: 1.35 }}>
                 Showing data for: {periodLabel}
@@ -1137,20 +1460,22 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
               {PERIODS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </BlurAura>
-          {isAdmin && (
-            <BlurAura>
-              <HoverButton variant="outline" onClick={fetchAnalytics} disabled={loading} style={{ height: 48 }}>
-                {loading ? "Loading..." : "Refresh"}
-              </HoverButton>
-            </BlurAura>
-          )}
-          {isAdmin && (
-            <BlurAura>
-              <HoverButton variant="danger" onClick={() => setResetConfirm(true)} style={{ height: 48 }}>
-                Clear Data
-              </HoverButton>
-            </BlurAura>
-          )}
+          <BlurAura>
+            <HoverButton variant="outline" onClick={fetchAnalytics} disabled={loading} style={{ height: 48 }}>
+              {loading ? "Loading..." : "Refresh"}
+            </HoverButton>
+          </BlurAura>
+          <BlurAura>
+            <HoverButton
+              variant="danger"
+              onClick={() => { if (isAdmin) setResetConfirm(true); }}
+              disabled={!isAdmin}
+              style={{ height: 48 }}
+              title={!isAdmin ? "Only admins can clear data" : undefined}
+            >
+              Clear Data
+            </HoverButton>
+          </BlurAura>
         </div>
       </div>
 
@@ -1185,6 +1510,11 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
               <StatCard label="PDFs Uploaded" value={data.total_pdfs_uploaded} sub="Parsed uploads" />
             </div>
 
+            {/* Quotes Timeline — stacked bar chart by insurance type */}
+            <Section title="Quotes Generated">
+              <QuotesTimeline events={data.recent_events} period={period} />
+            </Section>
+
             {/* User Leaderboard — full width, prominent */}
             <Section title="Team Leaderboard" expandable action={
               <div style={{ fontSize: 12, color: COLORS.mutedText }}>Click a user for details</div>
@@ -1204,7 +1534,7 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
 
             {/* Snapshot History */}
             <Section title="Snapshot History" expandable>
-              {(expanded) => <SnapshotHistory events={data.recent_events} getToken={getToken} onRefresh={fetchAnalytics} limit={expanded ? 30 : 5} />}
+              {(expanded) => <SnapshotHistory events={data.recent_events} getToken={getToken} onRefresh={fetchAnalytics} limit={expanded ? 30 : 5} isAdmin={isAdmin} />}
             </Section>
           </div>
         )}

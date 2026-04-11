@@ -6,7 +6,7 @@ import {
   DRIVER_GENDER_OPTIONS,
   AUTO_COVERAGE_FIELDS,
   PAYMENT_PLANS,
-  PAYMENT_PLAN_FIELDS,
+  fieldsForPaymentPlan,
   PAID_IN_FULL_DISCOUNT_FIELDS,
 } from "../configs/autoConfig";
 
@@ -337,6 +337,10 @@ export default function AutoPanel({
      ============================================================ */
   const paymentPlansBlock = PAYMENT_PLANS.map(([planKey, planLabel]) => {
     const plan = form.payment_options?.[planKey] || {};
+    const planFields = fieldsForPaymentPlan(planKey);
+    // Full Pay shows 2 fields side-by-side (span 6 each); installment plans
+    // show only one Required Down Payment field at half-width.
+    const cellSpan = planKey === "full_pay" ? 6 : 6;
     return (
       <SubCard key={planKey} title={planLabel}>
         <div
@@ -346,8 +350,11 @@ export default function AutoPanel({
             gap: 14,
           }}
         >
-          {PAYMENT_PLAN_FIELDS.map(([fk, fl]) => (
-            <div key={fk} style={{ gridColumn: "span 4", minWidth: 0 }}>
+          {planFields.map(([fk, fl]) => (
+            <div
+              key={fk}
+              style={{ gridColumn: `span ${cellSpan}`, minWidth: 0 }}
+            >
               <FieldControl
                 fieldKey={`payment_options.${planKey}.${fk}`}
                 label={fl}

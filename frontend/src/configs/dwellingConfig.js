@@ -1,7 +1,9 @@
 // ─── Section 1: Dwelling Policy ─────────────────────────────────
 export const DWELLING_POLICY_FIELDS = [
-  ["effective_date", "Effective Date"],
   ["total_premium", "Total Premium"],
+  ["quote_date", "Quote Date"],
+  ["quote_effective_date", "Quote Effective Date"],
+  ["quote_expiration_date", "Quote Expiration Date"],
   ["pay_in_full_discount", "Pay-in-Full Discount"],
   ["total_if_paid_in_full", "Total if Paid in Full"],
 ];
@@ -99,11 +101,26 @@ export const DWELLING_PAYMENT_PLAN_TYPES = [
   ["monthly", "Monthly"],
 ];
 
-export const DWELLING_PAYMENT_PLAN_FIELDS = [
-  ["amount_due", "Amount Due / Down Payment"],
-  ["installment_details", "Installment Details"],
-  ["installment_fee", "Installment Fee"],
+// Full Pay shows a single full-pay amount + the EFT/Auto-Pay flag.
+// Installment plans (2-Pay, 4-Pay, Monthly, …) only show the required
+// down payment for now. Per-installment amounts/fees will be re-added
+// when wiring fillers/HTML.
+export const DWELLING_FULL_PAY_FIELDS = [
+  ["full_pay_amount", "Full Pay Amount"],
+  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
+
+export const DWELLING_INSTALLMENT_PLAN_FIELDS = [
+  ["down_payment", "Required Down Payment"],
+];
+
+// Back-compat alias — defaults to installment fields.
+export const DWELLING_PAYMENT_PLAN_FIELDS = DWELLING_INSTALLMENT_PLAN_FIELDS;
+
+export const dwellingFieldsForPaymentPlan = (planKey) =>
+  planKey === "full_pay"
+    ? DWELLING_FULL_PAY_FIELDS
+    : DWELLING_INSTALLMENT_PLAN_FIELDS;
 
 // ─── Empty Structures ───────────────────────────────────────────
 
@@ -136,10 +153,13 @@ export const emptyProperty = () => ({
   deductible: "",
 });
 
-const emptyPaymentPlan = () => ({
-  amount_due: "",
-  installment_details: "",
-  installment_fee: "",
+const emptyDwellingFullPayPlan = () => ({
+  full_pay_amount: "",
+  eft_reduces_fee: "",
+});
+
+const emptyDwellingInstallmentPlan = () => ({
+  down_payment: "",
 });
 
 export const EMPTY_DWELLING_FORM = {
@@ -147,8 +167,10 @@ export const EMPTY_DWELLING_FORM = {
   why_selected: "",
 
   // S1: Dwelling Policy
-  effective_date: "",
   total_premium: "",
+  quote_date: "",
+  quote_effective_date: "",
+  quote_expiration_date: "",
   pay_in_full_discount: "",
   total_if_paid_in_full: "",
 
@@ -169,9 +191,9 @@ export const EMPTY_DWELLING_FORM = {
 
   // S5: Payment Plans
   payment_plans: {
-    full_pay: emptyPaymentPlan(),
-    two_pay: emptyPaymentPlan(),
-    four_pay: emptyPaymentPlan(),
-    monthly: emptyPaymentPlan(),
+    full_pay: emptyDwellingFullPayPlan(),
+    two_pay: emptyDwellingInstallmentPlan(),
+    four_pay: emptyDwellingInstallmentPlan(),
+    monthly: emptyDwellingInstallmentPlan(),
   },
 };

@@ -26,6 +26,7 @@ export async function trackEvent({
   manuallyChangedFields = "",
   createdQuote = false,
   generatedPdf = "",
+  clientName = "",
   getToken,
 }) {
   try {
@@ -46,6 +47,7 @@ export async function trackEvent({
         manually_changed_fields: manuallyChangedFields,
         created_quote: createdQuote,
         generated_pdf: generatedPdf,
+        client_name: clientName,
       }),
     });
   } catch (err) {

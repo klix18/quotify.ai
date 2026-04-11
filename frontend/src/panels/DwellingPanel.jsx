@@ -9,7 +9,7 @@ import {
   DWELLING_DEDUCTIBLE_FIELDS_V1,
   DWELLING_DEDUCTIBLE_FIELDS_V2,
   DWELLING_PAYMENT_PLAN_TYPES,
-  DWELLING_PAYMENT_PLAN_FIELDS,
+  dwellingFieldsForPaymentPlan,
   POLICY_FORM_OPTIONS,
   CONSTRUCTION_TYPE_OPTIONS,
 } from "../configs/dwellingConfig";
@@ -304,11 +304,12 @@ export default function DwellingPanel({
       <div style={{ display: "grid", gap: 12 }}>
         {DWELLING_PAYMENT_PLAN_TYPES.map(([planKey, planLabel]) => {
           const plan = form.payment_plans?.[planKey] || {};
+          const planFields = dwellingFieldsForPaymentPlan(planKey);
           return (
             <SubCard key={planKey} title={planLabel}>
               <div style={gridRow}>
-                {DWELLING_PAYMENT_PLAN_FIELDS.map(([field, label]) => (
-                  <div key={field} style={cell4}>
+                {planFields.map(([field, label]) => (
+                  <div key={field} style={cell6}>
                     <FieldControl
                       fieldKey={`payment_plans.${planKey}.${field}`}
                       label={label}

@@ -45,7 +45,9 @@ FLAT_KEYS = [
     "named_insured",
     "insured_property_address",
     "carrier_name",
-    "effective_date",
+    "quote_date",
+    "quote_effective_date",
+    "quote_expiration_date",
 ]
 
 AGENT_KEYS = [
@@ -86,8 +88,18 @@ DEDUCTIBLE_V2_KEYS = ["deductible", "wind_hail_included"]
 
 PREMIUM_KEYS = ["total_premium", "pay_in_full_discount", "total_if_paid_in_full"]
 
-PLAN_NAMES = ["full_pay", "two_pay", "four_pay", "monthly"]
-PAYMENT_PLAN_KEYS = ["amount_due", "installment_details", "installment_fee"]
+FULL_PAY_KEYS = ["full_pay_amount", "eft_reduces_fee"]
+INSTALLMENT_PLAN_KEYS = ["down_payment"]
+INSTALLMENT_PLAN_NAMES = ["two_pay", "four_pay", "monthly"]
+PLAN_NAMES = ["full_pay"] + INSTALLMENT_PLAN_NAMES
+# Back-compat — used by anything that still iterates a single
+# combined key list (e.g., quick-pass extraction looks at every key
+# the model might emit for any plan).
+PAYMENT_PLAN_KEYS = list(dict.fromkeys(FULL_PAY_KEYS + INSTALLMENT_PLAN_KEYS))
+
+
+def _plan_keys(plan: str) -> list:
+    return FULL_PAY_KEYS if plan == "full_pay" else INSTALLMENT_PLAN_KEYS
 
 
 # ── Gemini structured-output schema (Pass 2) ────────────────────
@@ -103,8 +115,6 @@ _all_property_keys = (
 )
 
 _premium_props = {k: {"type": "string"} for k in PREMIUM_KEYS}
-
-_payment_plan_props = {k: {"type": "string"} for k in PAYMENT_PLAN_KEYS}
 
 DWELLING_SCHEMA = {
     "type": "object",
@@ -139,12 +149,19 @@ DWELLING_SCHEMA = {
         "payment_plans": {
             "type": "object",
             "properties": {
-                plan: {
+                "full_pay": {
                     "type": "object",
-                    "properties": _payment_plan_props,
-                    "required": PAYMENT_PLAN_KEYS,
-                }
-                for plan in PLAN_NAMES
+                    "properties": {k: {"type": "string"} for k in FULL_PAY_KEYS},
+                    "required": FULL_PAY_KEYS,
+                },
+                **{
+                    plan: {
+                        "type": "object",
+                        "properties": {k: {"type": "string"} for k in INSTALLMENT_PLAN_KEYS},
+                        "required": INSTALLMENT_PLAN_KEYS,
+                    }
+                    for plan in INSTALLMENT_PLAN_NAMES
+                },
             },
             "required": PLAN_NAMES,
         },
@@ -221,7 +238,9 @@ POLICY INFO
 • named_insured            – the insured / applicant / named insured / client, NOT the agency or agent.
 • insured_property_address – the INSURED LOCATION or DESCRIBED LOCATION address (the property being insured), NOT the mailing address.
 • carrier_name             – the insurance carrier / company name (e.g., "Tower Hill Prime", "American Modern", "Johnson & Johnson / Great Lakes", "SageSure / SafePort", "Markel / Emerald Bay", "NCJUA").
-• effective_date           – policy effective date or start of policy period. Use MM/DD/YYYY format.
+• quote_date               – the date the quote was generated / printed / prepared. Use MM/DD/YYYY format.
+• quote_effective_date     – the policy effective date / start of policy period. Use MM/DD/YYYY format.
+• quote_expiration_date    – the date the quote expires (or the policy expiration date if quote expiration is not separately listed). Use MM/DD/YYYY format.
 
 AGENT INFORMATION
 • agent_name    – the agent, advisor, producer, or retail producer name. NOT the agency company name.
@@ -320,10 +339,13 @@ PREMIUM SUMMARY (array – one entry per property, in same order as properties)
 • total_if_paid_in_full – amount due if paying in full after discount. "" if same as total.
 
 PAYMENT PLANS (combined for all properties)
-For each plan (full_pay, two_pay, four_pay, monthly):
-• amount_due            – amount due or down payment.
-• installment_details   – description of installment schedule.
-• installment_fee       – fee per installment. "" if none.
+full_pay (the pay-in-full option):
+• full_pay_amount   – the single full-pay amount the insured would pay if
+                      they pay the entire policy term up front.
+• eft_reduces_fee   – "Yes", "No", or the reduced amount if shown for EFT/
+                      Auto-Pay on the full-pay plan.
+For each installment plan (two_pay, four_pay, monthly):
+• down_payment      – required down payment amount.
 Use "" for any plan or field not offered in the quote.
 ALIASES: "Full Plan"/"Full Pay"/"Pay in Full" → full_pay;
          "2-Pay Plan"/"Two Pay" → two_pay;
@@ -412,7 +434,8 @@ Output ONLY lines in this exact format (one per line):
 field_key: value
 
 Use these flat keys:
-  named_insured, insured_property_address, carrier_name, effective_date
+  named_insured, insured_property_address, carrier_name,
+  quote_date, quote_effective_date, quote_expiration_date
 
 For agent info:
   agent_name, agent_address, agent_phone, agent_email
@@ -434,11 +457,11 @@ For properties, use numbered keys (one line each):
 For premium summary (per property):
   premium_1_total_premium, premium_1_pay_in_full_discount, premium_1_total_if_paid_in_full
 
-For payment plans (full_pay, two_pay, four_pay, monthly):
-  full_pay_amount_due, full_pay_installment_details, full_pay_installment_fee
-  two_pay_amount_due, two_pay_installment_details, two_pay_installment_fee
-  four_pay_amount_due, four_pay_installment_details, four_pay_installment_fee
-  monthly_amount_due, monthly_installment_details, monthly_installment_fee
+For payment plans:
+  full_pay_full_pay_amount, full_pay_eft_reduces_fee
+  two_pay_down_payment
+  four_pay_down_payment
+  monthly_down_payment
 
 Field aliases to look for:
 - dwelling_limit: "Dwelling", "Coverage A", "Coverage A - Dwelling"
@@ -600,7 +623,7 @@ def normalize_dwelling_result(parsed: dict) -> tuple:
     pp = parsed.get("payment_plans") or {}
     for plan in PLAN_NAMES:
         p = pp.get(plan) or {}
-        pp[plan] = {k: p.get(k, "") or "" for k in PAYMENT_PLAN_KEYS}
+        pp[plan] = {k: p.get(k, "") or "" for k in _plan_keys(plan)}
     parsed["payment_plans"] = pp
 
     # Flatten confidence
@@ -674,11 +697,13 @@ def extract_quick_pass_lines(text: str) -> dict:
             premiums.append({k: ps.get(k, "") for k in PREMIUM_KEYS})
         result["premium_summary"] = premiums
 
-    # Payment plans (prefixed: full_pay_amount_due, monthly_installment_fee, etc.)
+    # Payment plans (prefixed by plan name).
+    # full_pay  → full_pay_full_pay_amount, full_pay_eft_reduces_fee
+    # installments → <plan>_down_payment
     payment_plans = {}
     for plan in PLAN_NAMES:
         plan_data = {}
-        for pk in PAYMENT_PLAN_KEYS:
+        for pk in _plan_keys(plan):
             combo_key = f"{plan}_{pk}"
             if combo_key in raw:
                 plan_data[pk] = raw[combo_key]
