@@ -2,9 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap">
   <style>
-    /* ── Sentient Variable (local) ───────────────────────── */
+    /* ── Poppins (local) ────────────────────────────────── */
+    @font-face {
+      font-family: 'Poppins';
+      src: url('../../fonts/poppins/Poppins-Light.ttf') format('truetype');
+      font-weight: 300;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Poppins';
+      src: url('../../fonts/poppins/Poppins-Regular.ttf') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Poppins';
+      src: url('../../fonts/poppins/Poppins-Medium.ttf') format('truetype');
+      font-weight: 500;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Poppins';
+      src: url('../../fonts/poppins/Poppins-SemiBold.ttf') format('truetype');
+      font-weight: 600;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Poppins';
+      src: url('../../fonts/poppins/Poppins-Bold.ttf') format('truetype');
+      font-weight: 700;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Poppins';
+      src: url('../../fonts/poppins/Poppins-Italic.ttf') format('truetype');
+      font-weight: 400;
+      font-style: italic;
+    }
+    @font-face {
+      font-family: 'Poppins';
+      src: url('../../fonts/poppins/Poppins-MediumItalic.ttf') format('truetype');
+      font-weight: 500;
+      font-style: italic;
+    }
+
+    /* ── Sentient (local) ───────────────────────────────── */
     @font-face {
       font-family: 'Sentient';
       src: url('../../fonts/WEB/fonts/Sentient-Regular.woff2') format('woff2'),
@@ -32,6 +75,11 @@
       font-family: 'Poppins', sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+      /* Fix Chromium headless PDF kerning bug — without this,
+         page.pdf() breaks text into positioning runs with
+         rounding errors, producing gaps mid-word. */
+      text-rendering: geometricPrecision;
+      -webkit-font-smoothing: antialiased;
     }
 
     /* ═══════════════════════════════════════════════════════
