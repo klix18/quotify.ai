@@ -1,7 +1,14 @@
 """
-Post-process Chromium-generated PDFs through Ghostscript to flatten
-internal structures (layers, clipping paths, transparency groups)
-and re-encode the file for smoother scrolling in PDF viewers.
+Post-process Chromium-generated PDFs to compress streams and linearize
+for faster loading, WITHOUT re-rendering text or touching font data.
+
+Previously used Ghostscript (gs -sDEVICE=pdfwrite), which re-distills
+the entire PDF and destroys glyph positioning / kerning — producing
+broken letter spacing like "Hamps tead" and "s izemoreins urance".
+
+Now uses qpdf, which operates at the PDF object/stream level and never
+touches text or font tables, preserving Chromium's original rendering.
+Falls back to keeping the original Chromium PDF if qpdf is unavailable.
 """
 
 import subprocess
@@ -11,32 +18,25 @@ from pathlib import Path
 
 def optimize_pdf(input_path: Path) -> None:
     """
-    Re-distill a PDF in-place via Ghostscript.
+    Optimize a PDF in-place via qpdf (lossless structural optimization).
 
-    This flattens compositing layers and clipping paths that Chromium
-    embeds during page.pdf(), which can cause laggy scroll/zoom in
-    PDF viewers even when the file size is small.
+    This compresses object streams, removes redundant objects, and
+    linearizes the PDF for faster first-page display — without
+    re-encoding fonts or re-positioning text glyphs.
     """
     tmp_output = input_path.with_suffix(".optimized.pdf")
 
     try:
         result = subprocess.run(
             [
-                "gs",
-                "-sDEVICE=pdfwrite",
-                "-dCompatibilityLevel=1.5",
-                "-dPDFSETTINGS=/printer",
-                "-sColorConversionStrategy=RGB",
-                "-sProcessColorModel=/DeviceRGB",
-                "-dConvertCMYKImagesToRGB=true",
-                "-dNOPAUSE",
-                "-dBATCH",
-                "-dQUIET",
-                "-dColorImageResolution=200",
-                "-dGrayImageResolution=200",
-                "-dMonoImageResolution=200",
-                f"-sOutputFile={tmp_output}",
+                "qpdf",
+                "--optimize-images",
+                "--compress-streams=y",
+                "--object-streams=generate",
+                "--linearize",
+                "--recompress-flate",
                 str(input_path),
+                str(tmp_output),
             ],
             capture_output=True,
             text=True,
@@ -47,8 +47,8 @@ def optimize_pdf(input_path: Path) -> None:
             # Replace original with optimized version
             shutil.move(str(tmp_output), str(input_path))
         else:
-            # If Ghostscript fails, keep the original Chromium PDF
+            # If qpdf fails, keep the original Chromium PDF (already good)
             tmp_output.unlink(missing_ok=True)
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        # Ghostscript not available or timed out — keep original
+        # qpdf not available or timed out — keep original Chromium PDF
         tmp_output.unlink(missing_ok=True)
