@@ -2,6 +2,8 @@
 
 {% block cover_title %}Homeowners Insurance{% endblock %}
 
+{% block hero_height %}280px{% endblock %}
+
 {% block hero_images %}
 <img class="hero-img" src="assets/homeowners-image-1.jpg" alt="">
 <img class="hero-icon" src="assets/white-homeowner-icon.png" alt="">
@@ -9,6 +11,13 @@
 
 {% block premium_content %}
 <div class="premium-amount sentient">{{ total_premium }}</div>
+<div class="quote-dates">
+  <span class="date-item"><span class="date-label">Quote Date:</span> {{ quote_date }}</span>
+  <span class="date-sep">·</span>
+  <span class="date-item"><span class="date-label">Effective:</span> {{ quote_effective_date }}</span>
+  <span class="date-sep">·</span>
+  <span class="date-item"><span class="date-label">Expires:</span> {{ quote_expiration_date }}</span>
+</div>
 {% endblock %}
 
 {% block why_bullets %}

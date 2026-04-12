@@ -119,7 +119,7 @@
     .hero-wrap {
       position: relative;
       width: 100%;
-      height: 310px;
+      height: 280px;
       border-radius: 16px 16px 0 0;
       overflow: hidden;
     }
@@ -144,7 +144,7 @@
       border: 8px solid #3DD990;
       border-radius: 0 0 16px 16px;
       text-align: center;
-      padding: 30px 32px 34px;
+      padding: 30px 32px 20px;
     }
     /* 3. SECTION HEADER — used for "Recommended Protection Plan" */
     .premium-label {
@@ -175,6 +175,31 @@
     .premium-sub strong {
       font-weight: 600;
       color: #0451BD;
+    }
+
+    /* Quote date strip inside premium banner */
+    .quote-dates {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 12px;
+      font-family: 'Poppins', sans-serif;
+      font-weight: 400;
+      font-size: 10.5px;
+      color: #4F4E4F;
+    }
+    .quote-dates .date-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .quote-dates .date-label {
+      font-weight: 500;
+      color: #20272D;
+    }
+    .quote-dates .date-sep {
+      margin: 0 6px;
+      color: #C4C4C4;
     }
 
     /* "Why This Plan Was Selected" */
@@ -531,9 +556,14 @@
       </div>
       <div class="premium-banner">
         <div class="premium-label sentient">Recommended Protection Plan</div>
-        
-<div class="premium-amount sentient">$2,847/yr</div>
-
+        <div class="premium-amount sentient">$2,847/yr</div>
+        <div class="quote-dates">
+          <span class="date-item"><span class="date-label">Quote Date:</span> 10/01/2026</span>
+          <span class="date-sep">·</span>
+          <span class="date-item"><span class="date-label">Effective:</span> 11/01/2026</span>
+          <span class="date-sep">·</span>
+          <span class="date-item"><span class="date-label">Expires:</span> 12/01/2026</span>
+        </div>
       </div>
     </div>
 
