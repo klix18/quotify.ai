@@ -64,7 +64,7 @@ async def render_homeowners_pdf(output_path: Path, data: dict):
     browser = await get_browser()
     page = await browser.new_page()
     try:
-        await page.goto(tmp_html.resolve().as_uri(), wait_until="networkidle")
+        await page.goto(tmp_html.resolve().as_uri(), wait_until="domcontentloaded")
         # Wait for all @font-face fonts to finish loading before PDF
         # generation — file:// font loads don't trigger networkidle.
         await page.evaluate("() => document.fonts.ready")

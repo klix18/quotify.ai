@@ -96,7 +96,7 @@ async def render_commercial_pdf(output_path: Path, data: dict):
     browser = await get_browser()
     page = await browser.new_page()
     try:
-        await page.goto(tmp_html.resolve().as_uri(), wait_until="networkidle")
+        await page.goto(tmp_html.resolve().as_uri(), wait_until="domcontentloaded")
         await page.evaluate("() => document.fonts.ready")
         await page.pdf(
             path=str(output_path),
