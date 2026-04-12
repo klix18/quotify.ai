@@ -11,13 +11,16 @@
 
 {% block premium_content %}
 <div class="premium-amount sentient">{{ total_premium }}</div>
+{% set date_items = [] %}
+{% if policy_term %}{% set _ = date_items.append('<span class="date-item"><span class="date-label">Policy Term:</span> ' ~ policy_term ~ '</span>') %}{% endif %}
+{% if quote_date %}{% set _ = date_items.append('<span class="date-item"><span class="date-label">Quote Date:</span> ' ~ quote_date ~ '</span>') %}{% endif %}
+{% if quote_effective_date %}{% set _ = date_items.append('<span class="date-item"><span class="date-label">Effective Date:</span> ' ~ quote_effective_date ~ '</span>') %}{% endif %}
+{% if quote_expiration_date %}{% set _ = date_items.append('<span class="date-item"><span class="date-label">Expiration Date:</span> ' ~ quote_expiration_date ~ '</span>') %}{% endif %}
+{% if date_items %}
 <div class="quote-dates">
-  <span class="date-item"><span class="date-label">Quote Date:</span> {{ quote_date }}</span>
-  <span class="date-sep">·</span>
-  <span class="date-item"><span class="date-label">Effective Date:</span> {{ quote_effective_date }}</span>
-  <span class="date-sep">·</span>
-  <span class="date-item"><span class="date-label">Expiration Date:</span> {{ quote_expiration_date }}</span>
+  {{ date_items | join(' <span class="date-sep">·</span> ') }}
 </div>
+{% endif %}
 {% endblock %}
 
 {% block why_bullets %}
@@ -218,11 +221,17 @@
     <div class="section-sub">Available payment plans for this policy.</div>
 
     <div class="payment-grid">
+      {% if payment_options.full_pay and (payment_options.full_pay.full_pay_amount or payment_options.full_pay.down_payment) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Full Pay</div>
-        <div class="payment-row"><span class="payment-row-label">Full Payment</span><span class="payment-row-value">{{ payment_options.full_pay.down_payment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Full Payment</span><span class="payment-row-value">{{ payment_options.full_pay.full_pay_amount or payment_options.full_pay.down_payment }}</span></div>
+        {% if payment_options.full_pay.eft_reduces_fee %}
+        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.full_pay.eft_reduces_fee }}</span></div>
+        {% endif %}
       </div>
+      {% endif %}
 
+      {% if payment_options.semi_annual and (payment_options.semi_annual.down_payment or payment_options.semi_annual.amount_per_installment) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Semi-Annual</div>
         <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.semi_annual.down_payment }}</span></div>
@@ -232,7 +241,9 @@
         <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.semi_annual.eft_reduces_fee }}</span></div>
         {% endif %}
       </div>
+      {% endif %}
 
+      {% if payment_options.quarterly and (payment_options.quarterly.down_payment or payment_options.quarterly.amount_per_installment) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Quarterly</div>
         <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.quarterly.down_payment }}</span></div>
@@ -242,7 +253,9 @@
         <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.quarterly.eft_reduces_fee }}</span></div>
         {% endif %}
       </div>
+      {% endif %}
 
+      {% if payment_options.monthly and (payment_options.monthly.down_payment or payment_options.monthly.amount_per_installment) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Monthly</div>
         <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.monthly.down_payment }}</span></div>
@@ -252,6 +265,7 @@
         <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.monthly.eft_reduces_fee }}</span></div>
         {% endif %}
       </div>
+      {% endif %}
     </div>
 
     {% if payment_options.show_paid_in_full_discount and payment_options.paid_in_full_discount %}

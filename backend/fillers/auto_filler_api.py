@@ -28,6 +28,7 @@ async def render_auto_pdf(output_path: Path, data: dict):
 
     context = {
         "total_premium": data.get("total_premium", ""),
+        "policy_term": data.get("policy_term", ""),
         "quote_date": data.get("quote_date", ""),
         "quote_effective_date": data.get("quote_effective_date", ""),
         "quote_expiration_date": data.get("quote_expiration_date", ""),
