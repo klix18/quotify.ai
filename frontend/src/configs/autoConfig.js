@@ -6,8 +6,6 @@ export const AUTO_POLICY_FIELDS = [
   ["quote_date", "Quote Date"],
   ["quote_effective_date", "Quote Effective Date"],
   ["quote_expiration_date", "Quote Expiration Date"],
-  ["paid_in_full_discount", "Paid-in-Full Discount"],
-  ["total_pay_in_full", "Total Pay-in-Full (After Discount)"],
 ];
 
 export const AUTO_POLICY_TERM_OPTIONS = ["6-Month", "12-Month"];
@@ -175,9 +173,6 @@ export const EMPTY_AUTO_FORM = {
   policy_term: "",
   program: "",
   total_premium: "",
-  paid_in_full_discount: "",
-  total_pay_in_full: "",
-
   // S1b: Client Information
   client_name: "",
   client_address: "",

@@ -46,11 +46,13 @@ export default function AutoPanel({
   const gridRow = { display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap: 14 };
   const cell3 = { gridColumn: "span 3", minWidth: 0 };
 
+  const cell4 = { gridColumn: "span 4", minWidth: 0 };
+
   const policySection = (
     <SectionCard title="Auto Policy">
       <div style={gridRow}>
         {AUTO_POLICY_FIELDS.map(([key, label]) => (
-          <div key={key} style={cell3}>
+          <div key={key} style={cell4}>
             <FieldControl
               fieldKey={key}
               label={label}

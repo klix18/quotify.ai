@@ -27,6 +27,9 @@ async def render_commercial_pdf(output_path: Path, data: dict):
     context = {
         # Policy
         "total_premium": data.get("total_premium", ""),
+        "quote_date": data.get("quote_date", ""),
+        "quote_effective_date": data.get("quote_effective_date", ""),
+        "quote_expiration_date": data.get("quote_expiration_date", ""),
         "additional_premiums_taxes_fees": data.get("additional_premiums_taxes_fees", ""),
         "why_selected": data.get("why_selected", ""),
         # Client / Agent

@@ -31,6 +31,9 @@ async def render_bundle_pdf(output_path: Path, data: dict):
         "bundle_total_premium": data.get("bundle_total_premium", ""),
         "home_premium": data.get("home_premium", ""),
         "auto_premium": data.get("auto_premium", ""),
+        "quote_date": data.get("quote_date", ""),
+        "quote_effective_date": data.get("quote_effective_date", ""),
+        "quote_expiration_date": data.get("quote_expiration_date", ""),
         "why_selected": data.get("why_selected", ""),
         # Client / Agent
         "client_name": data.get("client_name", ""),

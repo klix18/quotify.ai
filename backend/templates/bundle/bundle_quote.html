@@ -16,6 +16,13 @@
   <span class="premium-sub">Homeowners: <strong>{{ home_premium }}</strong></span>
   <span class="premium-sub">Auto: <strong>{{ auto_premium }}</strong></span>
 </div>
+<div class="quote-dates">
+  <span class="date-item"><span class="date-label">Quote Date:</span> {{ quote_date }}</span>
+  <span class="date-sep">·</span>
+  <span class="date-item"><span class="date-label">Effective Date:</span> {{ quote_effective_date }}</span>
+  <span class="date-sep">·</span>
+  <span class="date-item"><span class="date-label">Expiration Date:</span> {{ quote_expiration_date }}</span>
+</div>
 {% endblock %}
 
 {% block why_bullets %}

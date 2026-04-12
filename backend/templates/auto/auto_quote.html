@@ -2,6 +2,8 @@
 
 {% block cover_title %}Auto Insurance{% endblock %}
 
+{% block hero_height %}295px{% endblock %}
+
 {% block hero_images %}
 <img class="hero-img" src="assets/auto-image-1.jpg" alt="">
 <img class="hero-icon" src="assets/white-auto-icon.png" alt="">
@@ -9,6 +11,13 @@
 
 {% block premium_content %}
 <div class="premium-amount sentient">{{ total_premium }}</div>
+<div class="quote-dates">
+  <span class="date-item"><span class="date-label">Quote Date:</span> {{ quote_date }}</span>
+  <span class="date-sep">·</span>
+  <span class="date-item"><span class="date-label">Effective Date:</span> {{ quote_effective_date }}</span>
+  <span class="date-sep">·</span>
+  <span class="date-item"><span class="date-label">Expiration Date:</span> {{ quote_expiration_date }}</span>
+</div>
 {% endblock %}
 
 {% block why_bullets %}
@@ -70,7 +79,6 @@
     <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Additional Coverages</div>
     <div class="section-sub">Extra protections that round out your auto policy for broader peace of mind.</div>
 
-    {% if umpd_limit %}
     <div class="liab-card r8">
       <div class="liab-left">
         <div class="liab-name">UMPD Limit</div>
@@ -78,9 +86,7 @@
       </div>
       <div class="liab-desc">Covers damage to your vehicle caused by an uninsured or hit-and-run driver.</div>
     </div>
-    {% endif %}
 
-    {% if umpd_deductible %}
     <div class="liab-card r8">
       <div class="liab-left">
         <div class="liab-name">UMPD Deductible</div>
@@ -88,9 +94,7 @@
       </div>
       <div class="liab-desc">The amount you pay out of pocket before your uninsured motorist property damage coverage begins.</div>
     </div>
-    {% endif %}
 
-    {% if rental_limit %}
     <div class="liab-card r8">
       <div class="liab-left">
         <div class="liab-name">Rental Reimbursement</div>
@@ -98,9 +102,7 @@
       </div>
       <div class="liab-desc">Pays for a rental car while your vehicle is being repaired after a covered claim.</div>
     </div>
-    {% endif %}
 
-    {% if towing_limit %}
     <div class="liab-card r8">
       <div class="liab-left">
         <div class="liab-name">Towing &amp; Roadside</div>
@@ -108,7 +110,6 @@
       </div>
       <div class="liab-desc">Covers towing costs and roadside assistance such as jump-starts, lockouts, and flat tire changes.</div>
     </div>
-    {% endif %}
 
     <!-- Deductibles -->
     <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 12px;">Deductibles</div>
@@ -217,45 +218,40 @@
     <div class="section-sub">Available payment plans for this policy.</div>
 
     <div class="payment-grid">
-      {% if payment_options.full_pay and payment_options.full_pay.down_payment %}
       <div class="payment-card r8">
         <div class="payment-card-title">Full Pay</div>
-        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.full_pay.down_payment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Full Payment</span><span class="payment-row-value">{{ payment_options.full_pay.down_payment }}</span></div>
       </div>
-      {% endif %}
 
-      {% if payment_options.semi_annual and payment_options.semi_annual.down_payment %}
       <div class="payment-card r8">
         <div class="payment-card-title">Semi-Annual</div>
-        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.semi_annual.down_payment }}</span></div>
-        {% if payment_options.semi_annual.amount_per_installment %}
-        <div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.semi_annual.amount_per_installment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.semi_annual.down_payment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_options.semi_annual.amount_per_installment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.semi_annual.number_of_installments }}</span></div>
+        {% if payment_options.semi_annual.eft_reduces_fee %}
+        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.semi_annual.eft_reduces_fee }}</span></div>
         {% endif %}
       </div>
-      {% endif %}
 
-      {% if payment_options.quarterly and payment_options.quarterly.down_payment %}
       <div class="payment-card r8">
         <div class="payment-card-title">Quarterly</div>
-        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.quarterly.down_payment }}</span></div>
-        {% if payment_options.quarterly.amount_per_installment %}
-        <div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.quarterly.amount_per_installment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.quarterly.down_payment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_options.quarterly.amount_per_installment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.quarterly.number_of_installments }}</span></div>
+        {% if payment_options.quarterly.eft_reduces_fee %}
+        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.quarterly.eft_reduces_fee }}</span></div>
         {% endif %}
       </div>
-      {% endif %}
 
-      {% if payment_options.monthly and payment_options.monthly.down_payment %}
       <div class="payment-card r8">
         <div class="payment-card-title">Monthly</div>
-        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.monthly.down_payment }}</span></div>
-        {% if payment_options.monthly.amount_per_installment %}
-        <div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.monthly.amount_per_installment }}</span></div>
-        {% endif %}
+        <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.monthly.down_payment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_options.monthly.amount_per_installment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.monthly.number_of_installments }}</span></div>
         {% if payment_options.monthly.eft_reduces_fee %}
-        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay</span><span class="payment-row-value">{{ payment_options.monthly.eft_reduces_fee }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.monthly.eft_reduces_fee }}</span></div>
         {% endif %}
       </div>
-      {% endif %}
     </div>
 
     {% if payment_options.show_paid_in_full_discount and payment_options.paid_in_full_discount %}
