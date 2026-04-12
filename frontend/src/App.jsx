@@ -386,9 +386,143 @@ function AuthenticatedApp() {
   );
 }
 
+/* ── Mobile Blocker ────────────────────────────────────────────
+ * The Snapshot app is hover-heavy and laid out for landscape laptop
+ * screens. Below ~750px (phones + narrow portrait tablets) nothing
+ * fits, so we show a full-screen "please use desktop" message instead.
+ */
+const MOBILE_BLOCK_BREAKPOINT = 750;
+
+function MobileBlocker() {
+  const [winW, setWinW] = React.useState(
+    typeof window !== "undefined" ? window.innerWidth : 1920
+  );
+  React.useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  if (winW >= MOBILE_BLOCK_BREAKPOINT) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 99999,
+        background: "#EFF2F7",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "32px 24px",
+        fontFamily: "Poppins, sans-serif",
+        // Block scroll and any interaction with the app behind us.
+        overflow: "hidden",
+        touchAction: "none",
+      }}
+    >
+      {/* Subtle background orbs to match the rest of the app */}
+      <div style={{
+        position: "absolute", top: "-10%", left: "-10%",
+        width: 360, height: 360, borderRadius: "50%",
+        background: "rgba(23,101,212,0.14)", filter: "blur(80px)",
+        pointerEvents: "none",
+      }} />
+      <div style={{
+        position: "absolute", bottom: "-15%", right: "-15%",
+        width: 420, height: 420, borderRadius: "50%",
+        background: "rgba(201,242,255,0.22)", filter: "blur(100px)",
+        pointerEvents: "none",
+      }} />
+
+      {/* Glass card */}
+      <div
+        style={{
+          position: "relative",
+          borderRadius: 22,
+          overflow: "hidden",
+          maxWidth: 380,
+          width: "100%",
+        }}
+      >
+        {/* Glass base */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(255,255,255,0.72)",
+            backdropFilter: "blur(40px) saturate(2.0) brightness(1.05)",
+            WebkitBackdropFilter: "blur(40px) saturate(2.0) brightness(1.05)",
+            zIndex: 0,
+          }}
+        />
+        {/* Inset highlight */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 22,
+            boxShadow:
+              "inset 0 2px 0 0 rgba(255,255,255,1), inset 0 -1px 0 0 rgba(255,255,255,0.2), inset 1px 0 0 0 rgba(255,255,255,0.4), inset -1px 0 0 0 rgba(255,255,255,0.4)",
+            zIndex: 3,
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Content */}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 5,
+            padding: "36px 28px 32px 28px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+          }}
+        >
+          <img
+            src="/snapshot-logo-1.png"
+            alt="The Sizemore Snapshot"
+            style={{ height: 38, marginBottom: 22 }}
+          />
+
+          <div
+            style={{
+              fontFamily: "SentientCustom, Georgia, serif",
+              fontSize: 28,
+              fontWeight: 700,
+              lineHeight: 1.05,
+              letterSpacing: "-0.04em",
+              color: COLORS.black,
+              marginBottom: 12,
+            }}
+          >
+            Please use this app on desktop
+          </div>
+
+          <div
+            style={{
+              fontSize: 13,
+              color: COLORS.mutedText,
+              lineHeight: 1.5,
+              marginBottom: 4,
+            }}
+          >
+            The Sizemore Snapshot is built for a larger screen. Open this page
+            on a laptop or desktop browser to sign in and start generating quotes.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   return (
     <>
+      <MobileBlocker />
       <SignedOut>
         <SignInPage />
       </SignedOut>

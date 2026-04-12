@@ -196,6 +196,12 @@ function RainbowBorder({ children, borderRadius = 20, borderWidth = 2 }) {
 
 /* ── Main ChatPanel ──────────────────────────────────────────────── */
 
+// Breakpoint below which Snappy stretches to fill its parent container
+// (matching the width of sibling sections like "Quotes Generated"). Above
+// this width — MacBook Pro 14"/16" and external monitors — Snappy keeps
+// its narrower 52vw cap so it doesn't dominate the dashboard.
+const SNAPPY_FULL_WIDTH_BREAKPOINT = 1440;
+
 export default function ChatPanel({ period, userName, onOpenMemory }) {
   const { getToken } = useAuth();
   const [messages, setMessages] = useState([]);
@@ -205,6 +211,17 @@ export default function ChatPanel({ period, userName, onOpenMemory }) {
   const [greeting, setGreeting] = useState(null);
   const [isOpen, setIsOpen] = useState(true);
   const [pillHovered, setPillHovered] = useState(false);
+  // Track viewport width so we can switch Snappy to full-width on smaller
+  // screens. Inline styles can't use media queries, hence the listener.
+  const [winW, setWinW] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1920
+  );
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const isCompactViewport = winW < SNAPPY_FULL_WIDTH_BREAKPOINT;
   const scrollAreaRef = useRef(null);
   const inputRef = useRef(null);
   const abortRef = useRef(null);
@@ -429,7 +446,10 @@ export default function ChatPanel({ period, userName, onOpenMemory }) {
         onMouseLeave={() => setPillHovered(false)}
         style={{
           position: "relative",
-          maxWidth: expanded ? "52vw" : 180,
+          // Below 1440px: fill the parent container so Snappy matches the
+          // width of sibling sections (Quotes Generated, etc). Above that:
+          // cap at 52vw so it doesn't dominate wide MacBook Pro screens.
+          maxWidth: expanded ? (isCompactViewport ? "100%" : "52vw") : 180,
           width: "100%",
           transform: !expanded && pillHovered ? "scale(1.06)" : "scale(1)",
           transition: `max-width ${dur} ${ease}, transform 0.2s ${ease}`,

@@ -60,6 +60,22 @@ export default function QuotifyHome({ isAdmin }) {
   const [errorMessage, setErrorMessage] = React.useState("");
   const [parseStatus, setParseStatus] = React.useState("");
 
+  // Track viewport width so we can shrink the left sidebar on smaller
+  // screens (non-MacBook-Pro laptops), giving the right panel more room
+  // for the actual intake form. MacBook Pro 14" reports 1512px and 16"
+  // reports 1728px, so 1440 is a safe "MacBook Pro or bigger" threshold.
+  const SIDEBAR_COMPACT_BREAKPOINT = 1440;
+  const [winW, setWinW] = React.useState(
+    typeof window !== "undefined" ? window.innerWidth : 1920
+  );
+  React.useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const isCompactViewport = winW < SIDEBAR_COMPACT_BREAKPOINT;
+  const sidebarWidth = isCompactViewport ? 248 : 320;
+
   const [autoIsLoading, setAutoIsLoading] = React.useState(false);
   const [autoIsParsed, setAutoIsParsed] = React.useState(false);
   const [autoManual, setAutoManual] = React.useState({});
@@ -1694,7 +1710,9 @@ export default function QuotifyHome({ isAdmin }) {
         onMouseLeave={handleMainMouseLeave}
         style={{
           display: "grid",
-          gridTemplateColumns: "320px minmax(0, 1fr)",
+          // 320px on MacBook Pro and larger, 248px on smaller laptops so
+          // the right-hand intake form gets a meaningful amount of room back.
+          gridTemplateColumns: `${sidebarWidth}px minmax(0, 1fr)`,
           height: "100%",
           position: "relative",
         }}
