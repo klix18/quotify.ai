@@ -47,12 +47,13 @@ def get_session(session_id: str) -> dict | None:
     return session
 
 
-def create_session(session_id: str, user_id: str, user_name: str) -> dict:
+def create_session(session_id: str, user_id: str, user_name: str, user_role: str = "advisor") -> dict:
     """Create a new in-memory session."""
     session = {
         "session_id": session_id,
         "user_id": user_id,
         "user_name": user_name,
+        "user_role": user_role,
         "messages": [],
         "created_at": datetime.now(timezone.utc),
         "last_active": datetime.now(timezone.utc),
@@ -93,6 +94,7 @@ async def save_session_summary(
     user_id: str,
     user_role: str,
     messages: list[dict],
+    user_name: str = "",
 ):
     """Summarize a session via LLM and store in database."""
     if not messages or len(messages) < 2:
@@ -153,7 +155,7 @@ Respond in this exact JSON format:
         )
 
     # Also extract long-term memories from this session
-    await _extract_memories(user_id, convo_text)
+    await _extract_memories(user_id, convo_text, user_name=user_name)
 
 
 async def get_recent_summaries(user_id: str, limit: int = 5) -> list[dict]:
@@ -172,22 +174,30 @@ async def get_recent_summaries(user_id: str, limit: int = 5) -> list[dict]:
 
 # ── Database: long-term memories ─────────────────────────────────────
 
-async def _extract_memories(user_id: str, convo_text: str):
+async def _extract_memories(user_id: str, convo_text: str, user_name: str = ""):
     """Use LLM to extract durable memories from a conversation."""
+    user_identity_note = ""
+    if user_name:
+        user_identity_note = f"""
+CRITICAL CONTEXT: The user chatting is **{user_name}**. Any memories you extract must be about THIS person — {user_name}.
+The conversation contains analytics data about MANY people (team members, advisors, etc.). Do NOT confuse those people with the user. For example, if the data mentions "Kevin Li" but the user is "{user_name}", do NOT create a memory saying the user is Kevin Li.
+"""
+
     try:
         client = _get_client()
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": f"""Based on this conversation, extract what you learned about the USER (the human) — not the data they looked at.
-
+{user_identity_note}
 The goal is to build a profile of WHO this person is so the assistant can personalize future conversations. Focus exclusively on the person, not on the analytics or data.
 
 Types of things to extract:
-- **bio**: Facts about the user — their name, job title, role, team, company, background (e.g. "Kevin is an AI engineer", "Works at Sizemore Insurance", "Has been in insurance for 5 years")
+- **bio**: Facts about the user — their name, job title, role, team, company, background (e.g. "David is an insurance advisor", "Works at Sizemore Insurance", "Has been in insurance for 5 years")
 - **preference**: How they like to interact, communicate, or consume information (e.g. "Prefers concise bullet-point answers", "Likes seeing percentages over raw counts", "Usually asks about homeowners first")
 - **behavior**: Recurring habits, workflows, or patterns in how they use the tool (e.g. "Checks team performance every morning", "Always asks follow-up questions about manual corrections", "Tends to ask broad questions then drill down")
 
 DO NOT extract facts about the data itself (e.g. "Homeowners is 50% of quotes" or "Kevin Li is the only active member"). Those are data observations, not user memories. Only extract things that describe the person's identity, preferences, or behavior.
+DO NOT extract identities of OTHER people mentioned in the analytics data as if they are the user. The user is {user_name or "the person sending messages marked USER"}.
 
 Be generous — extract at least 1-2 items from any meaningful conversation. Only return an empty array if nothing about the user can be inferred.
 
@@ -305,6 +315,7 @@ async def end_session(session_id: str):
         await save_session_summary(
             session_id=session_id,
             user_id=session["user_id"],
-            user_role="admin",
+            user_role=session.get("user_role", "advisor"),
             messages=session["messages"],
+            user_name=session.get("user_name", ""),
         )

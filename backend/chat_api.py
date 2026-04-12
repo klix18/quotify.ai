@@ -302,10 +302,14 @@ async def _fetch_full_context(period: str) -> str:
 
 # ── System prompt ────────────────────────────────────────────────────
 
-ADMIN_SYSTEM_PROMPT = """You are the AI analytics assistant for the Quotify AI admin dashboard at Sizemore Insurance. Your name is Snappy.
+SYSTEM_PROMPT = """You are the AI analytics assistant for the Quotify AI dashboard at Sizemore Insurance. Your name is Snappy.
+
+## CURRENT USER
+You are currently speaking with **{user_display_name}** ({user_email}). Their role is **{user_role}**.
+IMPORTANT: This is the person you are talking to RIGHT NOW. Do NOT confuse them with other people who appear in the analytics data below. When the user says "I" or "me" or "my", they mean {user_display_name} — not anyone else in the data.
 
 ## YOUR ROLE
-You help admins understand their team's performance, insurance quote generation patterns, and areas that need attention. All your answers must be grounded in the analytics data provided below — never make up numbers or statistics.
+You help users understand their team's performance, insurance quote generation patterns, and areas that need attention. All your answers must be grounded in the analytics data provided below — never make up numbers or statistics.
 
 ## WHAT YOU CAN ANSWER
 - Team member performance and rankings (who's processing the most quotes, who's most active)
@@ -327,8 +331,12 @@ Critical context:
 - When discussing a person's activity, consider BOTH their actions as a logged-in user AND quotes attributed to them as an advisor.
 - If asked "how many quotes did Kevin Li do?", consider both quotes where Kevin Li was the user AND quotes where Kevin Li was the advisor (they mostly overlap, but not always).
 
+## WHAT YOU CAN ALSO ANSWER
+- Questions about the user's own identity ("who am I", "what's my name", "what's my role") — you know who they are from the CURRENT USER section above. Answer these warmly and naturally, e.g. "You're {user_display_name}! You're logged in as a {user_role}."
+- Questions about the user's own activity in the data — look up their name in the analytics data and summarize their performance.
+
 ## WHAT YOU CANNOT ANSWER
-- Anything unrelated to the analytics data (general knowledge, coding, personal topics, etc.)
+- Anything unrelated to the analytics data or the user's identity (general knowledge, coding, etc.)
 - If asked something off-topic, respond warmly: "I'm focused on your analytics data! Try asking about team performance, insurance breakdowns, or which fields need the most manual fixes."
 
 ## RESPONSE FORMAT — RICH TEXT
@@ -371,6 +379,9 @@ def _build_system_prompt(
     data_context: str,
     memories: list[dict],
     summaries: list[dict],
+    user_display_name: str = "User",
+    user_email: str = "",
+    user_role: str = "advisor",
 ) -> str:
     """Assemble the full system prompt with all context."""
     # Format memories
@@ -397,11 +408,14 @@ def _build_system_prompt(
     # Load skills from markdown files
     skills_prompt = build_skills_prompt("admin")
 
-    return ADMIN_SYSTEM_PROMPT.format(
+    return SYSTEM_PROMPT.format(
         skills_prompt=skills_prompt,
         memory_context=memory_context,
         session_summaries=session_summaries,
         data_context=data_context,
+        user_display_name=user_display_name,
+        user_email=user_email or "unknown",
+        user_role=user_role,
     )
 
 
@@ -485,9 +499,11 @@ async def start_session(
     """Start a new chat session."""
     body = await request.json()
     session_id = body.get("session_id", str(uuid4()))
-    user_name = body.get("user_name", "Admin")
+    user_name = body.get("user_name", "").strip() or "User"
+    user_metadata = user.get("metadata", {})
+    user_role = user_metadata.get("role", "advisor")
 
-    session = create_session(session_id, user["user_id"], user_name)
+    session = create_session(session_id, user["user_id"], user_name, user_role)
     return {"session_id": session["session_id"], "status": "created"}
 
 
@@ -585,10 +601,16 @@ async def chat_message(
     if not message:
         return {"error": "Empty message"}
 
+    # Resolve user identity
+    user_name = body.get("user_name", "").strip() or "User"
+    user_email = user.get("email", "")
+    user_metadata = user.get("metadata", {})
+    user_role = user_metadata.get("role", "advisor")
+
     # Ensure session exists
     session = get_session(session_id)
     if session is None:
-        session = create_session(session_id, user["user_id"], body.get("user_name", "Admin"))
+        session = create_session(session_id, user["user_id"], user_name, user_role)
 
     # Add user message to session
     add_message(session_id, "user", message)
@@ -598,8 +620,13 @@ async def chat_message(
     memories = await get_active_memories(user["user_id"])
     summaries = await get_recent_summaries(user["user_id"])
 
-    # Build system prompt
-    system_prompt = _build_system_prompt(data_context, memories, summaries)
+    # Build system prompt with current user identity
+    system_prompt = _build_system_prompt(
+        data_context, memories, summaries,
+        user_display_name=user_name,
+        user_email=user_email,
+        user_role=user_role,
+    )
 
     # Build conversation messages for the LLM (OpenAI format)
     history = get_conversation_history(session_id)
