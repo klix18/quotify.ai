@@ -18,7 +18,20 @@ async def get_browser() -> Browser:
 
     if _browser is None or not _browser.is_connected():
         _playwright = await async_playwright().start()
-        _browser = await _playwright.chromium.launch()
+        _browser = await _playwright.chromium.launch(
+            args=[
+                # Disable subpixel font positioning — prevents Chromium's
+                # PDF text encoder from accumulating fractional-pixel
+                # rounding errors that produce mid-word gaps.
+                "--disable-font-subpixel-positioning",
+                # Disable LCD text (subpixel) rendering — PDF doesn't
+                # have subpixels, so this avoids width miscalculations.
+                "--disable-lcd-text",
+                # Use no hinting — lets the font's own metrics control
+                # glyph advances without OS-level adjustments.
+                "--font-render-hinting=none",
+            ]
+        )
 
     return _browser
 
