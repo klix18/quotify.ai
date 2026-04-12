@@ -49,7 +49,6 @@ FLAT_KEYS = [
     "quote_effective_date",
     "quote_expiration_date",
     "policy_term",
-    "program",
 ]
 
 COVERAGE_KEYS = [
@@ -106,7 +105,6 @@ AUTO_SCHEMA = {
         "quote_effective_date": {"type": "string"},
         "quote_expiration_date": {"type": "string"},
         "policy_term": {"type": "string", "enum": ["6-Month", "12-Month", "Unknown"]},
-        "program": {"type": "string"},
 
         # S3 – Drivers
         "drivers": {
@@ -196,7 +194,7 @@ AUTO_SCHEMA = {
     "required": [
         "client_name", "client_address", "client_phone",
         "quote_date", "quote_effective_date", "quote_expiration_date",
-        "policy_term", "program",
+        "policy_term",
         "drivers", "vehicles", "coverages",
         "payment_options", "premium_summary",
     ],
@@ -271,8 +269,6 @@ POLICY INFO
                        stated explicitly. A ~180-day span = "6-Month",
                        ~365-day span = "12-Month". Use "Unknown" only if it
                        truly cannot be determined.
-• program            – the insurance program, product, or tier name if shown
-                       (e.g., "Signature", "Preferred", "Standard").  "" if absent.
 
 DRIVERS  (array – capture ALL listed drivers)
 • driver_name        – full name.
@@ -375,7 +371,7 @@ field_key: value
 
 Use these flat keys:
   client_name, client_address, client_phone, quote_date,
-  quote_effective_date, quote_expiration_date, policy_term, program
+  quote_effective_date, quote_expiration_date, policy_term
 
 For coverage limits/deductibles use these keys:
   bi_limit, pd_limit, medpay_limit, um_uim_bi_limit, umpd_limit,

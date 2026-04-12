@@ -61,13 +61,12 @@ export const BUNDLE_HOMEOWNERS_YES_NO_FIELDS = new Set([
 // AUTO SECTION
 // ═══════════════════════════════════════════════════════════════════
 
-// Auto Policy details (dates, term, program — no premiums here)
+// Auto Policy details (dates, term — no premiums here)
 export const BUNDLE_AUTO_POLICY_FIELDS = [
   ["auto_quote_date", "Quote Date / Print Date"],
   ["auto_quote_effective_date", "Quote Effective Date"],
   ["auto_quote_expiration_date", "Quote Expiration Date"],
   ["auto_policy_term", "Policy Term"],
-  ["auto_program", "Program"],
   ["auto_paid_in_full_discount", "Paid-in-Full Discount"],
   ["auto_total_pay_in_full", "Total Pay-in-Full (After Discount)"],
 ];
@@ -224,7 +223,6 @@ export const EMPTY_BUNDLE_FORM = {
   auto_quote_effective_date: "",
   auto_quote_expiration_date: "",
   auto_policy_term: "",
-  auto_program: "",
   auto_paid_in_full_discount: "",
   auto_total_pay_in_full: "",
 

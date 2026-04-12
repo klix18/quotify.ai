@@ -2940,7 +2940,7 @@ function getAutoCompletionCount(form) {
   const topLevel = [
     "client_name", "client_address", "client_email", "client_phone",
     "quote_date", "quote_effective_date", "quote_expiration_date",
-    "policy_term", "program",
+    "policy_term",
     "total_premium", "paid_in_full_discount", "total_pay_in_full",
     "agent_name", "agent_address", "agent_phone", "agent_email",
   ];

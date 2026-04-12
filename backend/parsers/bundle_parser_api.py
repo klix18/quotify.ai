@@ -80,7 +80,6 @@ AUTO_POLICY_KEYS = [
     "auto_quote_effective_date",
     "auto_quote_expiration_date",
     "auto_policy_term",
-    "auto_program",
     "auto_paid_in_full_discount",
     "auto_total_pay_in_full",
 ]
@@ -178,7 +177,6 @@ BUNDLE_SCHEMA = {
         "auto_quote_effective_date": {"type": "string"},
         "auto_quote_expiration_date": {"type": "string"},
         "auto_policy_term": {"type": "string", "enum": ["6-Month", "12-Month", "Unknown"]},
-        "auto_program": {"type": "string"},
         "auto_paid_in_full_discount": {"type": "string"},
         "auto_total_pay_in_full": {"type": "string"},
 
@@ -269,7 +267,7 @@ BUNDLE_SCHEMA = {
         "personal_liability", "medical_payments",
         "all_perils_deductible", "wind_hail_deductible", "water_and_sewer_backup",
         "auto_quote_date", "auto_quote_effective_date", "auto_quote_expiration_date",
-        "auto_policy_term", "auto_program",
+        "auto_policy_term",
         "drivers", "vehicles", "coverages", "payment_options",
         "confidence",
     ],
@@ -315,7 +313,6 @@ or homeowners dates here. (Auto-specific dates still go in auto_quote_*.)
 • auto_quote_date – print/quote date in MM/DD/YYYY.
 • auto_quote_effective_date / auto_quote_expiration_date – MM/DD/YYYY.
 • auto_policy_term – "6-Month", "12-Month", or "Unknown".
-• auto_program – program/tier name or "".
 • auto_paid_in_full_discount – discount amount if paying in full, or "".
 • auto_total_pay_in_full – total if paying in full after discount, or "".
 
@@ -377,7 +374,7 @@ Use these keys for bundle policy and homeowners:
 
 Use these keys for auto details:
   auto_quote_date, auto_quote_effective_date, auto_quote_expiration_date,
-  auto_policy_term, auto_program, auto_paid_in_full_discount,
+  auto_policy_term, auto_paid_in_full_discount,
   auto_total_pay_in_full
 
 For auto coverage limits/deductibles:
@@ -862,7 +859,6 @@ def _remap_auto_to_bundle(data: dict) -> dict:
         "quote_effective_date": "auto_quote_effective_date",
         "quote_expiration_date": "auto_quote_expiration_date",
         "policy_term": "auto_policy_term",
-        "program": "auto_program",
     }
     for k, v in data.items():
         if k in auto_remap:
@@ -915,7 +911,6 @@ def _merge_home_auto_to_bundle(home: dict, auto: dict) -> dict:
         "quote_effective_date": "auto_quote_effective_date",
         "quote_expiration_date": "auto_quote_expiration_date",
         "policy_term": "auto_policy_term",
-        "program": "auto_program",
     }
     for src, dst in auto_remap.items():
         merged[dst] = auto.get(src, "")

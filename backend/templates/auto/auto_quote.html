@@ -215,9 +215,21 @@
 
     {% endif %}
 
-    <!-- Payment Options -->
-    {% if payment_options %}
-    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Payment Options</div>
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+<!-- ════════════════════  PAGE 4 — PAYMENT OPTIONS  ══════════════════ -->
+{% if payment_options %}
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Payment Options</div>
     <div class="section-sub">Available payment plans for this policy.</div>
 
     <div class="payment-grid">
@@ -302,9 +314,8 @@
     </div>
     {% endif %}
 
-    {% endif %}
-
   </div>
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
 </div>
+{% endif %}
 {% endblock %}

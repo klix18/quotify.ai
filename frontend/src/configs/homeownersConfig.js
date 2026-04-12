@@ -65,9 +65,9 @@ export const HOMEOWNERS_FIELDS = [
       { key: "wind_hail_deductible", span: 3 },
     ],
     [
-      { key: "water_and_sewer_backup", span: 3 },
-      { key: "replacement_cost_on_contents", span: 3 },
-      { key: "25_extended_replacement_cost", span: 3 },
+      { key: "water_and_sewer_backup", span: 4 },
+      { key: "replacement_cost_on_contents", span: 4 },
+      { key: "25_extended_replacement_cost", span: 4 },
     ],
     [
       { key: "client_name", span: 3 },

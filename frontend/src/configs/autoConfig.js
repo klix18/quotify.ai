@@ -1,7 +1,6 @@
 // ─── Section 1: Auto Policy ─────────────────────────────────────
 export const AUTO_POLICY_FIELDS = [
   ["policy_term", "Policy Term"],
-  ["program", "Program"],
   ["total_premium", "Total Premium"],
   ["quote_date", "Quote Date"],
   ["quote_effective_date", "Quote Effective Date"],
@@ -171,7 +170,6 @@ export const EMPTY_AUTO_FORM = {
   quote_effective_date: "",
   quote_expiration_date: "",
   policy_term: "",
-  program: "",
   total_premium: "",
   // S1b: Client Information
   client_name: "",
