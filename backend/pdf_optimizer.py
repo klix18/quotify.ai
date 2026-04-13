@@ -9,6 +9,12 @@ broken letter spacing like "Hamps tead" and "s izemoreins urance".
 Now uses qpdf, which operates at the PDF object/stream level and never
 touches text or font tables, preserving Chromium's original rendering.
 Falls back to keeping the original Chromium PDF if qpdf is unavailable.
+
+NOTE: --optimize-images is intentionally NOT used because it re-encodes
+images (Flate → DCT) and can alter color space metadata, producing
+inconsistent DeviceRGB / ICCBased color spaces across PDFs. All source
+images have been standardized to have no embedded ICC profiles so that
+Chromium consistently outputs DeviceRGB.
 """
 
 import subprocess
@@ -30,7 +36,6 @@ def optimize_pdf(input_path: Path) -> None:
         result = subprocess.run(
             [
                 "qpdf",
-                "--optimize-images",
                 "--compress-streams=y",
                 "--object-streams=generate",
                 "--linearize",
