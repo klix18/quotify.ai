@@ -76,12 +76,7 @@ HOMEOWNERS_COVERAGE_KEYS = [
 
 # Auto policy detail keys (prefixed with auto_)
 AUTO_POLICY_KEYS = [
-    "auto_quote_date",
-    "auto_quote_effective_date",
-    "auto_quote_expiration_date",
     "auto_policy_term",
-    "auto_paid_in_full_discount",
-    "auto_total_pay_in_full",
 ]
 
 # Auto coverage keys
@@ -173,12 +168,7 @@ BUNDLE_SCHEMA = {
         "water_and_sewer_backup": {"type": "string"},
 
         # Auto policy details
-        "auto_quote_date": {"type": "string"},
-        "auto_quote_effective_date": {"type": "string"},
-        "auto_quote_expiration_date": {"type": "string"},
         "auto_policy_term": {"type": "string", "enum": ["6-Month", "12-Month", "Unknown"]},
-        "auto_paid_in_full_discount": {"type": "string"},
-        "auto_total_pay_in_full": {"type": "string"},
 
         # Auto drivers
         "drivers": {
@@ -266,7 +256,6 @@ BUNDLE_SCHEMA = {
         "dwelling", "other_structures", "personal_property", "loss_of_use",
         "personal_liability", "medical_payments",
         "all_perils_deductible", "wind_hail_deductible", "water_and_sewer_backup",
-        "auto_quote_date", "auto_quote_effective_date", "auto_quote_expiration_date",
         "auto_policy_term",
         "drivers", "vehicles", "coverages", "payment_options",
         "confidence",
@@ -310,11 +299,7 @@ or homeowners dates here. (Auto-specific dates still go in auto_quote_*.)
 • water_and_sewer_backup – dollar amount or "".
 
 ─── AUTO POLICY DETAILS ─────────────────────────────────────────
-• auto_quote_date – print/quote date in MM/DD/YYYY.
-• auto_quote_effective_date / auto_quote_expiration_date – MM/DD/YYYY.
 • auto_policy_term – "6-Month", "12-Month", or "Unknown".
-• auto_paid_in_full_discount – discount amount if paying in full, or "".
-• auto_total_pay_in_full – total if paying in full after discount, or "".
 
 ─── AUTO DRIVERS (array) ────────────────────────────────────────
 • driver_name, gender ("Male"/"Female"/"Unknown"), marital_status, license_state.
@@ -372,10 +357,8 @@ Use these keys for bundle policy and homeowners:
   25_extended_replacement_cost, all_perils_deductible,
   wind_hail_deductible, water_and_sewer_backup
 
-Use these keys for auto details:
-  auto_quote_date, auto_quote_effective_date, auto_quote_expiration_date,
-  auto_policy_term, auto_paid_in_full_discount,
-  auto_total_pay_in_full
+Use this key for auto details:
+  auto_policy_term
 
 For auto coverage limits/deductibles:
   bi_limit, pd_limit, medpay_limit, um_uim_bi_limit, umpd_limit,
@@ -782,8 +765,8 @@ def classify_pdf(client, uploaded_file) -> str:
 
 def stream_two_file_bundle(home_path: Path, auto_path: Path) -> Iterator[str]:
     """Parse 2 separate PDFs (homeowners + auto) and merge into bundle schema."""
-    from homeowners_parser_api import stream_homeowners_quote_with_gemini
-    from auto_parser_api import stream_auto_quote_with_gemini
+    from parsers.homeowners_parser_api import stream_homeowners_quote_with_gemini
+    from parsers.auto_parser_api import stream_auto_quote_with_gemini
 
     yield json.dumps({"type": "status", "message": "Parsing homeowners quote..."}) + "\n"
 
@@ -855,9 +838,6 @@ def _remap_auto_to_bundle(data: dict) -> dict:
     """Remap auto parser flat fields to bundle auto_ prefixed keys."""
     remapped = {}
     auto_remap = {
-        "quote_date": "auto_quote_date",
-        "quote_effective_date": "auto_quote_effective_date",
-        "quote_expiration_date": "auto_quote_expiration_date",
         "policy_term": "auto_policy_term",
     }
     for k, v in data.items():
@@ -907,9 +887,6 @@ def _merge_home_auto_to_bundle(home: dict, auto: dict) -> dict:
 
     # Auto fields (remapped to bundle prefixed)
     auto_remap = {
-        "quote_date": "auto_quote_date",
-        "quote_effective_date": "auto_quote_effective_date",
-        "quote_expiration_date": "auto_quote_expiration_date",
         "policy_term": "auto_policy_term",
     }
     for src, dst in auto_remap.items():

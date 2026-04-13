@@ -48,6 +48,11 @@ export default function QuotifyHome({ isAdmin }) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [fileName, setFileName] = React.useState("");
   const [bundleFileNames, setBundleFileNames] = React.useState([]);
+  const [bundleUploadMode, setBundleUploadMode] = React.useState("combined"); // "combined" | "separate"
+  const [separateHomeFile, setSeparateHomeFile] = React.useState(null);
+  const [separateAutoFile, setSeparateAutoFile] = React.useState(null);
+  const separateHomeInputRef = React.useRef(null);
+  const separateAutoInputRef = React.useRef(null);
   const [homeownersForm, setHomeownersForm] = React.useState(EMPTY_HOMEOWNERS_FORM);
   const [autoForm, setAutoForm] = React.useState({
     ...EMPTY_AUTO_FORM,
@@ -1625,6 +1630,18 @@ export default function QuotifyHome({ isAdmin }) {
     await parseBundleFiles(pdfs);
   };
 
+  const handleSeparateHomeFile = (file) => {
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
+    setSeparateHomeFile(file);
+    setErrorMessage("");
+  };
+
+  const handleSeparateAutoFile = (file) => {
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
+    setSeparateAutoFile(file);
+    setErrorMessage("");
+  };
+
   const handleDrop = async (e) => {
     e.preventDefault();
     setIsDragging(false);
@@ -1646,7 +1663,9 @@ export default function QuotifyHome({ isAdmin }) {
 
   const insuranceReady = !!selectedInsurance;
   const advisorReady = !!selectedAdvisorName;
-  const uploadReady = !!fileName;
+  const uploadReady = selectedInsurance === "bundle" && bundleUploadMode === "separate"
+    ? !!(separateHomeFile && separateAutoFile)
+    : !!fileName;
 
   // Required fields per insurance type: client info, advisor info, and policy
   const REQUIRED_FIELDS_MAP = {
@@ -1804,6 +1823,9 @@ export default function QuotifyHome({ isAdmin }) {
                       setIsDragging(false);
                       setFileName("");
                       setBundleFileNames([]);
+                      setSeparateHomeFile(null);
+                      setSeparateAutoFile(null);
+                      setBundleUploadMode("combined");
                     }}
                     onMouseEnter={() => setHoveredInsurance(item.key)}
                     onMouseLeave={() => setHoveredInsurance("")}
@@ -1969,6 +1991,54 @@ export default function QuotifyHome({ isAdmin }) {
           </SidebarBlock>
 
           <SidebarBlock title="Upload Quote" status={uploadReady} style={{ flexShrink: 1, minHeight: 0, overflow: "hidden" }}>
+            {/* ── Apple-style toggle for bundle mode ─────────────── */}
+            {selectedInsurance === "bundle" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: bundleUploadMode === "combined" ? COLORS.blue : COLORS.mutedText, transition: "color 200ms ease" }}>Combined</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = bundleUploadMode === "combined" ? "separate" : "combined";
+                    setBundleUploadMode(next);
+                    setFileName("");
+                    setBundleFileNames([]);
+                    setSeparateHomeFile(null);
+                    setSeparateAutoFile(null);
+                    setErrorMessage("");
+                    setParseStatus("");
+                  }}
+                  style={{
+                    position: "relative",
+                    width: 44,
+                    height: 24,
+                    borderRadius: 12,
+                    border: "none",
+                    background: bundleUploadMode === "separate" ? COLORS.blue : "#D1D5DB",
+                    cursor: isParsing ? "not-allowed" : "pointer",
+                    transition: "background 300ms ease",
+                    flexShrink: 0,
+                    padding: 0,
+                  }}
+                  disabled={isParsing}
+                >
+                  <div style={{
+                    position: "absolute",
+                    top: 2,
+                    left: bundleUploadMode === "separate" ? 22 : 2,
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    background: "#fff",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                    transition: "left 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+                  }} />
+                </button>
+                <span style={{ fontSize: 12, fontWeight: 600, color: bundleUploadMode === "separate" ? COLORS.blue : COLORS.mutedText, transition: "color 200ms ease" }}>Separate</span>
+              </div>
+            )}
+
+            {/* ── Combined mode OR non-bundle upload zone ─────────── */}
+            {(selectedInsurance !== "bundle" || bundleUploadMode === "combined") && (
             <div
               onDragEnter={(e) => {
                 if (!uploaderEnabled) return;
@@ -2015,7 +2085,7 @@ export default function QuotifyHome({ isAdmin }) {
                   marginBottom: 6,
                 }}
               >
-                {fileName || (selectedInsurance === "bundle" ? "Drag & drop 1 or 2 PDFs" : "Drag & drop PDF")}
+                {fileName || (selectedInsurance === "bundle" ? "Drag & drop combined PDF" : "Drag & drop PDF")}
               </div>
 
               <div
@@ -2026,7 +2096,7 @@ export default function QuotifyHome({ isAdmin }) {
                   marginBottom: 12,
                 }}
               >
-                {selectedInsurance === "bundle" ? "PDF only · 1 combined or 2 separate · up to 200MB each" : "PDF only · up to 200MB"}
+                {selectedInsurance === "bundle" ? "PDF only · single combined quote · up to 200MB" : "PDF only · up to 200MB"}
               </div>
 
               {isParsing && parseStatus ? (
@@ -2046,7 +2116,7 @@ export default function QuotifyHome({ isAdmin }) {
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf"
-                multiple={selectedInsurance === "bundle"}
+                multiple={selectedInsurance === "bundle" && bundleUploadMode === "combined"}
                 style={{ display: "none" }}
                 onChange={(e) => {
                   if (selectedInsurance === "bundle") {
@@ -2130,6 +2200,184 @@ export default function QuotifyHome({ isAdmin }) {
                 </div>
               )}
             </div>
+            )}
+
+            {/* ── Separate mode: two mini upload zones ────────────── */}
+            {selectedInsurance === "bundle" && bundleUploadMode === "separate" && (
+              <div style={{ display: "grid", gap: 8 }}>
+                {/* Homeowners zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleSeparateHomeFile(file);
+                  }}
+                  style={{
+                    borderRadius: 14,
+                    border: `1.5px dashed ${separateHomeFile ? COLORS.blue : COLORS.borderStrong}`,
+                    background: separateHomeFile ? COLORS.blueSoft : COLORS.white,
+                    padding: "10px 12px",
+                    transition: "all 200ms ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <img src="/i-homeowners.png" alt="Home" style={{ width: 16, height: 16, objectFit: "contain" }} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.blue }}>Homeowners Quote</span>
+                    {separateHomeFile && (
+                      <button type="button" onClick={() => setSeparateHomeFile(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {separateHomeFile ? (
+                    <div style={{ fontSize: 11, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {separateHomeFile.name}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11, color: COLORS.mutedText, marginBottom: 6 }}>Drag PDF or browse</div>
+                      <input ref={separateHomeInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) handleSeparateHomeFile(e.target.files[0]); }} />
+                      <button
+                        type="button"
+                        disabled={isParsing}
+                        onClick={() => separateHomeInputRef.current?.click()}
+                        style={{
+                          width: "100%",
+                          height: 34,
+                          borderRadius: 10,
+                          border: `1px solid ${COLORS.borderGrey}`,
+                          background: COLORS.lightGrey,
+                          color: COLORS.blue,
+                          fontWeight: 600,
+                          fontSize: 12,
+                          fontFamily: "Poppins, sans-serif",
+                          cursor: isParsing ? "not-allowed" : "pointer",
+                          transition: "all 200ms ease",
+                        }}
+                      >
+                        Browse
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Auto zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleSeparateAutoFile(file);
+                  }}
+                  style={{
+                    borderRadius: 14,
+                    border: `1.5px dashed ${separateAutoFile ? COLORS.blue : COLORS.borderStrong}`,
+                    background: separateAutoFile ? COLORS.blueSoft : COLORS.white,
+                    padding: "10px 12px",
+                    transition: "all 200ms ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <img src="/i-auto.png" alt="Auto" style={{ width: 16, height: 16, objectFit: "contain" }} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.blue }}>Auto Quote</span>
+                    {separateAutoFile && (
+                      <button type="button" onClick={() => setSeparateAutoFile(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {separateAutoFile ? (
+                    <div style={{ fontSize: 11, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {separateAutoFile.name}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11, color: COLORS.mutedText, marginBottom: 6 }}>Drag PDF or browse</div>
+                      <input ref={separateAutoInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) handleSeparateAutoFile(e.target.files[0]); }} />
+                      <button
+                        type="button"
+                        disabled={isParsing}
+                        onClick={() => separateAutoInputRef.current?.click()}
+                        style={{
+                          width: "100%",
+                          height: 34,
+                          borderRadius: 10,
+                          border: `1px solid ${COLORS.borderGrey}`,
+                          background: COLORS.lightGrey,
+                          color: COLORS.blue,
+                          fontWeight: 600,
+                          fontSize: 12,
+                          fontFamily: "Poppins, sans-serif",
+                          cursor: isParsing ? "not-allowed" : "pointer",
+                          transition: "all 200ms ease",
+                        }}
+                      >
+                        Browse
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Parse button — only when both files ready */}
+                {separateHomeFile && separateAutoFile && !isParsing && (
+                  <button
+                    type="button"
+                    onClick={() => parseBundleFiles([separateHomeFile, separateAutoFile])}
+                    style={{
+                      width: "100%",
+                      height: 42,
+                      borderRadius: 12,
+                      border: `1px solid ${COLORS.blue}`,
+                      background: COLORS.blue,
+                      color: COLORS.white,
+                      fontWeight: 600,
+                      fontSize: 13,
+                      fontFamily: "Poppins, sans-serif",
+                      cursor: "pointer",
+                      transition: "all 200ms ease",
+                      marginTop: 2,
+                    }}
+                  >
+                    Parse Both Quotes
+                  </button>
+                )}
+
+                {isParsing && parseStatus ? (
+                  <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, textAlign: "center", padding: "4px 0" }}>
+                    {parseStatus}
+                  </div>
+                ) : null}
+
+                {isParsing && (
+                  <button
+                    type="button"
+                    onClick={cancelParsing}
+                    style={{
+                      width: "100%",
+                      height: 36,
+                      borderRadius: 12,
+                      border: `1px solid ${COLORS.danger}`,
+                      background: COLORS.dangerSoft,
+                      color: COLORS.danger,
+                      fontWeight: 600,
+                      fontSize: 12,
+                      fontFamily: "Poppins, sans-serif",
+                      cursor: "pointer",
+                      transition: "all 200ms ease",
+                    }}
+                  >
+                    Cancel Operation
+                  </button>
+                )}
+
+                {errorMessage && (
+                  <div style={{ color: COLORS.danger, fontSize: 12, fontWeight: 500, textAlign: "center", lineHeight: 1.4 }}>
+                    {errorMessage}
+                  </div>
+                )}
+              </div>
+            )}
           </SidebarBlock>
 
           </div>

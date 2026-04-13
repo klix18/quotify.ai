@@ -26,11 +26,11 @@ export default function HomeownersPanel({
         alignItems: "start",
       }}
     >
-      {row.map(({ key }) => (
+      {row.map(({ key, span }) => (
         <div
           key={key}
           style={{
-            gridColumn: "span 3",
+            gridColumn: `span ${span || 3}`,
             minWidth: 0,
           }}
         >

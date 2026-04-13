@@ -61,16 +61,6 @@ export const BUNDLE_HOMEOWNERS_YES_NO_FIELDS = new Set([
 // AUTO SECTION
 // ═══════════════════════════════════════════════════════════════════
 
-// Auto Policy details (dates, term — no premiums here)
-export const BUNDLE_AUTO_POLICY_FIELDS = [
-  ["auto_quote_date", "Quote Date / Print Date"],
-  ["auto_quote_effective_date", "Quote Effective Date"],
-  ["auto_quote_expiration_date", "Quote Expiration Date"],
-  ["auto_policy_term", "Policy Term"],
-  ["auto_paid_in_full_discount", "Paid-in-Full Discount"],
-  ["auto_total_pay_in_full", "Total Pay-in-Full (After Discount)"],
-];
-
 export const AUTO_POLICY_TERM_OPTIONS = ["6-Month", "12-Month"];
 
 // ─── Drivers ─────────────────────────────────────────────────────
@@ -218,13 +208,8 @@ export const EMPTY_BUNDLE_FORM = {
   wind_hail_deductible: "",
   water_and_sewer_backup: "",
 
-  // ── Auto Policy Details ──
-  auto_quote_date: "",
-  auto_quote_effective_date: "",
-  auto_quote_expiration_date: "",
+  // ── Auto Policy ──
   auto_policy_term: "",
-  auto_paid_in_full_discount: "",
-  auto_total_pay_in_full: "",
 
   // ── Auto Drivers ──
   drivers: [],

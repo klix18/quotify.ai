@@ -4,7 +4,6 @@ import {
   BUNDLE_AGENT_FIELDS,
   BUNDLE_HOMEOWNERS_COVERAGE_FIELDS,
   BUNDLE_HOMEOWNERS_YES_NO_FIELDS,
-  BUNDLE_AUTO_POLICY_FIELDS,
   AUTO_POLICY_TERM_OPTIONS,
   BUNDLE_AUTO_DRIVER_FIELDS,
   DRIVER_GENDER_OPTIONS,
@@ -169,40 +168,23 @@ export default function BundlePanel({
   const homeownersCoveragesSection = (
     <SectionCard title="Homeowners Coverages">
       <div style={gridRow}>
-        {BUNDLE_HOMEOWNERS_COVERAGE_FIELDS.map(([key, label]) => (
-          <div key={key} style={cell3}>
-            <FieldControl
-              fieldKey={key}
-              label={label}
-              value={form[key] || ""}
-              onChange={onFieldChange}
-              isYesNo={BUNDLE_HOMEOWNERS_YES_NO_FIELDS.has(key)}
-              {...fp(key)}
-            />
-          </div>
-        ))}
-      </div>
-    </SectionCard>
-  );
-
-  /* ============================================================
-     AUTO — Policy Details
-     ============================================================ */
-  const autoPolicySection = (
-    <SectionCard title="Auto Policy Details">
-      <div style={gridRow}>
-        {BUNDLE_AUTO_POLICY_FIELDS.map(([key, label]) => (
-          <div key={key} style={cell3}>
-            <FieldControl
-              fieldKey={key}
-              label={label}
-              value={form[key] || ""}
-              onChange={onFieldChange}
-              selectOptions={key === "auto_policy_term" ? AUTO_POLICY_TERM_OPTIONS : null}
-              {...fp(key)}
-            />
-          </div>
-        ))}
+        {BUNDLE_HOMEOWNERS_COVERAGE_FIELDS.map(([key, label], i) => {
+          const total = BUNDLE_HOMEOWNERS_COVERAGE_FIELDS.length;
+          const remainder = total % 4;
+          const isLastRow = remainder > 0 && i >= total - remainder;
+          return (
+            <div key={key} style={isLastRow ? cell4 : cell3}>
+              <FieldControl
+                fieldKey={key}
+                label={label}
+                value={form[key] || ""}
+                onChange={onFieldChange}
+                isYesNo={BUNDLE_HOMEOWNERS_YES_NO_FIELDS.has(key)}
+                {...fp(key)}
+              />
+            </div>
+          );
+        })}
       </div>
     </SectionCard>
   );
@@ -335,8 +317,18 @@ export default function BundlePanel({
   const coveragesSection = (
     <SectionCard title="Auto Coverages">
       <div style={gridRow}>
-        {/* Row 1: BI, PD, MedPay, UM/UIM BI */}
-        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(0, 4).map(([key, label]) => (
+        {/* Policy Term + Row 1: BI, PD, MedPay */}
+        <div style={cell3}>
+          <FieldControl
+            fieldKey="auto_policy_term"
+            label="Policy Term"
+            value={form.auto_policy_term || ""}
+            onChange={onFieldChange}
+            selectOptions={AUTO_POLICY_TERM_OPTIONS}
+            {...fp("auto_policy_term")}
+          />
+        </div>
+        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(0, 3).map(([key, label]) => (
           <div key={key} style={cell3}>
             <FieldControl
               fieldKey={`coverages.${key}`}
@@ -348,8 +340,8 @@ export default function BundlePanel({
           </div>
         ))}
 
-        {/* Row 2: UMPD Limit, UMPD Deductible, Comprehensive, Collision */}
-        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(4, 8).map(([key, label]) => (
+        {/* Row 2: UM/UIM BI, UMPD Limit, UMPD Deductible, Comprehensive */}
+        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(3, 7).map(([key, label]) => (
           <div key={key} style={cell3}>
             <FieldControl
               fieldKey={`coverages.${key}`}
@@ -361,9 +353,9 @@ export default function BundlePanel({
           </div>
         ))}
 
-        {/* Row 3: Rental, Towing */}
-        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(8).map(([key, label]) => (
-          <div key={key} style={cell6}>
+        {/* Row 3: Collision, Rental, Towing */}
+        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(7).map(([key, label]) => (
+          <div key={key} style={cell4}>
             <FieldControl
               fieldKey={`coverages.${key}`}
               label={label}
@@ -461,10 +453,9 @@ export default function BundlePanel({
       {homeownersCoveragesSection}
 
       <BigSectionHeader title="Auto" icon="/i-auto.png" />
-      {autoPolicySection}
+      {coveragesSection}
       {driversSection}
       {vehiclesSection}
-      {coveragesSection}
       {paymentSection}
     </div>
   );
