@@ -834,6 +834,30 @@ def stream_two_file_bundle(home_path: Path, auto_path: Path) -> Iterator[str]:
     yield json.dumps({"type": "result", "data": merged, "confidence": merged_confidence}) + "\n"
 
 
+def _sum_premiums(*amounts: str) -> str:
+    """Parse dollar-formatted strings and return their sum as a formatted dollar string.
+
+    Handles formats like "$2,641.00", "1528.15", "$1,234", etc.
+    Returns "" if no valid amounts could be parsed.
+    """
+    import re
+    total = 0.0
+    found_any = False
+    for raw in amounts:
+        if not raw or not str(raw).strip():
+            continue
+        cleaned = re.sub(r"[,$\s]", "", str(raw).strip())
+        try:
+            total += float(cleaned)
+            found_any = True
+        except (ValueError, TypeError):
+            continue
+    if not found_any:
+        return ""
+    # Format as $X,XXX.XX
+    return f"${total:,.2f}"
+
+
 def _remap_auto_to_bundle(data: dict) -> dict:
     """Remap auto parser flat fields to bundle auto_ prefixed keys."""
     remapped = {}
@@ -898,8 +922,8 @@ def _merge_home_auto_to_bundle(home: dict, auto: dict) -> dict:
     merged["auto_paid_in_full_discount"] = ps.get("paid_in_full_discount", "") or auto.get("paid_in_full_discount", "")
     merged["auto_total_pay_in_full"] = ps.get("total_pay_in_full", "") or auto.get("total_pay_in_full", "")
 
-    # Bundle total = try to compute if both are parseable dollar amounts
-    merged["bundle_total_premium"] = ""  # Could auto-compute, left for user
+    # Bundle total = auto-compute by summing home + auto premiums
+    merged["bundle_total_premium"] = _sum_premiums(merged.get("home_premium", ""), merged.get("auto_premium", ""))
 
     # Auto arrays and objects
     merged["drivers"] = auto.get("drivers", [])

@@ -2214,16 +2214,16 @@ export default function QuotifyHome({ isAdmin }) {
                     if (file) handleSeparateHomeFile(file);
                   }}
                   style={{
-                    borderRadius: 14,
+                    borderRadius: 16,
                     border: `1.5px dashed ${separateHomeFile ? COLORS.blue : COLORS.borderStrong}`,
                     background: separateHomeFile ? COLORS.blueSoft : COLORS.white,
-                    padding: "10px 12px",
+                    padding: "14px 14px 16px",
                     transition: "all 200ms ease",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <img src="/i-homeowners.png" alt="Home" style={{ width: 16, height: 16, objectFit: "contain" }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.blue }}>Homeowners Quote</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <img src="/i-homeowners.png" alt="Home" style={{ width: 18, height: 18, objectFit: "contain" }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.blue }}>Homeowners Quote</span>
                     {separateHomeFile && (
                       <button type="button" onClick={() => setSeparateHomeFile(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}>
                         Remove
@@ -2231,12 +2231,12 @@ export default function QuotifyHome({ isAdmin }) {
                     )}
                   </div>
                   {separateHomeFile ? (
-                    <div style={{ fontSize: 11, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {separateHomeFile.name}
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 11, color: COLORS.mutedText, marginBottom: 6 }}>Drag PDF or browse</div>
+                      <div style={{ fontSize: 12, color: COLORS.mutedText, lineHeight: 1.4, marginBottom: 10 }}>Drag PDF or browse</div>
                       <input ref={separateHomeInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) handleSeparateHomeFile(e.target.files[0]); }} />
                       <button
                         type="button"
@@ -2244,13 +2244,13 @@ export default function QuotifyHome({ isAdmin }) {
                         onClick={() => separateHomeInputRef.current?.click()}
                         style={{
                           width: "100%",
-                          height: 34,
+                          height: 38,
                           borderRadius: 10,
                           border: `1px solid ${COLORS.borderGrey}`,
                           background: COLORS.lightGrey,
                           color: COLORS.blue,
                           fontWeight: 600,
-                          fontSize: 12,
+                          fontSize: 13,
                           fontFamily: "Poppins, sans-serif",
                           cursor: isParsing ? "not-allowed" : "pointer",
                           transition: "all 200ms ease",
@@ -2271,16 +2271,16 @@ export default function QuotifyHome({ isAdmin }) {
                     if (file) handleSeparateAutoFile(file);
                   }}
                   style={{
-                    borderRadius: 14,
+                    borderRadius: 16,
                     border: `1.5px dashed ${separateAutoFile ? COLORS.blue : COLORS.borderStrong}`,
                     background: separateAutoFile ? COLORS.blueSoft : COLORS.white,
-                    padding: "10px 12px",
+                    padding: "14px 14px 16px",
                     transition: "all 200ms ease",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <img src="/i-auto.png" alt="Auto" style={{ width: 16, height: 16, objectFit: "contain" }} />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.blue }}>Auto Quote</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <img src="/i-auto.png" alt="Auto" style={{ width: 18, height: 18, objectFit: "contain" }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.blue }}>Auto Quote</span>
                     {separateAutoFile && (
                       <button type="button" onClick={() => setSeparateAutoFile(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}>
                         Remove
@@ -2288,12 +2288,12 @@ export default function QuotifyHome({ isAdmin }) {
                     )}
                   </div>
                   {separateAutoFile ? (
-                    <div style={{ fontSize: 11, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {separateAutoFile.name}
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize: 11, color: COLORS.mutedText, marginBottom: 6 }}>Drag PDF or browse</div>
+                      <div style={{ fontSize: 12, color: COLORS.mutedText, lineHeight: 1.4, marginBottom: 10 }}>Drag PDF or browse</div>
                       <input ref={separateAutoInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) handleSeparateAutoFile(e.target.files[0]); }} />
                       <button
                         type="button"
@@ -2301,13 +2301,13 @@ export default function QuotifyHome({ isAdmin }) {
                         onClick={() => separateAutoInputRef.current?.click()}
                         style={{
                           width: "100%",
-                          height: 34,
+                          height: 38,
                           borderRadius: 10,
                           border: `1px solid ${COLORS.borderGrey}`,
                           background: COLORS.lightGrey,
                           color: COLORS.blue,
                           fontWeight: 600,
-                          fontSize: 12,
+                          fontSize: 13,
                           fontFamily: "Poppins, sans-serif",
                           cursor: isParsing ? "not-allowed" : "pointer",
                           transition: "all 200ms ease",
