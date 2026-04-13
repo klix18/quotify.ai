@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -25,6 +26,8 @@ from clerk_users_api import router as clerk_users_router
 from chat_api import router as chat_router
 from report_generator import router as report_router
 
+from settings_api import router as settings_router, usage_router as api_usage_router
+from auto_clear_task import start_auto_clear_loop
 from browser_manager import get_browser, close_browser
 from database import init_db, close_pool
 
@@ -34,7 +37,10 @@ async def lifespan(app: FastAPI):
     # Startup: launch Chromium + initialize database
     await get_browser()
     await init_db()
+    # Start background auto-clear task
+    auto_clear = asyncio.create_task(start_auto_clear_loop())
     yield
+    auto_clear.cancel()
     # Shutdown: clean up browser + database pool
     await close_browser()
     await close_pool()
@@ -83,3 +89,7 @@ app.include_router(clerk_users_router)
 # Chat & reports
 app.include_router(chat_router)
 app.include_router(report_router)
+
+# Settings & API usage
+app.include_router(settings_router)
+app.include_router(api_usage_router)

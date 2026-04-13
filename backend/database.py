@@ -83,6 +83,32 @@ async def init_db():
         """)
 
         # Chat tables (separate execute to avoid multi-statement issues)
+        # App settings (key-value store for auto-clear, etc.)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT ''
+            );
+        """)
+
+        # API usage log — tracks tokens & estimated cost per AI call
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS api_usage_log (
+                id              BIGSERIAL PRIMARY KEY,
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                provider        TEXT NOT NULL,
+                model           TEXT NOT NULL,
+                input_tokens    INTEGER NOT NULL DEFAULT 0,
+                output_tokens   INTEGER NOT NULL DEFAULT 0,
+                estimated_cost  DOUBLE PRECISION NOT NULL DEFAULT 0,
+                call_type       TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_api_usage_created_at
+                ON api_usage_log (created_at);
+            CREATE INDEX IF NOT EXISTS idx_api_usage_provider
+                ON api_usage_log (provider);
+        """)
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_session_memories (
                 id              TEXT PRIMARY KEY,
@@ -254,3 +280,100 @@ async def log_event(
             generated_pdf,
             client_name,
         )
+
+
+# ── App settings ────────────────────────────────────────────────────
+
+
+async def get_setting(key: str, default: str = "") -> str:
+    """Read a setting value by key."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT value FROM app_settings WHERE key = $1", key
+        )
+    return row["value"] if row else default
+
+
+async def set_setting(key: str, value: str) -> None:
+    """Upsert a setting value."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO app_settings (key, value) VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = $2
+            """,
+            key, value,
+        )
+
+
+# ── PDF bulk operations ─────────────────────────────────────────────
+
+
+async def delete_all_pdfs() -> int:
+    """Delete all PDF documents. Returns count of deleted rows."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute("DELETE FROM pdf_documents")
+    # result looks like "DELETE 42"
+    return int(result.split()[-1])
+
+
+async def get_pdf_filenames() -> set[str]:
+    """Return a set of all stored PDF file_name values (lightweight check)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT file_name FROM pdf_documents")
+    return {r["file_name"] for r in rows}
+
+
+# ── API usage tracking ──────────────────────────────────────────────
+
+
+async def log_api_usage(
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    estimated_cost: float,
+    call_type: str = "",
+) -> None:
+    """Log a single AI API call with token counts and cost estimate."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO api_usage_log
+                (provider, model, input_tokens, output_tokens, estimated_cost, call_type)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            """,
+            provider, model, input_tokens, output_tokens, estimated_cost, call_type,
+        )
+
+
+async def get_api_usage(period: str = "month") -> list[dict]:
+    """Return daily API usage aggregated by provider for the given period."""
+    cutoff_sql = {
+        "week": "NOW() - INTERVAL '7 days'",
+        "month": "NOW() - INTERVAL '30 days'",
+        "6months": "NOW() - INTERVAL '180 days'",
+        "year": "NOW() - INTERVAL '365 days'",
+        "all": "'1970-01-01'::timestamptz",
+    }.get(period, "NOW() - INTERVAL '30 days'")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(f"""
+            SELECT
+                DATE(created_at) AS date,
+                provider,
+                SUM(input_tokens)   AS input_tokens,
+                SUM(output_tokens)  AS output_tokens,
+                SUM(estimated_cost) AS cost
+            FROM api_usage_log
+            WHERE created_at >= {cutoff_sql}
+            GROUP BY DATE(created_at), provider
+            ORDER BY date ASC
+        """)
+    return [dict(r) for r in rows]

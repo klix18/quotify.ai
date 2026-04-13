@@ -1292,7 +1292,7 @@ function UserSnapshotHistory({ events, getToken }) {
 }
 
 /* ── Snapshot History (Event Log with delete) ────────────────── */
-function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = false }) {
+function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = false, pdfFilenames = new Set() }) {
   const [deleteTarget, setDeleteTarget] = React.useState(null);
   const [deleting, setDeleting] = React.useState(false);
   const [filterUser, setFilterUser] = React.useState("");
@@ -1448,12 +1448,17 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
                 </td>
                 <td style={td}>{e.advisor || "—"}</td>
                 <td style={td} title={e.uploaded_pdf}>
-                  {e.uploaded_pdf ? (
-                    <span
-                      onClick={() => handlePdfDownload(e.uploaded_pdf, "uploaded")}
-                      style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}
-                    >{e.uploaded_pdf}</span>
-                  ) : "—"}
+                  {e.uploaded_pdf ? (() => {
+                    const exists = pdfFilenames.has(e.uploaded_pdf) || [...pdfFilenames].some(fn => e.uploaded_pdf.startsWith(fn.split(".pdf")[0]));
+                    return exists ? (
+                      <span
+                        onClick={() => handlePdfDownload(e.uploaded_pdf, "uploaded")}
+                        style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}
+                      >{e.uploaded_pdf}</span>
+                    ) : (
+                      <span style={{ color: COLORS.mutedText }}>{e.uploaded_pdf}</span>
+                    );
+                  })() : "—"}
                 </td>
                 <td style={td} title={e.manually_changed_fields}>{e.manually_changed_fields || "—"}</td>
                 <td style={{ ...td, textAlign: "center" }}>
@@ -1465,12 +1470,17 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
                   }}>{e.created_quote ? "Yes" : "No"}</span>
                 </td>
                 <td style={td} title={e.generated_pdf}>
-                  {e.generated_pdf ? (
-                    <span
-                      onClick={() => handlePdfDownload(e.generated_pdf, "generated")}
-                      style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}
-                    >{e.generated_pdf}</span>
-                  ) : "—"}
+                  {e.generated_pdf ? (() => {
+                    const exists = pdfFilenames.has(e.generated_pdf) || [...pdfFilenames].some(fn => e.generated_pdf.startsWith(fn.split(".pdf")[0]));
+                    return exists ? (
+                      <span
+                        onClick={() => handlePdfDownload(e.generated_pdf, "generated")}
+                        style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}
+                      >{e.generated_pdf}</span>
+                    ) : (
+                      <span style={{ color: COLORS.mutedText }}>{e.generated_pdf}</span>
+                    );
+                  })() : "—"}
                 </td>
                 <td style={{ ...td, textAlign: "center" }}>
                   <HoverButton
@@ -1488,6 +1498,379 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
     </>
   );
 }
+
+/* ── PDF Storage Management ─────────────────────────────────── */
+function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
+  const [docs, setDocs] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [deleteTarget, setDeleteTarget] = React.useState(null);
+  const [deleting, setDeleting] = React.useState(false);
+  const [clearConfirm, setClearConfirm] = React.useState(false);
+  const [clearing, setClearing] = React.useState(false);
+  const [autoClear, setAutoClear] = React.useState("never");
+  const [savingAuto, setSavingAuto] = React.useState(false);
+
+  const fetchDocs = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const resp = await fetch(`${API_BASE_URL}/api/pdfs?limit=200`, { headers: { Authorization: `Bearer ${token}` } });
+      if (resp.ok) { const d = await resp.json(); setDocs(d.documents || []); }
+    } catch {}
+    setLoading(false);
+  }, [getToken]);
+
+  const fetchAutoClear = React.useCallback(async () => {
+    try {
+      const token = await getToken();
+      const resp = await fetch(`${API_BASE_URL}/api/admin/settings/auto-clear`, { headers: { Authorization: `Bearer ${token}` } });
+      if (resp.ok) { const d = await resp.json(); setAutoClear(d.value || "never"); }
+    } catch {}
+  }, [getToken]);
+
+  React.useEffect(() => { fetchDocs(); fetchAutoClear(); }, [fetchDocs, fetchAutoClear]);
+
+  const handleDeleteOne = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      const resp = await fetch(`${API_BASE_URL}/api/pdfs/${deleteTarget}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (resp.ok) { setDeleteTarget(null); fetchDocs(); if (onRefresh) onRefresh(); }
+    } catch {}
+    setDeleting(false);
+  };
+
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      const token = await getToken();
+      const resp = await fetch(`${API_BASE_URL}/api/pdfs/all`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (resp.ok) { setClearConfirm(false); fetchDocs(); if (onRefresh) onRefresh(); }
+    } catch {}
+    setClearing(false);
+  };
+
+  const handleAutoClearChange = async (value) => {
+    setSavingAuto(true);
+    setAutoClear(value);
+    try {
+      const token = await getToken();
+      await fetch(`${API_BASE_URL}/api/admin/settings/auto-clear`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ value }),
+      });
+    } catch {}
+    setSavingAuto(false);
+  };
+
+  const handleDownload = async (doc) => {
+    try {
+      const token = await getToken();
+      const resp = await fetch(`${API_BASE_URL}/api/pdfs/${doc.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!resp.ok) return;
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = doc.file_name; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch {}
+  };
+
+  const th = { padding: "10px 14px", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", textAlign: "left" };
+  const td = { padding: "10px 14px", fontSize: 12, fontWeight: 400, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+  const typeColors = INSURANCE_COLORS;
+
+  const totalSize = docs.reduce((sum, d) => sum + (d.file_size || 0), 0);
+  const formatSize = (b) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+
+  return (
+    <>
+      {deleteTarget && (
+        <ConfirmModal message="Delete this PDF from storage?" onConfirm={handleDeleteOne} onCancel={() => setDeleteTarget(null)} confirming={deleting} />
+      )}
+      {clearConfirm && (
+        <ConfirmModal message={`Delete ALL ${docs.length} stored PDFs? This cannot be undone.`} onConfirm={handleClearAll} onCancel={() => setClearConfirm(false)} confirming={clearing} confirmLabel="Clear All" confirmingLabel="Clearing..." />
+      )}
+
+      {/* Header row with stats + actions */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <div style={{ fontSize: 13, color: COLORS.mutedText }}>
+            <strong style={{ color: COLORS.black }}>{docs.length}</strong> PDFs stored
+            <span style={{ margin: "0 6px", color: COLORS.borderGrey }}>·</span>
+            {formatSize(totalSize)} total
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 11, color: COLORS.mutedText, fontWeight: 500 }}>Auto-clear:</span>
+            <select
+              value={autoClear}
+              onChange={(e) => { if (isAdmin) handleAutoClearChange(e.target.value); }}
+              disabled={!isAdmin || savingAuto}
+              style={{
+                padding: "4px 10px", height: 30, borderRadius: 8,
+                border: `1px solid ${COLORS.borderGrey}`, background: "rgba(255,255,255,0.88)",
+                fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
+                color: COLORS.black, cursor: isAdmin ? "pointer" : "not-allowed",
+              }}
+            >
+              <option value="never">Never</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="6months">6 Months</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <HoverButton
+            variant="danger"
+            onClick={() => { if (isAdmin && docs.length > 0) setClearConfirm(true); }}
+            disabled={!isAdmin || docs.length === 0}
+            style={{ height: 32, padding: "0 14px", fontSize: 11, borderRadius: 10 }}
+          >Clear All</HoverButton>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ color: COLORS.mutedText, fontSize: 13, textAlign: "center", padding: 24 }}>Loading PDFs...</div>
+      ) : docs.length === 0 ? (
+        <div style={{ color: COLORS.mutedText, fontSize: 13, textAlign: "center", padding: 24 }}>No PDFs stored</div>
+      ) : (
+        <div style={{ overflowX: "auto", maxHeight: 320, overflowY: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "Poppins, sans-serif" }}>
+            <thead>
+              <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)`, position: "sticky", top: 0, background: "rgba(255,255,255,0.95)", zIndex: 1 }}>
+                <th style={th}>Date</th>
+                <th style={th}>File Name</th>
+                <th style={th}>Type</th>
+                <th style={th}>Insurance</th>
+                <th style={th}>Client</th>
+                <th style={th}>Size</th>
+                <th style={{ ...th, textAlign: "center", width: 100 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {docs.map((doc) => (
+                <HoverRow key={doc.id}>
+                  <td style={td}>{new Date(doc.created_at).toLocaleDateString()}</td>
+                  <td style={td}>
+                    <span onClick={() => handleDownload(doc)} style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}>
+                      {doc.file_name}
+                    </span>
+                  </td>
+                  <td style={td}>
+                    <span style={{
+                      padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize",
+                      background: doc.doc_type === "generated" ? COLORS.blueSoft : COLORS.greenSoft,
+                      color: doc.doc_type === "generated" ? COLORS.blue : COLORS.green,
+                    }}>{doc.doc_type}</span>
+                  </td>
+                  <td style={td}>
+                    <span style={{
+                      padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize",
+                      background: `${typeColors[doc.insurance_type] || COLORS.blue}15`,
+                      color: typeColors[doc.insurance_type] || COLORS.blue,
+                    }}>{doc.insurance_type}</span>
+                  </td>
+                  <td style={td}>{doc.client_name || "—"}</td>
+                  <td style={td}>{formatSize(doc.file_size || 0)}</td>
+                  <td style={{ ...td, textAlign: "center" }}>
+                    <HoverButton
+                      variant="dangerSmall"
+                      onClick={() => { if (isAdmin) setDeleteTarget(doc.id); }}
+                      disabled={!isAdmin}
+                      style={{ height: 26, padding: "0 10px", fontSize: 10, borderRadius: 8 }}
+                    >Delete</HoverButton>
+                  </td>
+                </HoverRow>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+
+/* ── API Usage Line Graph ──────────────────────────────────────── */
+function ApiUsageGraph({ period, getToken }) {
+  const [usage, setUsage] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [metric, setMetric] = React.useState("tokens"); // "tokens" | "cost"
+  const [hovered, setHovered] = React.useState(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const token = await getToken();
+        const resp = await fetch(`${API_BASE_URL}/api/admin/api-usage?period=${period}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (resp.ok && !cancelled) {
+          const d = await resp.json();
+          setUsage(d.usage || []);
+        }
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [period, getToken]);
+
+  if (loading) return <div style={{ color: COLORS.mutedText, fontSize: 13, textAlign: "center", padding: 40 }}>Loading API usage...</div>;
+  if (usage.length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13, textAlign: "center", padding: 40 }}>No API usage data yet. Usage will appear here as quotes are generated.</div>;
+
+  // Group by date, then by provider
+  const dateMap = {};
+  for (const row of usage) {
+    if (!dateMap[row.date]) dateMap[row.date] = {};
+    const entry = dateMap[row.date];
+    if (!entry[row.provider]) entry[row.provider] = { input_tokens: 0, output_tokens: 0, cost: 0 };
+    entry[row.provider].input_tokens += row.input_tokens || 0;
+    entry[row.provider].output_tokens += row.output_tokens || 0;
+    entry[row.provider].cost += row.cost || 0;
+  }
+
+  const dates = Object.keys(dateMap).sort();
+  const providers = [...new Set(usage.map((r) => r.provider))].sort();
+
+  const providerColors = {
+    openai: "#10A37F",   // OpenAI green
+    gemini: "#4285F4",   // Google blue
+  };
+
+  // Get values for the chart
+  const getValue = (date, provider) => {
+    const d = dateMap[date]?.[provider];
+    if (!d) return 0;
+    return metric === "tokens" ? d.input_tokens + d.output_tokens : d.cost;
+  };
+
+  const allValues = dates.flatMap((d) => providers.map((p) => getValue(d, p)));
+  const maxVal = Math.max(...allValues, 1);
+
+  // SVG dimensions
+  const W = 700, H = 220, padL = 60, padR = 20, padT = 16, padB = 40;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  const xScale = (i) => padL + (dates.length === 1 ? chartW / 2 : (i / (dates.length - 1)) * chartW);
+  const yScale = (v) => padT + chartH - (v / maxVal) * chartH;
+
+  const buildPath = (provider) => {
+    const points = dates.map((d, i) => ({ x: xScale(i), y: yScale(getValue(d, provider)) }));
+    if (points.length === 0) return "";
+    if (points.length === 1) return "";
+    return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  };
+
+  // Y-axis ticks
+  const yTicks = 4;
+  const yTickValues = Array.from({ length: yTicks + 1 }, (_, i) => (maxVal / yTicks) * i);
+  const formatYTick = (v) => {
+    if (metric === "cost") return `$${v < 1 ? v.toFixed(3) : v.toFixed(2)}`;
+    if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+    if (v >= 1000) return `${(v / 1000).toFixed(0)}K`;
+    return v.toFixed(0);
+  };
+
+  // Hover detection
+  const handleSvgMove = (e) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * W;
+    if (dates.length === 0) return;
+    let closestIdx = 0;
+    let closestDist = Infinity;
+    dates.forEach((_, i) => {
+      const dist = Math.abs(xScale(i) - mx);
+      if (dist < closestDist) { closestDist = dist; closestIdx = i; }
+    });
+    if (closestDist < 40) setHovered(closestIdx);
+    else setHovered(null);
+  };
+
+  const filterSelect = {
+    padding: "4px 10px", height: 30, borderRadius: 8,
+    border: `1px solid ${COLORS.borderGrey}`, background: "rgba(255,255,255,0.88)",
+    fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
+    color: COLORS.black, cursor: "pointer",
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          {providers.map((p) => (
+            <div key={p} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: providerColors[p] || COLORS.blue }} />
+              <span style={{ fontSize: 12, fontWeight: 500, color: COLORS.black, textTransform: "capitalize" }}>{p === "openai" ? "OpenAI" : p === "gemini" ? "Google Gemini" : p}</span>
+            </div>
+          ))}
+        </div>
+        <select value={metric} onChange={(e) => setMetric(e.target.value)} style={filterSelect}>
+          <option value="tokens">Tokens</option>
+          <option value="cost">Estimated Cost</option>
+        </select>
+      </div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }} onMouseMove={handleSvgMove} onMouseLeave={() => setHovered(null)}>
+        {/* Grid lines */}
+        {yTickValues.map((v, i) => (
+          <g key={i}>
+            <line x1={padL} x2={W - padR} y1={yScale(v)} y2={yScale(v)} stroke="rgba(180,200,230,0.25)" strokeWidth={1} />
+            <text x={padL - 8} y={yScale(v) + 4} textAnchor="end" fontSize={10} fill={COLORS.mutedText} fontFamily="Poppins">{formatYTick(v)}</text>
+          </g>
+        ))}
+
+        {/* X-axis labels */}
+        {dates.map((d, i) => {
+          // Show max ~10 labels
+          if (dates.length > 12 && i % Math.ceil(dates.length / 10) !== 0 && i !== dates.length - 1) return null;
+          const label = new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+          return <text key={d} x={xScale(i)} y={H - 8} textAnchor="middle" fontSize={10} fill={COLORS.mutedText} fontFamily="Poppins">{label}</text>;
+        })}
+
+        {/* Lines */}
+        {providers.map((p) => (
+          <path key={p} d={buildPath(p)} fill="none" stroke={providerColors[p] || COLORS.blue} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+        ))}
+
+        {/* Dots */}
+        {providers.map((p) => dates.map((d, i) => {
+          const v = getValue(d, p);
+          if (v === 0) return null;
+          return <circle key={`${p}-${i}`} cx={xScale(i)} cy={yScale(v)} r={hovered === i ? 5 : 3} fill={providerColors[p] || COLORS.blue} stroke="#fff" strokeWidth={1.5} style={{ transition: "r 150ms ease" }} />;
+        }))}
+
+        {/* Hover line + tooltip */}
+        {hovered !== null && (
+          <>
+            <line x1={xScale(hovered)} x2={xScale(hovered)} y1={padT} y2={padT + chartH} stroke="rgba(23,101,212,0.2)" strokeWidth={1} strokeDasharray="4 3" />
+          </>
+        )}
+      </svg>
+
+      {/* Tooltip below chart */}
+      {hovered !== null && dates[hovered] && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: COLORS.black }}>
+            {new Date(dates[hovered] + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+          </span>
+          {providers.map((p) => {
+            const v = getValue(dates[hovered], p);
+            return (
+              <span key={p} style={{ fontSize: 11, color: providerColors[p] || COLORS.blue, fontWeight: 500 }}>
+                {p === "openai" ? "OpenAI" : "Gemini"}: {metric === "cost" ? `$${v.toFixed(4)}` : v.toLocaleString() + " tokens"}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 /* ── Hoverable table row ─────────────────────────────────────── */
 function HoverRow({ children }) {
@@ -1519,6 +1902,7 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
   const [selectedUser, setSelectedUser] = React.useState(null);
   const [clerkUsers, setClerkUsers] = React.useState({});  // lookup map (includes alias keys) -> { id, role, email, image_url }
   const [clerkUsersList, setClerkUsersList] = React.useState([]); // canonical one-entry-per-Clerk-user list: [{ id, role, email, image_url, displayName }]
+  const [pdfFilenames, setPdfFilenames] = React.useState(new Set()); // set of stored PDF filenames for smart links
   const navigate = useNavigate();
 
   // Mouse-tracking orbs
@@ -1609,10 +1993,11 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
       const token = await getToken();
 
       // Both admins and advisors fetch the same dashboard data
-      const [summaryResp, changesResp, usersResp] = await Promise.all([
+      const [summaryResp, changesResp, usersResp, fnResp] = await Promise.all([
         fetch(`${API_BASE_URL}/api/admin/analytics/summary?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE_URL}/api/admin/analytics/manual-changes?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/api/pdfs/filenames`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (!summaryResp.ok) {
         const detail = await summaryResp.json().catch(() => ({}));
@@ -1655,6 +2040,10 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
         }
         setClerkUsers(map);
         setClerkUsersList(canonical);
+      }
+      if (fnResp.ok) {
+        const fnData = await fnResp.json();
+        setPdfFilenames(new Set(fnData.filenames || []));
       }
     } catch (e) {
       setError(e.message);
@@ -1853,7 +2242,21 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
 
             {/* Snapshot History */}
             <Section title="Snapshot History" expandable>
-              {(expanded) => <SnapshotHistory events={data.recent_events} getToken={getToken} onRefresh={fetchAnalytics} limit={expanded ? 30 : 5} isAdmin={isAdmin} />}
+              {(expanded) => <SnapshotHistory events={data.recent_events} getToken={getToken} onRefresh={fetchAnalytics} limit={expanded ? 30 : 5} isAdmin={isAdmin} pdfFilenames={pdfFilenames} />}
+            </Section>
+
+            {/* PDF Storage Management */}
+            <Section title="PDF Storage" expandable>
+              {(expanded) => expanded ? <PdfStorageManager getToken={getToken} isAdmin={isAdmin} onRefresh={fetchAnalytics} /> : (
+                <div style={{ color: COLORS.mutedText, fontSize: 13 }}>Expand to manage stored PDFs, set auto-clear schedule, or clear storage.</div>
+              )}
+            </Section>
+
+            {/* API Usage */}
+            <Section title="API Usage" expandable defaultExpanded>
+              {(expanded) => expanded ? <ApiUsageGraph period={period} getToken={getToken} /> : (
+                <div style={{ color: COLORS.mutedText, fontSize: 13 }}>Expand to view OpenAI and Gemini token usage and cost over time.</div>
+              )}
             </Section>
           </div>
         )}

@@ -285,6 +285,12 @@ def generate_with_fallback(
                 config=config,
             )
             _log(f"gen OK: model={model}")
+            # Track Gemini token usage
+            try:
+                from usage_tracker import track_gemini_response
+                track_gemini_response(resp, model, call_type="parser")
+            except Exception:
+                pass
             return resp
         except Exception as exc:
             last_exc = exc

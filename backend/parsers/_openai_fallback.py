@@ -339,6 +339,19 @@ def generate_openai_extraction(
             resp = client.responses.create(**create_kwargs)
             text = getattr(resp, "output_text", "") or ""
             _log(f"gen OK: model={model} chars={len(text)}")
+            # Track OpenAI usage
+            try:
+                usage = getattr(resp, "usage", None)
+                if usage:
+                    from usage_tracker import track_openai_usage
+                    track_openai_usage(
+                        model=model,
+                        input_tokens=getattr(usage, "input_tokens", 0) or 0,
+                        output_tokens=getattr(usage, "output_tokens", 0) or 0,
+                        call_type="parser",
+                    )
+            except Exception:
+                pass
             return text
         except Exception as exc:
             last_exc = exc

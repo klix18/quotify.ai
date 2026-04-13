@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from auth import get_current_user, require_admin
-from database import get_pdf, list_pdfs, delete_pdf
+from database import get_pdf, list_pdfs, delete_pdf, delete_all_pdfs, get_pdf_filenames
 
 router = APIRouter(prefix="/api/pdfs", tags=["pdf-storage"])
 
@@ -37,6 +37,24 @@ async def list_documents(
         doc["id"] = str(doc["id"])
 
     return {"documents": docs}
+
+
+@router.get("/filenames")
+async def list_filenames(
+    user: dict = Depends(get_current_user),
+):
+    """Return the set of all stored PDF filenames (lightweight)."""
+    names = await get_pdf_filenames()
+    return {"filenames": list(names)}
+
+
+@router.delete("/all")
+async def clear_all_documents(
+    _admin: dict = Depends(require_admin),
+):
+    """Delete ALL stored PDFs (admin only)."""
+    count = await delete_all_pdfs()
+    return {"status": "deleted", "count": count}
 
 
 @router.get("/{doc_id}")
