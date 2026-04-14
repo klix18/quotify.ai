@@ -1500,6 +1500,86 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
 }
 
 /* ── PDF Storage Management ─────────────────────────────────── */
+function PdfStorageTable({ docs, th, td, typeColors, formatSize, handleDownload, isAdmin, setDeleteTarget }) {
+  const INITIAL_SHOW = 5;
+  const [expanded, setExpanded] = React.useState(false);
+  const visible = expanded ? docs : docs.slice(0, INITIAL_SHOW);
+  const hasMore = docs.length > INITIAL_SHOW;
+
+  return (
+    <>
+      <div style={{ overflowX: "auto", maxHeight: expanded ? 400 : undefined, overflowY: expanded ? "auto" : undefined }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "Poppins, sans-serif" }}>
+          <thead>
+            <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)`, position: "sticky", top: 0, background: "rgba(255,255,255,0.95)", zIndex: 1 }}>
+              <th style={th}>Date</th>
+              <th style={th}>File Name</th>
+              <th style={th}>Type</th>
+              <th style={th}>Insurance</th>
+              <th style={th}>Client</th>
+              <th style={th}>Size</th>
+              <th style={{ ...th, textAlign: "center", width: 100 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((doc) => (
+              <HoverRow key={doc.id}>
+                <td style={td}>{new Date(doc.created_at).toLocaleDateString()}</td>
+                <td style={td}>
+                  <span onClick={() => handleDownload(doc)} style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}>
+                    {doc.file_name}
+                  </span>
+                </td>
+                <td style={td}>
+                  <span style={{
+                    padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize",
+                    background: doc.doc_type === "generated" ? COLORS.blueSoft : COLORS.greenSoft,
+                    color: doc.doc_type === "generated" ? COLORS.blue : COLORS.green,
+                  }}>{doc.doc_type}</span>
+                </td>
+                <td style={td}>
+                  <span style={{
+                    padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize",
+                    background: `${typeColors[doc.insurance_type] || COLORS.blue}15`,
+                    color: typeColors[doc.insurance_type] || COLORS.blue,
+                  }}>{doc.insurance_type}</span>
+                </td>
+                <td style={td}>{doc.client_name || "—"}</td>
+                <td style={td}>{formatSize(doc.file_size || 0)}</td>
+                <td style={{ ...td, textAlign: "center" }}>
+                  <HoverButton
+                    variant="dangerSmall"
+                    onClick={() => { if (isAdmin) setDeleteTarget(doc.id); }}
+                    disabled={!isAdmin}
+                    style={{ height: 26, padding: "0 10px", fontSize: 10, borderRadius: 8 }}
+                  >Delete</HoverButton>
+                </td>
+              </HoverRow>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {hasMore && (
+        <div style={{ textAlign: "center", marginTop: 10 }}>
+          <button
+            onClick={() => setExpanded((prev) => !prev)}
+            style={{
+              background: "none", border: "none", color: COLORS.blue,
+              fontSize: 12, fontWeight: 600, fontFamily: "Poppins, sans-serif",
+              cursor: "pointer", padding: "6px 16px", borderRadius: 8,
+              transition: "background 150ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.blueSoft; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+          >
+            {expanded ? "Show Less" : `Show All (${docs.length})`}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
   const [docs, setDocs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -1636,57 +1716,7 @@ function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
       ) : docs.length === 0 ? (
         <div style={{ color: COLORS.mutedText, fontSize: 13, textAlign: "center", padding: 24 }}>No PDFs stored</div>
       ) : (
-        <div style={{ overflowX: "auto", maxHeight: 320, overflowY: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "Poppins, sans-serif" }}>
-            <thead>
-              <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)`, position: "sticky", top: 0, background: "rgba(255,255,255,0.95)", zIndex: 1 }}>
-                <th style={th}>Date</th>
-                <th style={th}>File Name</th>
-                <th style={th}>Type</th>
-                <th style={th}>Insurance</th>
-                <th style={th}>Client</th>
-                <th style={th}>Size</th>
-                <th style={{ ...th, textAlign: "center", width: 100 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map((doc) => (
-                <HoverRow key={doc.id}>
-                  <td style={td}>{new Date(doc.created_at).toLocaleDateString()}</td>
-                  <td style={td}>
-                    <span onClick={() => handleDownload(doc)} style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}>
-                      {doc.file_name}
-                    </span>
-                  </td>
-                  <td style={td}>
-                    <span style={{
-                      padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize",
-                      background: doc.doc_type === "generated" ? COLORS.blueSoft : COLORS.greenSoft,
-                      color: doc.doc_type === "generated" ? COLORS.blue : COLORS.green,
-                    }}>{doc.doc_type}</span>
-                  </td>
-                  <td style={td}>
-                    <span style={{
-                      padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, textTransform: "capitalize",
-                      background: `${typeColors[doc.insurance_type] || COLORS.blue}15`,
-                      color: typeColors[doc.insurance_type] || COLORS.blue,
-                    }}>{doc.insurance_type}</span>
-                  </td>
-                  <td style={td}>{doc.client_name || "—"}</td>
-                  <td style={td}>{formatSize(doc.file_size || 0)}</td>
-                  <td style={{ ...td, textAlign: "center" }}>
-                    <HoverButton
-                      variant="dangerSmall"
-                      onClick={() => { if (isAdmin) setDeleteTarget(doc.id); }}
-                      disabled={!isAdmin}
-                      style={{ height: 26, padding: "0 10px", fontSize: 10, borderRadius: 8 }}
-                    >Delete</HoverButton>
-                  </td>
-                </HoverRow>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <PdfStorageTable docs={docs} th={th} td={td} typeColors={typeColors} formatSize={formatSize} handleDownload={handleDownload} isAdmin={isAdmin} setDeleteTarget={setDeleteTarget} />
       )}
     </>
   );

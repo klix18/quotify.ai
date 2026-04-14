@@ -41,6 +41,7 @@ export default function QuotifyHome({ isAdmin }) {
   const [hoveredInsurance, setHoveredInsurance] = React.useState("");
   const [isBrowseHovered, setIsBrowseHovered] = React.useState(false);
   const [isGenerateHovered, setIsGenerateHovered] = React.useState(false);
+  const [isClearHovered, setIsClearHovered] = React.useState(false);
   const [isAdvisorHovered, setIsAdvisorHovered] = React.useState(false);
   const [advisors, setAdvisors] = React.useState([]);
   const [advisorSearch, setAdvisorSearch] = React.useState("");
@@ -233,6 +234,43 @@ export default function QuotifyHome({ isAdmin }) {
     setHomeownersFinalized(Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false])));
     setHomeownersManual(Object.fromEntries(HOMEOWNERS_FIELDS.map(([key]) => [key, false])));
     setHomeownersConfidence({});
+  };
+
+  const handleClearSnapshot = () => {
+    // Reset all forms to their empty state
+    setHomeownersForm(EMPTY_HOMEOWNERS_FORM);
+    setAutoForm({ ...EMPTY_AUTO_FORM, drivers: [emptyDriver()], vehicles: [emptyVehicle()] });
+    setDwellingForm({ ...EMPTY_DWELLING_FORM, properties: [emptyProperty()] });
+    setCommercialForm(EMPTY_COMMERCIAL_FORM);
+    setBundleForm({ ...EMPTY_BUNDLE_FORM, drivers: [emptyBundleDriver()], vehicles: [emptyBundleVehicle()] });
+    // Reset field-level states
+    resetHomeownersFieldState();
+    setAutoIsParsed(false);
+    setAutoManual({});
+    setAutoConfidence({});
+    setDwellingIsParsed(false);
+    setDwellingManual({});
+    setDwellingConfidence({});
+    setCommercialIsParsed(false);
+    setCommercialManual({});
+    setCommercialConfidence({});
+    setBundleIsParsed(false);
+    setBundleManual({});
+    setBundleConfidence({});
+    // Reset upload / file state
+    setFileName("");
+    setBundleFileNames([]);
+    setSeparateHomeFile(null);
+    setSeparateAutoFile(null);
+    setBundleUploadMode("combined");
+    setWindFileName("");
+    // Reset status
+    setErrorMessage("");
+    setParseStatus("");
+    setIsParsing(false);
+    setIsGenerating(false);
+    setAdvisorSearch("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const onBrowseClick = () => fileInputRef.current?.click();
@@ -2393,13 +2431,13 @@ export default function QuotifyHome({ isAdmin }) {
             overflow: "hidden",
           }}
         >
-          {/* Floating Create Proposal button — fixed top-right with dashboard-style BlurAura */}
+          {/* Floating Clear + Create Proposal buttons — fixed top-right with dashboard-style BlurAura */}
           <div style={{
             position: "absolute", top: 16, right: 28, zIndex: 20,
             pointerEvents: "auto",
           }}>
-            <div style={{ position: "relative" }}>
-              {/* Blur halo behind button — matches AdminDashboard BlurAura
+            <div style={{ position: "relative", display: "flex", gap: 10, alignItems: "center" }}>
+              {/* Blur halo behind buttons — matches AdminDashboard BlurAura
                   (spread=60, blur=22, radial mask 40%→72%, radius 14+spread). */}
               <div style={{
                 position: "absolute",
@@ -2412,6 +2450,32 @@ export default function QuotifyHome({ isAdmin }) {
                 pointerEvents: "none",
                 zIndex: 0,
               }} />
+              <button
+                type="button"
+                onClick={handleClearSnapshot}
+                disabled={isGenerating || isParsing}
+                onMouseEnter={() => setIsClearHovered(true)}
+                onMouseLeave={() => setIsClearHovered(false)}
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  background: isClearHovered ? "rgba(0,0,0,0.04)" : "transparent",
+                  color: COLORS.mutedText,
+                  border: `1px solid ${COLORS.borderGrey}`,
+                  borderRadius: 14,
+                  height: 48,
+                  padding: "0 22px",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  fontFamily: "Poppins, sans-serif",
+                  cursor: isGenerating || isParsing ? "not-allowed" : "pointer",
+                  transition: "all 200ms ease",
+                  opacity: isGenerating || isParsing ? 0.5 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                Clear
+              </button>
               <button
                 ref={generateBtnRef}
                 type="button"
