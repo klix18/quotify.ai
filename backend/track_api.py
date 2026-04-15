@@ -30,7 +30,11 @@ async def track_event(
     user: dict = Depends(get_current_user),
 ):
     """Log an analytics event for the current authenticated user."""
+    # Always use the stable Clerk user_id from the verified JWT — never trust
+    # the user_name from the request body for identity, since display names can
+    # change and would otherwise fragment a user's history across multiple rows.
     await log_event(
+        user_id=user["user_id"],
         user_name=payload.user_name,
         insurance_type=payload.insurance_type,
         advisor=payload.advisor,

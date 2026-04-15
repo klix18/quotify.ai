@@ -65,30 +65,34 @@ async def get_analytics_summary(
             ORDER BY count DESC
         """, cutoff)
 
-        # Usage by user (includes days active)
+        # Usage by user (includes days active).
+        # GROUP BY the stable user_id so renames don't split a user's history.
+        # Use the most-recent user_name for display purposes.
         user_rows = await conn.fetch("""
             SELECT
-                user_name,
+                COALESCE(NULLIF(user_id, ''), user_name) AS user_key,
+                (ARRAY_AGG(user_name ORDER BY created_at DESC))[1] AS user_name,
                 COUNT(*) AS total,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created,
                 COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded,
                 COUNT(DISTINCT DATE(created_at AT TIME ZONE 'America/New_York')) AS days_active
             FROM analytics_events
             WHERE created_at >= $1
-            GROUP BY user_name
+            GROUP BY COALESCE(NULLIF(user_id, ''), user_name)
             ORDER BY total DESC
         """, cutoff)
 
         # Insurance type by user
         user_type_rows = await conn.fetch("""
             SELECT
-                user_name,
+                COALESCE(NULLIF(user_id, ''), user_name) AS user_key,
+                (ARRAY_AGG(user_name ORDER BY created_at DESC))[1] AS user_name,
                 insurance_type,
                 COUNT(*) AS count
             FROM analytics_events
             WHERE created_at >= $1
-            GROUP BY user_name, insurance_type
-            ORDER BY user_name, count DESC
+            GROUP BY COALESCE(NULLIF(user_id, ''), user_name), insurance_type
+            ORDER BY user_key, count DESC
         """, cutoff)
 
         # Recent events (detailed log)
@@ -132,6 +136,7 @@ async def get_analytics_summary(
         "usage_by_insurance_type": {row["insurance_type"]: row["count"] for row in type_rows},
         "usage_by_user": [
             {
+                "user_id": row["user_key"],
                 "user_name": row["user_name"],
                 "total": row["total"],
                 "quotes_created": row["quotes_created"],
@@ -142,6 +147,7 @@ async def get_analytics_summary(
         ],
         "insurance_type_by_user": [
             {
+                "user_id": row["user_key"],
                 "user_name": row["user_name"],
                 "insurance_type": row["insurance_type"],
                 "count": row["count"],
@@ -208,52 +214,64 @@ async def get_manual_changes_leaderboard(
     return {"leaderboard": leaderboard}
 
 
-@router.get("/user/{user_name}")
+@router.get("/user/{user_id}")
 async def get_user_detail(
-    user_name: str,
+    user_id: str,
     period: str = Query("month", regex="^(week|month|6months|year|all)$"),
     _user: dict = Depends(get_current_user),
 ):
-    """Get detailed analytics for a specific user."""
+    """Get detailed analytics for a specific user (matched by stable user_id, or by user_name for legacy rows)."""
     pool = await get_pool()
     cutoff = _period_start(period)
 
+    # Match on user_id if populated, otherwise fall back to user_name (legacy rows
+    # pre-dating the user_id column will have user_id = '').
+    user_filter = "COALESCE(NULLIF(user_id, ''), user_name) = $2"
+
     async with pool.acquire() as conn:
-        totals = await conn.fetchrow("""
+        # Resolve display name (most recent)
+        name_row = await conn.fetchrow(f"""
+            SELECT user_name FROM analytics_events
+            WHERE created_at >= $1 AND {user_filter}
+            ORDER BY created_at DESC LIMIT 1
+        """, cutoff, user_id)
+        display_name = name_row["user_name"] if name_row else user_id
+
+        totals = await conn.fetchrow(f"""
             SELECT
                 COUNT(*) AS total_events,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created,
                 COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
-        """, cutoff, user_name)
+            WHERE created_at >= $1 AND {user_filter}
+        """, cutoff, user_id)
 
-        type_rows = await conn.fetch("""
+        type_rows = await conn.fetch(f"""
             SELECT insurance_type, COUNT(*) AS count
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
+            WHERE created_at >= $1 AND {user_filter}
             GROUP BY insurance_type
             ORDER BY count DESC
-        """, cutoff, user_name)
+        """, cutoff, user_id)
 
-        recent_rows = await conn.fetch("""
+        recent_rows = await conn.fetch(f"""
             SELECT
                 id, created_at, insurance_type, advisor,
                 uploaded_pdf, manually_changed_fields, created_quote, generated_pdf,
                 client_name
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
+            WHERE created_at >= $1 AND {user_filter}
             ORDER BY created_at DESC
             LIMIT 50
-        """, cutoff, user_name)
+        """, cutoff, user_id)
 
         # Distinct active days (one per calendar date)
-        active_day_rows = await conn.fetch("""
+        active_day_rows = await conn.fetch(f"""
             SELECT DISTINCT DATE(created_at AT TIME ZONE 'America/New_York') AS active_date
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
+            WHERE created_at >= $1 AND {user_filter}
             ORDER BY active_date DESC
-        """, cutoff, user_name)
+        """, cutoff, user_id)
 
         # Timeline — quotes per bucket, broken down by insurance type (user-scoped).
         if period == "year":
@@ -268,13 +286,14 @@ async def get_user_detail(
                 insurance_type,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
+            WHERE created_at >= $1 AND {user_filter}
             GROUP BY bucket, insurance_type
             ORDER BY bucket ASC
-        """, cutoff, user_name)
+        """, cutoff, user_id)
 
     return {
-        "user_name": user_name,
+        "user_id": user_id,
+        "user_name": display_name,
         "period": period,
         "total_events": totals["total_events"],
         "quotes_created": totals["quotes_created"],
@@ -347,49 +366,54 @@ async def reset_analytics(
 
 @self_router.get("/me")
 async def get_my_stats(
-    user_name: str = Query(..., description="Display name of the current user"),
+    user_name: str = Query(..., description="Display name of the current user (used for legacy fallback only)"),
     period: str = Query("month", regex="^(week|month|6months|year|all)$"),
-    _user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
     """Get analytics for the currently authenticated user (no admin required)."""
     pool = await get_pool()
     cutoff = _period_start(period)
 
+    # Use the stable Clerk user_id from the JWT. Fall back to user_name for any
+    # legacy rows written before the user_id column was added.
+    user_key = user["user_id"] or user_name
+    user_filter = "COALESCE(NULLIF(user_id, ''), user_name) = $2"
+
     async with pool.acquire() as conn:
-        totals = await conn.fetchrow("""
+        totals = await conn.fetchrow(f"""
             SELECT
                 COUNT(*) AS total_events,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created,
                 COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
-        """, cutoff, user_name)
+            WHERE created_at >= $1 AND {user_filter}
+        """, cutoff, user_key)
 
-        type_rows = await conn.fetch("""
+        type_rows = await conn.fetch(f"""
             SELECT insurance_type, COUNT(*) AS count
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
+            WHERE created_at >= $1 AND {user_filter}
             GROUP BY insurance_type
             ORDER BY count DESC
-        """, cutoff, user_name)
+        """, cutoff, user_key)
 
-        recent_rows = await conn.fetch("""
+        recent_rows = await conn.fetch(f"""
             SELECT
                 id, created_at, insurance_type, advisor,
                 uploaded_pdf, manually_changed_fields, created_quote, generated_pdf,
                 client_name
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
+            WHERE created_at >= $1 AND {user_filter}
             ORDER BY created_at DESC
             LIMIT 50
-        """, cutoff, user_name)
+        """, cutoff, user_key)
 
-        active_day_rows = await conn.fetch("""
+        active_day_rows = await conn.fetch(f"""
             SELECT DISTINCT DATE(created_at AT TIME ZONE 'America/New_York') AS active_date
             FROM analytics_events
-            WHERE created_at >= $1 AND user_name = $2
+            WHERE created_at >= $1 AND {user_filter}
             ORDER BY active_date DESC
-        """, cutoff, user_name)
+        """, cutoff, user_key)
 
     return {
         "user_name": user_name,

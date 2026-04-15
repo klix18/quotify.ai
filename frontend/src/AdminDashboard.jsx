@@ -908,10 +908,10 @@ function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15
               null;
             return (
               <UserRow
-                key={u.user_name}
+                key={u.user_id || u.user_name}
                 user={u}
                 role={cu?.role || "advisor"}
-                onClick={() => onSelectUser(u.user_name)}
+                onClick={() => onSelectUser(u.user_id || u.user_name)}
                 rank={idx + 1}
                 imageUrl={cu?.image_url}
               />
@@ -1037,11 +1037,16 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
+  // `userName` is now the stable Clerk user_id (e.g. "user_2abc...").
+  // The API returns the current display name in data.user_name, so use that
+  // for display and for the clerkUsers lookup keyed by display name.
+  const displayName = data?.user_name || userName;
+
   // Look the user up by exact key first, then a case-insensitive fallback
   // so single-name users (e.g. "jj") still get a Clerk record + role toggle.
   const clerkUser =
-    clerkUsers[userName] ||
-    clerkUsers[(userName || "").toLowerCase()] ||
+    clerkUsers[displayName] ||
+    clerkUsers[(displayName || "").toLowerCase()] ||
     null;
 
   React.useEffect(() => {
@@ -1049,7 +1054,8 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
       setLoading(true);
       try {
         const token = await getToken();
-        // Both admins and advisors use the same endpoint (now allowed for any user)
+        // userName is the stable user_id — used as the URL path param so renames
+        // don't break the link or fragment the user's history.
         const url = `${API_BASE_URL}/api/admin/analytics/user/${encodeURIComponent(userName)}?period=${period}`;
         const resp = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
@@ -1078,11 +1084,11 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
             display: "flex", alignItems: "center", justifyContent: "center",
             color: COLORS.white, fontSize: 16, fontWeight: 700,
           }}>
-            {userName.charAt(0).toUpperCase()}
+            {displayName.charAt(0).toUpperCase()}
           </div>
         )}
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.black }}>{userName}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.black }}>{displayName}</div>
           {clerkUser?.email && <div style={{ fontSize: 12, color: COLORS.mutedText }}>{clerkUser.email}</div>}
         </div>
       </div>

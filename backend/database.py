@@ -44,6 +44,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS analytics_events (
                 id                      BIGSERIAL PRIMARY KEY,
                 created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                user_id                 TEXT NOT NULL DEFAULT '',
                 user_name               TEXT NOT NULL,
                 insurance_type          TEXT NOT NULL,
                 advisor                 TEXT NOT NULL DEFAULT '',
@@ -54,12 +55,15 @@ async def init_db():
                 client_name             TEXT NOT NULL DEFAULT ''
             );
 
-            -- Ensure client_name exists on pre-existing databases
+            -- Ensure client_name and user_id exist on pre-existing databases
             ALTER TABLE analytics_events
                 ADD COLUMN IF NOT EXISTS client_name TEXT NOT NULL DEFAULT '';
+            ALTER TABLE analytics_events
+                ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
 
             CREATE INDEX IF NOT EXISTS idx_events_created_at ON analytics_events (created_at);
             CREATE INDEX IF NOT EXISTS idx_events_user_name ON analytics_events (user_name);
+            CREATE INDEX IF NOT EXISTS idx_events_user_id ON analytics_events (user_id);
             CREATE INDEX IF NOT EXISTS idx_events_insurance_type ON analytics_events (insurance_type);
 
             -- PDF document storage
@@ -255,6 +259,7 @@ async def delete_pdf(doc_id: str) -> bool:
 async def log_event(
     user_name: str,
     insurance_type: str,
+    user_id: str = "",
     advisor: str = "",
     uploaded_pdf: str = "",
     manually_changed_fields: str = "",
@@ -268,9 +273,10 @@ async def log_event(
         await conn.execute(
             """
             INSERT INTO analytics_events
-                (user_name, insurance_type, advisor, uploaded_pdf, manually_changed_fields, created_quote, generated_pdf, client_name)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                (user_id, user_name, insurance_type, advisor, uploaded_pdf, manually_changed_fields, created_quote, generated_pdf, client_name)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
+            user_id,
             user_name,
             insurance_type,
             advisor,
