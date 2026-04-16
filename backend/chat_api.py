@@ -449,10 +449,12 @@ async def get_greeting(
         """, cutoff)
 
         top_user = await conn.fetchrow("""
-            SELECT user_name, COUNT(*) AS total
+            SELECT
+                (ARRAY_AGG(user_name ORDER BY created_at DESC))[1] AS user_name,
+                COUNT(*) AS total
             FROM analytics_events
             WHERE created_at >= $1
-            GROUP BY user_name
+            GROUP BY COALESCE(NULLIF(user_id, ''), user_name)
             ORDER BY total DESC
             LIMIT 1
         """, cutoff)
@@ -484,8 +486,8 @@ async def get_greeting(
 
     greeting += (
         '\n\n_Try asking:_'
-        '\n· "Who\'s the top performer?"'
-        '\n· "Which insurance type gets the most quotes?"'
+        '\n· "How does this month compare to last month?"'
+        '\n· "Which advisor is getting the most quotes?"'
         '\n· "What fields need the most manual fixes?"'
     )
 
