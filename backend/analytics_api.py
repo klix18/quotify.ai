@@ -5,7 +5,8 @@ Provides usage stats with time period filtering and reset capability.
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
+from pydantic import BaseModel
 
 from auth import get_current_user, require_admin
 from database import get_pool
@@ -326,21 +327,24 @@ async def get_user_detail(
     }
 
 
+class BackfillUserIdRequest(BaseModel):
+    user_id: str
+    user_names: list[str]
+
+
 @router.post("/backfill-user-id")
 async def backfill_user_id(
-    payload: dict,
+    payload: BackfillUserIdRequest,
     _admin: dict = Depends(require_admin),
 ):
     """
     Assign a stable user_id to all historical rows that match any of the given
     user_name aliases. Use this to consolidate a person whose name changed or
     who was logged under multiple identifiers (e.g. "J J" and "jj@example.com").
-
-    Body: { "user_id": "user_clerk_xxx", "user_names": ["J J", "jj@example.com"] }
     """
     from fastapi import HTTPException
-    user_id = (payload.get("user_id") or "").strip()
-    user_names = [n for n in (payload.get("user_names") or []) if n and n.strip()]
+    user_id = (payload.user_id or "").strip()
+    user_names = [n for n in payload.user_names if n and n.strip()]
 
     if not user_id:
         raise HTTPException(status_code=422, detail="user_id is required")

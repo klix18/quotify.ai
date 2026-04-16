@@ -166,27 +166,30 @@ async def _fetch_full_context(period: str) -> str:
             ORDER BY count DESC
         """, cutoff)
 
-        # Usage by user
+        # Usage by user — GROUP BY stable user_id so renames don't split history
         user_rows = await conn.fetch("""
             SELECT
-                user_name,
+                (ARRAY_AGG(user_name ORDER BY created_at DESC))[1] AS user_name,
                 COUNT(*) AS total,
                 COUNT(*) FILTER (WHERE created_quote = TRUE) AS quotes_created,
                 COUNT(*) FILTER (WHERE uploaded_pdf != '') AS pdfs_uploaded,
                 COUNT(DISTINCT DATE(created_at AT TIME ZONE 'America/New_York')) AS days_active
             FROM analytics_events
             WHERE created_at >= $1
-            GROUP BY user_name
+            GROUP BY COALESCE(NULLIF(user_id, ''), user_name)
             ORDER BY total DESC
         """, cutoff)
 
         # Insurance type per user
         user_type_rows = await conn.fetch("""
-            SELECT user_name, insurance_type, COUNT(*) AS count
+            SELECT
+                (ARRAY_AGG(user_name ORDER BY created_at DESC))[1] AS user_name,
+                insurance_type,
+                COUNT(*) AS count
             FROM analytics_events
             WHERE created_at >= $1
-            GROUP BY user_name, insurance_type
-            ORDER BY user_name, count DESC
+            GROUP BY COALESCE(NULLIF(user_id, ''), user_name), insurance_type
+            ORDER BY count DESC
         """, cutoff)
 
         # Manual changes breakdown
