@@ -326,6 +326,38 @@ async def get_user_detail(
     }
 
 
+@router.post("/backfill-user-id")
+async def backfill_user_id(
+    payload: dict,
+    _admin: dict = Depends(require_admin),
+):
+    """
+    Assign a stable user_id to all historical rows that match any of the given
+    user_name aliases. Use this to consolidate a person whose name changed or
+    who was logged under multiple identifiers (e.g. "J J" and "jj@example.com").
+
+    Body: { "user_id": "user_clerk_xxx", "user_names": ["J J", "jj@example.com"] }
+    """
+    from fastapi import HTTPException
+    user_id = (payload.get("user_id") or "").strip()
+    user_names = [n for n in (payload.get("user_names") or []) if n and n.strip()]
+
+    if not user_id:
+        raise HTTPException(status_code=422, detail="user_id is required")
+    if not user_names:
+        raise HTTPException(status_code=422, detail="user_names list is required")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE analytics_events SET user_id = $1 WHERE user_name = ANY($2::text[])",
+            user_id, user_names,
+        )
+
+    updated = int(result.split()[-1])
+    return {"status": "ok", "user_id": user_id, "aliases": user_names, "rows_updated": updated}
+
+
 @router.delete("/event/{event_id}")
 async def delete_single_event(
     event_id: int,

@@ -1505,6 +1505,101 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
   );
 }
 
+/* ── Merge User Aliases ─────────────────────────────────────── */
+function MergeUserAliases({ getToken, clerkUsersList }) {
+  const [selectedUserId, setSelectedUserId] = React.useState("");
+  const [aliasInput, setAliasInput] = React.useState("");
+  const [status, setStatus] = React.useState(null); // { ok, message }
+  const [saving, setSaving] = React.useState(false);
+
+  const handleMerge = async () => {
+    const aliases = aliasInput.split("\n").map(s => s.trim()).filter(Boolean);
+    if (!selectedUserId || aliases.length === 0) {
+      setStatus({ ok: false, message: "Choose a canonical user and enter at least one alias." });
+      return;
+    }
+    setSaving(true);
+    setStatus(null);
+    try {
+      const token = await getToken();
+      const resp = await fetch(`${API_BASE_URL}/api/admin/analytics/backfill-user-id`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selectedUserId, user_names: aliases }),
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        setStatus({ ok: true, message: `Updated ${d.rows_updated} row${d.rows_updated !== 1 ? "s" : ""}.` });
+        setAliasInput("");
+      } else {
+        const e = await resp.json().catch(() => ({}));
+        setStatus({ ok: false, message: e.detail || "Request failed." });
+      }
+    } catch (e) {
+      setStatus({ ok: false, message: String(e) });
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 520 }}>
+      <p style={{ fontSize: 13, color: COLORS.mutedText, margin: 0 }}>
+        If the same person appears under multiple names in the Snapshot History (e.g. <em>"J J"</em> and <em>"jj@sizemoreinsurance.com"</em>), use this tool to re-stamp their historical rows with their stable Clerk ID so all activity is counted together.
+      </p>
+
+      <label style={{ fontSize: 13, fontWeight: 600, color: COLORS.black }}>
+        Canonical User (from Clerk)
+        <select
+          value={selectedUserId}
+          onChange={e => setSelectedUserId(e.target.value)}
+          style={{
+            display: "block", marginTop: 6, width: "100%", padding: "8px 10px",
+            borderRadius: 8, border: "1px solid #dde1e7", fontSize: 13,
+            background: "#fff", color: COLORS.black, cursor: "pointer",
+          }}
+        >
+          <option value="">— select a user —</option>
+          {(clerkUsersList || []).map(u => (
+            <option key={u.id} value={u.id}>{u.displayName} ({u.email})</option>
+          ))}
+        </select>
+      </label>
+
+      <label style={{ fontSize: 13, fontWeight: 600, color: COLORS.black }}>
+        Name aliases to merge (one per line)
+        <textarea
+          value={aliasInput}
+          onChange={e => setAliasInput(e.target.value)}
+          placeholder={"J J\njj@sizemoreinsurance.com"}
+          rows={4}
+          style={{
+            display: "block", marginTop: 6, width: "100%", padding: "8px 10px",
+            borderRadius: 8, border: "1px solid #dde1e7", fontSize: 13,
+            fontFamily: "monospace", resize: "vertical", boxSizing: "border-box",
+          }}
+        />
+      </label>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <button
+          onClick={handleMerge}
+          disabled={saving}
+          style={{
+            padding: "8px 20px", borderRadius: 8, border: "none", cursor: saving ? "not-allowed" : "pointer",
+            background: COLORS.blue, color: COLORS.white, fontSize: 13, fontWeight: 600,
+            opacity: saving ? 0.6 : 1,
+          }}
+        >
+          {saving ? "Merging…" : "Merge Rows"}
+        </button>
+        {status && (
+          <span style={{ fontSize: 13, color: status.ok ? "#16a34a" : "#dc2626" }}>{status.message}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── PDF Storage Management ─────────────────────────────────── */
 function PdfStorageTable({ docs, th, td, typeColors, formatSize, handleDownload, isAdmin, setDeleteTarget }) {
   const INITIAL_SHOW = 5;
@@ -2287,6 +2382,15 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
                 <div style={{ color: COLORS.mutedText, fontSize: 13 }}>Expand to manage stored PDFs, set auto-clear schedule, or clear storage.</div>
               )}
             </Section>
+
+            {/* Merge User Aliases — admin only */}
+            {isAdmin && (
+              <Section title="Merge User Aliases" expandable>
+                {(expanded) => expanded ? <MergeUserAliases getToken={getToken} clerkUsersList={clerkUsersList} /> : (
+                  <div style={{ color: COLORS.mutedText, fontSize: 13 }}>Consolidate historical rows where the same person appears under multiple names.</div>
+                )}
+              </Section>
+            )}
 
             {/* API Usage */}
             <Section title="API Usage" expandable defaultExpanded>
