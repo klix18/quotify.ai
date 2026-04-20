@@ -2,6 +2,11 @@ import React from "react";
 import { useUser, useAuth } from "@clerk/clerk-react";
 import COLORS from "./colors";
 import { trackEvent, getManualFieldNames } from "./trackEvent";
+import {
+  startParseTimer,
+  logParseComplete,
+  logQuoteGenerated,
+} from "./devMetrics";
 import { INSURANCE_OPTIONS } from "./configs/insuranceOptions";
 import {
   HOMEOWNERS_FIELDS,
@@ -163,6 +168,11 @@ export default function QuotifyHome({ isAdmin }) {
   const [bundleConfidence, setBundleConfidence] = React.useState({});
   // Skill version from the most recent parse — passed to analytics on quote generation
   const [lastSkillVersion, setLastSkillVersion] = React.useState("");
+  // parse_id from the most recent parse — used by the dev-metrics logger to
+  // join a "quote" event back to its originating "parse" event. Ref (not
+  // state) because no UI reads this; it just needs to survive across renders
+  // from parse completion to quote click.
+  const lastParseIdRef = React.useRef("");
 
   const abortControllerRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
@@ -520,6 +530,15 @@ export default function QuotifyHome({ isAdmin }) {
     setIsParsing(true);
     startHomeownersFieldState();
 
+    // Dev-metrics: start the latency stopwatch BEFORE the upload so we
+    // capture real end-to-end time (including network upload, not just
+    // LLM work). Logged on parse completion in the finally block below.
+    const __devSession = startParseTimer({
+      insuranceType: "homeowners",
+      pdfCount: windFile ? 2 : 1,
+    });
+    lastParseIdRef.current = __devSession.parseId;
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -702,13 +721,16 @@ export default function QuotifyHome({ isAdmin }) {
       setParseStatus("Done.");
 
     } catch (error) {
-      if (error.name === "AbortError") return;
+      if (error.name === "AbortError") { __devSession.aborted = true; return; }
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       resetHomeownersFieldState();
       setHomeownersConfidence({});
     } finally {
       setIsParsing(false);
+      // Log the end-to-end parse latency. Fire-and-forget: errors here
+      // are swallowed inside devMetrics, we don't want to block the UI.
+      logParseComplete(__devSession);
     }
   };
 
@@ -759,6 +781,12 @@ export default function QuotifyHome({ isAdmin }) {
     setAutoIsParsed(false);
     setAutoManual({});
     setAutoConfidence({});
+
+    const __devSession = startParseTimer({
+      insuranceType: "auto",
+      pdfCount: 1,
+    });
+    lastParseIdRef.current = __devSession.parseId;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -911,7 +939,7 @@ export default function QuotifyHome({ isAdmin }) {
       setParseStatus("Done.");
 
     } catch (error) {
-      if (error.name === "AbortError") return;
+      if (error.name === "AbortError") { __devSession.aborted = true; return; }
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       setAutoIsLoading(false);
@@ -919,6 +947,7 @@ export default function QuotifyHome({ isAdmin }) {
       setAutoConfidence({});
     } finally {
       setIsParsing(false);
+      logParseComplete(__devSession);
     }
   };
 
@@ -1017,6 +1046,12 @@ export default function QuotifyHome({ isAdmin }) {
     setDwellingIsParsed(false);
     setDwellingManual({});
     setDwellingConfidence({});
+
+    const __devSession = startParseTimer({
+      insuranceType: "dwelling",
+      pdfCount: windFile ? 2 : 1,
+    });
+    lastParseIdRef.current = __devSession.parseId;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -1131,7 +1166,7 @@ export default function QuotifyHome({ isAdmin }) {
       setParseStatus("Done.");
 
     } catch (error) {
-      if (error.name === "AbortError") return;
+      if (error.name === "AbortError") { __devSession.aborted = true; return; }
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       setDwellingIsLoading(false);
@@ -1139,6 +1174,7 @@ export default function QuotifyHome({ isAdmin }) {
       setDwellingConfidence({});
     } finally {
       setIsParsing(false);
+      logParseComplete(__devSession);
     }
   };
 
@@ -1303,6 +1339,12 @@ export default function QuotifyHome({ isAdmin }) {
     setBundleManual({});
     setBundleConfidence({});
 
+    const __devSession = startParseTimer({
+      insuranceType: "bundle",
+      pdfCount: fileArr.length,
+    });
+    lastParseIdRef.current = __devSession.parseId;
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -1420,7 +1462,7 @@ export default function QuotifyHome({ isAdmin }) {
       setParseStatus("Done.");
 
     } catch (error) {
-      if (error.name === "AbortError") return;
+      if (error.name === "AbortError") { __devSession.aborted = true; return; }
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       setBundleIsLoading(false);
@@ -1428,6 +1470,7 @@ export default function QuotifyHome({ isAdmin }) {
       setBundleConfidence({});
     } finally {
       setIsParsing(false);
+      logParseComplete(__devSession);
     }
   };
 
@@ -1467,6 +1510,12 @@ export default function QuotifyHome({ isAdmin }) {
     setCommercialIsParsed(false);
     setCommercialManual({});
     setCommercialConfidence({});
+
+    const __devSession = startParseTimer({
+      insuranceType: "commercial",
+      pdfCount: 1,
+    });
+    lastParseIdRef.current = __devSession.parseId;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -1579,7 +1628,7 @@ export default function QuotifyHome({ isAdmin }) {
       setParseStatus("Done.");
 
     } catch (error) {
-      if (error.name === "AbortError") return;
+      if (error.name === "AbortError") { __devSession.aborted = true; return; }
       setErrorMessage(error.message || "Something went wrong while parsing the PDF.");
       setParseStatus("");
       setCommercialIsLoading(false);
@@ -1587,6 +1636,7 @@ export default function QuotifyHome({ isAdmin }) {
       setCommercialConfidence({});
     } finally {
       setIsParsing(false);
+      logParseComplete(__devSession);
     }
   };
 
@@ -1780,6 +1830,18 @@ export default function QuotifyHome({ isAdmin }) {
         clientName,
         skillVersion: lastSkillVersion,
         getToken,
+      });
+
+      // Dev-metrics: log a "quote" event tied back to the most recent parse
+      // via parse_id. Carries the manual-edit counters (with/without client
+      // info) and the actual changed values so the viewer can show a
+      // tester's corrections. Fire-and-forget — devMetrics swallows errors,
+      // and the PDF has already been downloaded at this point anyway.
+      logQuoteGenerated({
+        parseId: lastParseIdRef.current,
+        insuranceType: selectedInsurance,
+        manualMap: manualMap[selectedInsurance] || {},
+        formValues: formForClient,
       });
     } catch (error) {
       setErrorMessage(

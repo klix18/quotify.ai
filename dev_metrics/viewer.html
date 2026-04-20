@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quotify — Parse Metrics Viewer (Dev-Only)</title>
+<style>
+  :root {
+    --blue: #0451BD;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --ink: #20272D;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent-bg: #E8EFF8;
+    --danger: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    padding: 24px;
+  }
+  h1 { margin: 0 0 4px; color: var(--blue); font-size: 22px; }
+  h2 { margin: 24px 0 12px; font-size: 16px; color: var(--ink); }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input[type=text], input[type=password] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+  }
+  .row { display: grid; grid-template-columns: 2fr 1fr auto auto; gap: 12px; align-items: end; }
+  button {
+    padding: 9px 14px;
+    background: var(--blue);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover { filter: brightness(0.92); }
+  button.secondary {
+    background: white;
+    color: var(--blue);
+    border: 1px solid var(--blue);
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 22px; font-weight: 600; color: var(--blue); margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--accent-bg); color: var(--blue); font-weight: 600; position: sticky; top: 0; }
+  tr:hover { background: #fafbfc; }
+  .chip { display: inline-block; padding: 2px 8px; background: var(--accent-bg); color: var(--blue); border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .error {
+    background: #fee2e2;
+    color: var(--danger);
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  .ok { color: #059669; font-size: 12px; }
+  details { margin-top: 4px; }
+  summary { cursor: pointer; color: var(--blue); font-size: 11px; }
+  .manual-list { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .manual-list li { margin: 2px 0; }
+  .chart-wrap { height: 280px; }
+  canvas { max-width: 100%; }
+  .design-badge { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); }
+  .filters { display: flex; gap: 10px; align-items: end; margin-bottom: 12px; flex-wrap: wrap; }
+  select {
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    font-size: 13px;
+  }
+  .scroll { max-height: 540px; overflow: auto; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Quotify — Parse Metrics Viewer</h1>
+<div class="sub">
+  Dev-only. Not accessible from the main app. Compare parser latency +
+  accuracy across LLM / system designs. See
+  <a href="./SYSTEM_DESIGN.md">SYSTEM_DESIGN.md</a> for the current
+  orchestration description.
+</div>
+
+<div class="card">
+  <div class="row">
+    <div>
+      <label>Backend URL</label>
+      <input type="text" id="backendUrl" placeholder="https://your-railway-app.up.railway.app" />
+    </div>
+    <div>
+      <label>DEV_METRICS_API_KEY</label>
+      <input type="password" id="apiKey" placeholder="Set DEV_METRICS_API_KEY on Railway" />
+    </div>
+    <button onclick="loadData()">Load</button>
+    <button class="secondary" onclick="downloadJsonl()">Download JSONL</button>
+  </div>
+  <div id="status" style="margin-top: 10px;"></div>
+</div>
+
+<div id="results" style="display:none;">
+  <div class="stats" id="stats"></div>
+
+  <div class="card">
+    <div class="filters">
+      <div>
+        <label>Insurance Type</label>
+        <select id="filterType" onchange="render()">
+          <option value="">All</option>
+          <option>homeowners</option>
+          <option>auto</option>
+          <option>dwelling</option>
+          <option>commercial</option>
+          <option>bundle</option>
+        </select>
+      </div>
+      <div>
+        <label>System Design</label>
+        <select id="filterDesign" onchange="render()">
+          <option value="">All</option>
+        </select>
+      </div>
+    </div>
+
+    <h2>Latency over time</h2>
+    <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Parse sessions</h2>
+    <div class="scroll">
+      <table id="sessionsTable">
+        <thead>
+          <tr>
+            <th>Parsed at</th>
+            <th>Type</th>
+            <th>PDFs</th>
+            <th>Latency (ms)</th>
+            <th># Manual (all)</th>
+            <th># Manual (non-client)</th>
+            <th>System Design</th>
+            <th>Manual Changes</th>
+          </tr>
+        </thead>
+        <tbody id="sessionsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+ * Config + tiny Chart.js-free line chart (pure canvas, no external deps)
+ * =========================================================================*/
+const STATE = {
+  rows: [],       // raw rows from API
+  sessions: [],   // joined by parse_id
+};
+
+function getBackend() {
+  let url = document.getElementById("backendUrl").value.trim();
+  // Normalise: drop trailing slash.
+  url = url.replace(/\/+$/, "");
+  // If the user typed just a hostname (e.g. "api.example.com"), prepend
+  // https://. Without this, fetch() interprets the value as a relative
+  // path from the viewer's file:// origin and fails with "Failed to
+  // fetch" before a request ever leaves the browser.
+  if (url && !/^https?:\/\//i.test(url)) {
+    url = "https://" + url;
+  }
+  return url;
+}
+function getKey() {
+  return document.getElementById("apiKey").value.trim();
+}
+
+// Persist inputs to localStorage so you don't re-enter them every refresh.
+function loadInputs() {
+  const u = localStorage.getItem("qm.backendUrl") || "";
+  const k = localStorage.getItem("qm.apiKey") || "";
+  if (u) document.getElementById("backendUrl").value = u;
+  if (k) document.getElementById("apiKey").value = k;
+}
+function saveInputs() {
+  localStorage.setItem("qm.backendUrl", getBackend());
+  localStorage.setItem("qm.apiKey", getKey());
+}
+
+async function loadData() {
+  const backend = getBackend();
+  const key = getKey();
+  const status = document.getElementById("status");
+  status.innerHTML = "";
+  if (!backend) {
+    status.innerHTML = '<div class="error">Please enter your Railway backend URL.</div>';
+    return;
+  }
+  if (!key) {
+    status.innerHTML = '<div class="error">Please enter the DEV_METRICS_API_KEY.</div>';
+    return;
+  }
+  saveInputs();
+  status.innerHTML = '<span class="ok">Loading…</span>';
+  try {
+    const resp = await fetch(`${backend}/api/dev-metrics/data`, {
+      headers: { "X-Dev-Metrics-Key": key },
+      mode: "cors",
+    });
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
+    }
+    const data = await resp.json();
+    STATE.rows = data.rows || [];
+    joinSessions();
+    populateDesignFilter();
+    status.innerHTML = `<span class="ok">Loaded ${STATE.rows.length} row(s) / ${STATE.sessions.length} session(s).</span>`;
+    document.getElementById("results").style.display = "block";
+    render();
+  } catch (err) {
+    // "Failed to fetch" from the browser is a black box — it covers CORS,
+    // DNS, TLS, offline, Cloudflare-challenged, and blocked-by-extension.
+    // Surface a hint so the developer knows where to look.
+    const msg = String(err?.message || err);
+    let hint = "";
+    if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
+      hint = [
+        "",
+        "Likely causes (open DevTools → Network tab for the real reason):",
+        "  • CORS — viewer is at file://, backend only allows listed origins.",
+        "    Fix: serve this file via  python -m http.server 8080  then",
+        "    add http://localhost:8080 to allow_origins in backend/main.py.",
+        "  • Cloudflare blocking the OPTIONS preflight or the GET.",
+        "  • Wrong URL / typo — double-check the Backend URL field.",
+      ].join("\n");
+    }
+    status.innerHTML =
+      `<div class="error">${msg}${hint ? "<pre>" + hint + "</pre>" : ""}</div>`;
+  }
+}
+
+/* Join parse + quote rows into sessions keyed by parse_id. */
+function joinSessions() {
+  const bucket = new Map();
+  for (const r of STATE.rows) {
+    const key = r.parse_id;
+    if (!bucket.has(key)) bucket.set(key, { parse_id: key });
+    const s = bucket.get(key);
+    if (r.event === "parse") {
+      s.parse_timestamp = r.timestamp;
+      s.insurance_type = r.insurance_type;
+      s.pdf_count = r.pdf_count;
+      s.latency_ms = r.latency_ms;
+      s.system_design = r.system_design;
+    } else if (r.event === "quote") {
+      s.quote_timestamp = r.timestamp;
+      s.manual_changes_all_count = r.manual_changes_all_count;
+      s.manual_changes_non_client_count = r.manual_changes_non_client_count;
+      s.manual_changes = r.manual_changes || [];
+      if (!s.insurance_type) s.insurance_type = r.insurance_type;
+      if (!s.system_design) s.system_design = r.system_design;
+    }
+  }
+  STATE.sessions = Array.from(bucket.values())
+    .sort((a, b) => (b.parse_timestamp || b.quote_timestamp || "").localeCompare(a.parse_timestamp || a.quote_timestamp || ""));
+}
+
+function populateDesignFilter() {
+  const sel = document.getElementById("filterDesign");
+  const uniq = new Set();
+  STATE.sessions.forEach(s => { if (s.system_design) uniq.add(s.system_design); });
+  // Preserve "All" option and remove the rest
+  while (sel.options.length > 1) sel.remove(1);
+  Array.from(uniq).sort().forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v; opt.textContent = v;
+    sel.appendChild(opt);
+  });
+}
+
+function filtered() {
+  const t = document.getElementById("filterType").value;
+  const d = document.getElementById("filterDesign").value;
+  return STATE.sessions.filter(s => (!t || s.insurance_type === t) && (!d || s.system_design === d));
+}
+
+function render() {
+  const rows = filtered();
+  renderStats(rows);
+  renderTable(rows);
+  renderChart(rows);
+}
+
+function renderStats(rows) {
+  const el = document.getElementById("stats");
+  const withLatency = rows.filter(r => typeof r.latency_ms === "number");
+  const avgLatency = withLatency.length
+    ? Math.round(withLatency.reduce((a, b) => a + b.latency_ms, 0) / withLatency.length)
+    : 0;
+  const p50 = percentile(withLatency.map(r => r.latency_ms), 50);
+  const p95 = percentile(withLatency.map(r => r.latency_ms), 95);
+  const withQuote = rows.filter(r => typeof r.manual_changes_all_count === "number");
+  const avgAll = withQuote.length
+    ? (withQuote.reduce((a, b) => a + b.manual_changes_all_count, 0) / withQuote.length).toFixed(1)
+    : "—";
+  const avgNonClient = withQuote.length
+    ? (withQuote.reduce((a, b) => a + b.manual_changes_non_client_count, 0) / withQuote.length).toFixed(1)
+    : "—";
+  el.innerHTML = `
+    <div class="stat"><div class="stat-label">Sessions</div><div class="stat-value">${rows.length}</div></div>
+    <div class="stat"><div class="stat-label">With quote</div><div class="stat-value">${withQuote.length}</div></div>
+    <div class="stat"><div class="stat-label">Avg latency</div><div class="stat-value">${avgLatency || "—"} ms</div></div>
+    <div class="stat"><div class="stat-label">p50 latency</div><div class="stat-value">${p50 || "—"} ms</div></div>
+    <div class="stat"><div class="stat-label">p95 latency</div><div class="stat-value">${p95 || "—"} ms</div></div>
+    <div class="stat"><div class="stat-label">Avg manual (all)</div><div class="stat-value">${avgAll}</div></div>
+    <div class="stat"><div class="stat-label">Avg manual (non-client)</div><div class="stat-value">${avgNonClient}</div></div>
+  `;
+}
+
+function percentile(arr, p) {
+  if (!arr || !arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  return Math.round(sorted[idx]);
+}
+
+function renderTable(rows) {
+  const body = document.getElementById("sessionsBody");
+  body.innerHTML = rows.map(r => {
+    const ts = r.parse_timestamp || r.quote_timestamp || "";
+    const manual = Array.isArray(r.manual_changes) && r.manual_changes.length
+      ? `<details><summary>${r.manual_changes.length} change(s)</summary>
+         <ul class="manual-list">${r.manual_changes.map(m =>
+           `<li><b>${escapeHtml(m.field || "")}</b> → ${escapeHtml(String(m.value ?? ""))}</li>`).join("")}</ul></details>`
+      : "—";
+    return `<tr>
+      <td>${escapeHtml(ts)}</td>
+      <td><span class="chip">${escapeHtml(r.insurance_type || "?")}</span></td>
+      <td>${r.pdf_count ?? "—"}</td>
+      <td>${r.latency_ms != null ? r.latency_ms.toLocaleString() : "—"}</td>
+      <td>${r.manual_changes_all_count ?? "—"}</td>
+      <td>${r.manual_changes_non_client_count ?? "—"}</td>
+      <td><span class="design-badge">${escapeHtml(r.system_design || "—")}</span></td>
+      <td>${manual}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:24px;">No sessions match the filters.</td></tr>`;
+}
+
+/* ----- Tiny no-dep line chart (latency by time) ---------------------------- */
+function renderChart(rows) {
+  const canvas = document.getElementById("latencyChart");
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.clientWidth;
+  const h = 280;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const points = rows
+    .filter(r => typeof r.latency_ms === "number" && r.parse_timestamp)
+    .map(r => ({ t: new Date(r.parse_timestamp).getTime(), y: r.latency_ms, type: r.insurance_type }))
+    .sort((a, b) => a.t - b.t);
+
+  const pad = { l: 50, r: 16, t: 16, b: 32 };
+  const plotW = w - pad.l - pad.r;
+  const plotH = h - pad.t - pad.b;
+
+  // Axes
+  ctx.strokeStyle = "#d1d5db";
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t);
+  ctx.lineTo(pad.l, pad.t + plotH);
+  ctx.lineTo(pad.l + plotW, pad.t + plotH);
+  ctx.stroke();
+
+  if (points.length === 0) {
+    ctx.fillStyle = "#6b7280";
+    ctx.font = "13px -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No data points", w / 2, h / 2);
+    return;
+  }
+
+  const minT = points[0].t;
+  const maxT = points[points.length - 1].t || (minT + 1);
+  const maxY = Math.max(...points.map(p => p.y), 1);
+
+  // Grid + y labels
+  ctx.fillStyle = "#6b7280";
+  ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.textAlign = "right";
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const y = pad.t + plotH - (plotH * i / steps);
+    const val = Math.round(maxY * i / steps);
+    ctx.strokeStyle = "#f3f4f6";
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + plotW, y); ctx.stroke();
+    ctx.fillText(val + " ms", pad.l - 6, y + 4);
+  }
+
+  // Colour per insurance type
+  const palette = {
+    homeowners: "#0451BD",
+    auto: "#16a34a",
+    dwelling: "#f59e0b",
+    commercial: "#a855f7",
+    bundle: "#e11d48",
+  };
+
+  // Group by type, draw each as line
+  const byType = new Map();
+  for (const p of points) {
+    if (!byType.has(p.type)) byType.set(p.type, []);
+    byType.get(p.type).push(p);
+  }
+  for (const [type, pts] of byType) {
+    ctx.strokeStyle = palette[type] || "#6b7280";
+    ctx.fillStyle = palette[type] || "#6b7280";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const x = pad.l + (maxT === minT ? plotW / 2 : plotW * (p.t - minT) / (maxT - minT));
+      const y = pad.t + plotH - (plotH * p.y / maxY);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // Dots
+    for (const p of pts) {
+      const x = pad.l + (maxT === minT ? plotW / 2 : plotW * (p.t - minT) / (maxT - minT));
+      const y = pad.t + plotH - (plotH * p.y / maxY);
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // X-axis labels
+  ctx.fillStyle = "#6b7280";
+  ctx.textAlign = "center";
+  ctx.fillText(new Date(minT).toLocaleString(), pad.l + 40, pad.t + plotH + 18);
+  ctx.fillText(new Date(maxT).toLocaleString(), pad.l + plotW - 40, pad.t + plotH + 18);
+
+  // Legend
+  ctx.textAlign = "left";
+  let lx = pad.l + 10;
+  const ly = pad.t + 14;
+  for (const type of byType.keys()) {
+    ctx.fillStyle = palette[type] || "#6b7280";
+    ctx.fillRect(lx, ly - 8, 10, 10);
+    ctx.fillStyle = "#20272D";
+    ctx.fillText(type, lx + 14, ly + 1);
+    lx += ctx.measureText(type).width + 34;
+  }
+}
+
+function downloadJsonl() {
+  if (!STATE.rows.length) { alert("Load data first."); return; }
+  const lines = STATE.rows.map(r => JSON.stringify(r)).join("\n");
+  const blob = new Blob([lines + "\n"], { type: "application/x-ndjson" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `parse_metrics_${new Date().toISOString().slice(0, 10)}.jsonl`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+loadInputs();
+</script>
+</body>
+</html>

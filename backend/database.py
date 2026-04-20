@@ -147,6 +147,33 @@ async def init_db():
                 ON chat_insight_memories (user_id, is_active);
         """)
 
+        # Developer-only parse/accuracy metrics — persisted in Postgres because
+        # Railway's filesystem is ephemeral. Open POST (so live frontend testers
+        # can log), DEV_METRICS_API_KEY-gated GET (so only the dev viewer reads).
+        # Two event shapes share one table: "parse" rows (latency) and "quote"
+        # rows (manual changes) — joined in the viewer via parse_id.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS parse_metrics (
+                id                              BIGSERIAL PRIMARY KEY,
+                created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                event                           TEXT NOT NULL,
+                parse_id                        UUID NOT NULL,
+                insurance_type                  TEXT NOT NULL DEFAULT '',
+                pdf_count                       INTEGER NOT NULL DEFAULT 0,
+                latency_ms                      INTEGER NOT NULL DEFAULT 0,
+                manual_changes_all_count        INTEGER NOT NULL DEFAULT 0,
+                manual_changes_non_client_count INTEGER NOT NULL DEFAULT 0,
+                manual_changes                  JSONB NOT NULL DEFAULT '[]'::jsonb,
+                system_design                   TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_parse_metrics_created_at
+                ON parse_metrics (created_at);
+            CREATE INDEX IF NOT EXISTS idx_parse_metrics_parse_id
+                ON parse_metrics (parse_id);
+            CREATE INDEX IF NOT EXISTS idx_parse_metrics_event
+                ON parse_metrics (event);
+        """)
+
 
 # ── PDF document storage ──────────────────────────────────────────
 

@@ -1066,3 +1066,81 @@ WHERE created_at >= $1
 GROUP BY user_id;
 ```
 
+## 10. Developer-only parse/accuracy metrics (2026-04-20)
+
+Separate from the user-facing `analytics_events` pipeline, there is now a
+**developer-only** metrics pipeline for reasoning about LLM orchestration
+trade-offs (latency vs. manual-edit count across different designs).
+
+### Where the code lives
+
+- **Backend** — `backend/dev_metrics_api.py`
+  - `POST /api/dev-metrics/log` — OPEN (no auth). Accepts a "parse" event
+    (latency) or "quote" event (manual-edit counts + list). Both shapes
+    share the same Pydantic model (`DevMetricEvent`) and are joined in
+    the viewer by `parse_id`.
+  - `GET /api/dev-metrics/data` — gated by `X-Dev-Metrics-Key` header
+    matching the `DEV_METRICS_API_KEY` env var on Railway. Returns
+    newest-first rows for the viewer.
+  - Table `parse_metrics` is defined in `backend/database.py` `init_db()`
+    alongside the other tables. Columns: `id`, `created_at`, `event`,
+    `parse_id`, `insurance_type`, `pdf_count`, `latency_ms`,
+    `manual_changes_all_count`, `manual_changes_non_client_count`,
+    `manual_changes` (JSONB), `system_design`.
+  - Router mounted in `backend/main.py` alongside the others.
+
+- **Frontend helper** — `frontend/src/devMetrics.js`
+  - `SYSTEM_DESIGN_VERSION` constant — bump when the LLM orchestration is
+    changed (models, passes, prompts, fallback chain, skill layer) and
+    append a new section to `dev_metrics/SYSTEM_DESIGN.md`.
+  - `startParseTimer({ insuranceType, pdfCount })` — call at the top of
+    each parse function. Returns a session object with a freshly
+    generated `parse_id` and start time.
+  - `logParseComplete(session)` — call in the `finally` block of each
+    parse function. Skips aborted sessions (session.aborted = true in
+    the AbortError branch).
+  - `logQuoteGenerated({ parseId, insuranceType, manualMap, formValues })`
+    — call after a successful quote PDF download.
+  - Client-info field keys are excluded from `non_client_count`:
+    `client_name`, `client_address`, `client_phone`, `client_email`,
+    `named_insured`, `mailing_address`.
+
+- **Frontend wiring** — `frontend/src/QuotifyHome.jsx`
+  - 5 parse functions instrumented: `parseHomeownersFile`, `parseAutoFile`,
+    `parseDwellingFile`, `parseBundleFiles`, `parseCommercialFile`. Each
+    owns a local `__devSession` in function scope and logs in `finally`.
+  - `lastParseIdRef` (React ref) carries the parse_id from parse to quote
+    so `logQuoteGenerated` can join rows via `parse_id`.
+
+- **Viewer** — `dev_metrics/viewer.html` (standalone HTML)
+  - Asks for the Railway backend URL + `DEV_METRICS_API_KEY` (persisted
+    to localStorage).
+  - Joins parse + quote rows by `parse_id`, renders stats cards,
+    filterable session table, pure-canvas latency chart, and a "Download
+    JSONL" button.
+
+- **System design doc** — `dev_metrics/SYSTEM_DESIGN.md`
+  - Describes the current LLM orchestration in plain terms. Every
+    `parse_metrics` row carries a `system_design` tag that points at a
+    specific version of this doc. When the orchestration changes, bump
+    `SYSTEM_DESIGN_VERSION` in `devMetrics.js` AND append a new section
+    here so old rows remain interpretable.
+
+### Rules of the road
+
+- **Never put user PII in `parse_metrics`** beyond what already lives in
+  the form (client names are captured as part of manual_changes for
+  client_name/named_insured, which is fine because the developer viewer
+  is key-gated).
+- **`POST /api/dev-metrics/log` is intentionally open.** Testers on the
+  live Vercel site are not Clerk admins, and we want their parse
+  latencies in the dataset. Adding auth would silently gap the data.
+- **`GET /api/dev-metrics/data` MUST remain key-gated.** The viewer is a
+  local HTML file, so the `DEV_METRICS_API_KEY` env var is the auth.
+- **Do not mutate the `event` strings.** The viewer hard-codes `"parse"`
+  and `"quote"` to dispatch join behavior.
+- **If you rename a parse function or change its file,** re-check the
+  `__devSession` block is still in scope across its try/finally — it
+  lives in the function body above the try, not inside it.
+
+

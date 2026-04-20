@@ -23,6 +23,7 @@ from chat_api import router as chat_router
 from report_generator import router as report_router
 
 from settings_api import router as settings_router, usage_router as api_usage_router
+from dev_metrics_api import router as dev_metrics_router
 from auto_clear_task import start_auto_clear_loop
 from browser_manager import get_browser, close_browser
 from database import init_db, close_pool
@@ -54,6 +55,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        # Dev-metrics viewer served locally: `python -m http.server 8080`
+        # from the dev_metrics/ folder → http://localhost:8080/viewer.html
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
         "https://the-sizemore-snapshot.vercel.app",
         "https://sizemoresnapshot.ai",
         "https://www.sizemoresnapshot.ai",
@@ -93,3 +98,6 @@ app.include_router(report_router)
 # Settings & API usage
 app.include_router(settings_router)
 app.include_router(api_usage_router)
+
+# Developer-only parse/accuracy metrics (open POST, key-gated GET)
+app.include_router(dev_metrics_router)
