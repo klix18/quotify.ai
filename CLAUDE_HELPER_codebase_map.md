@@ -996,3 +996,73 @@ Each marked edit must satisfy:
 | E10 | panels/DwellingPanel.jsx | 1 | `DWELLING_PROPERTY_INFO_FIELDS`, `DWELLING_NA_FIELDS` | yes (only appear on import line) | no | no |
 
 All confirmed safe. Proceed to Run 4.
+
+---
+
+## 9. Source-of-truth invariants (2026-04-20)
+
+These are load-bearing rules. Any change that touches analytics, user
+attribution, or the admin dashboard must preserve them.
+
+### The ONE stable identifier is the Clerk user_id
+
+- `analytics_events.user_id` is the Clerk `sub` claim (format `user_xxxxx`).
+- `user_name` is display-only. It can change, collide, be written lowercase,
+  be swapped with an email, etc. NEVER use it for identity.
+- `track_api.py` rejects JWTs without a `sub` claim (401) so no row can be
+  written with user_id=''. This is enforced at the ingress, not just relied
+  on downstream.
+
+### The ONE source of truth is analytics_events
+
+- Dashboard totals, leaderboards, timelines, and Snapshot History all derive
+  from `analytics_events`. They do NOT read from `pdf_documents` for counts.
+- `pdf_documents` mirrors the attribution fields (`user_id`, `user_name`,
+  `client_name`) for link-through when viewing a specific snapshot, but is
+  not queried for "how many did Kevin generate".
+- If you find yourself computing a number from `pdf_documents` that ALSO
+  exists in `analytics_events`, stop and use the analytics_events value.
+
+### Legacy rows are consolidated on startup via user_id_backfill.py
+
+- `backend/user_id_backfill.py` fetches Clerk users and bulk-UPDATEs rows
+  with `user_id=''` when `user_name` matches any alias (fullName, first,
+  last, email, email-local-part; case-insensitive fallback).
+- Runs on `main.py` lifespan startup AND is exposed as admin endpoint
+  `POST /api/admin/analytics/backfill-clerk-ids` for manual re-runs.
+- The UPDATE is gated by `user_id IS NULL OR user_id = ''` so it can NEVER
+  overwrite an existing attribution. Safe to run repeatedly.
+
+### Frontend aggregates by user_id, not user_name
+
+- `AdminDashboard.jsx` `UserTable` keys the merge map by resolved Clerk id
+  (`byClerkId[clerkId]`), summing counts across any fragments the backend
+  returned. The old `analyticsMap[u.user_name] = u` pattern is GONE — it
+  caused silent collisions that dropped Kevin Li's count to 1.
+- `clerkUsers` alias map now indexes by Clerk id as well, so the UserRow
+  lookup can resolve role/avatar directly from `u.user_id`.
+- Orphan rows (activity with no matching Clerk account) are shown rather
+  than silently filtered out — the admin must explicitly delete them via
+  the event-level delete flow if they are genuinely stale.
+
+### trackEvent must be awaited
+
+- `frontend/src/trackEvent.js` uses `keepalive: true` AND checks `response.ok`,
+  returning a boolean.
+- The quote-download flow in `QuotifyHome.jsx` now `await`s the call so
+  the POST completes before the PDF download starts. Fire-and-forget was
+  losing events whenever the browser navigated to the download URL before
+  the fetch reached Railway.
+
+### If you add a new analytics query, use this template
+
+```sql
+-- Group / filter on user_id (the stable Clerk sub), NEVER on user_name.
+-- The COALESCE(NULLIF(user_id, ''), user_name) fallback remains as a
+-- safety net for any pre-backfill rows that haven't been consolidated
+-- yet, but after run_startup_backfill() the fallback branch is unused.
+SELECT user_id, COUNT(*) FROM analytics_events
+WHERE created_at >= $1
+GROUP BY user_id;
+```
+

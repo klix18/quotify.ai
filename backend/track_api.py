@@ -4,7 +4,7 @@ Called by the frontend after each quote workflow.
 Requires a valid Clerk JWT (any authenticated user).
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from auth import get_current_user
@@ -34,8 +34,20 @@ async def track_event(
     # Always use the stable Clerk user_id from the verified JWT — never trust
     # the user_name from the request body for identity, since display names can
     # change and would otherwise fragment a user's history across multiple rows.
+    #
+    # Reject writes without a user_id. Historically the JWT always contains a
+    # sub claim, but we want to fail LOUDLY rather than silently drop a row
+    # into the user_id='' legacy bucket again — that bucket is exactly what
+    # caused the Kevin Li fragmentation bug.
+    user_id = user.get("user_id") or ""
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="JWT missing sub claim — cannot attribute event to a user",
+        )
+
     await log_event(
-        user_id=user["user_id"],
+        user_id=user_id,
         user_name=payload.user_name,
         insurance_type=payload.insurance_type,
         advisor=payload.advisor,
@@ -46,4 +58,4 @@ async def track_event(
         client_name=payload.client_name,
         skill_version=payload.skill_version,
     )
-    return {"status": "ok"}
+    return {"status": "ok", "user_id": user_id}

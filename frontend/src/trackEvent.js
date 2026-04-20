@@ -1,24 +1,25 @@
 /**
  * Analytics event tracker.
  * Sends workflow events to the backend for admin dashboard tracking.
- * Fires asynchronously — never blocks the main UI flow.
+ *
+ * Failure handling — IMPORTANT:
+ *   Callers should `await` this function before letting the browser
+ *   navigate or close (e.g. in the PDF download handler). Fire-and-forget
+ *   was how we lost Kevin Li's events after a download — the navigation
+ *   aborted the in-flight POST before it reached the backend.
+ *
+ *   This function STILL does not throw on failure so the user's workflow
+ *   never breaks, but it now:
+ *     1. Waits for the response instead of returning after fetch() starts
+ *     2. Logs a loud console.error with status + response body on non-2xx
+ *     3. Returns a boolean so callers can log a retry if desired
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 /**
  * Track a complete workflow event.
- * @param {Object} params
- * @param {string} params.userName - Clerk first + last name
- * @param {string} params.insuranceType - e.g. "homeowners", "auto"
- * @param {string} params.advisor - selected advisor name
- * @param {string} params.uploadedPdf - uploaded PDF filename
- * @param {string} params.manuallyChangedFields - comma-separated field names
- * @param {boolean} params.createdQuote - whether a quote was generated
- * @param {string} params.generatedPdf - generated PDF filename
- * @param {string} params.clientName - client name from the form
- * @param {string} params.skillVersion - skill version from parse result (e.g. "1.2")
- * @param {Function} params.getToken - Clerk getToken function
+ * @returns {Promise<boolean>} true if the event was accepted by the backend.
  */
 export async function trackEvent({
   userName,
@@ -34,10 +35,20 @@ export async function trackEvent({
 }) {
   try {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      console.error("[trackEvent] no Clerk token — event NOT recorded", {
+        userName,
+        insuranceType,
+      });
+      return false;
+    }
 
-    await fetch(`${API_BASE_URL}/api/track-event`, {
+    const resp = await fetch(`${API_BASE_URL}/api/track-event`, {
       method: "POST",
+      // keepalive: allow the request to complete even if the user navigates
+      // away (e.g. while a PDF download triggers a nav). Caps at ~64KB body,
+      // which is plenty for a single tracking event.
+      keepalive: true,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
@@ -54,9 +65,25 @@ export async function trackEvent({
         skill_version: skillVersion,
       }),
     });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.error(
+        `[trackEvent] backend rejected event (${resp.status}):`,
+        body,
+        { userName, insuranceType },
+      );
+      return false;
+    }
+    return true;
   } catch (err) {
-    // Analytics should never break the main app flow
-    console.warn("Analytics tracking failed:", err.message);
+    // Analytics should never break the main app flow — log loudly so the
+    // issue is visible in the browser console, but don't throw.
+    console.error("[trackEvent] network/exception failure:", err, {
+      userName,
+      insuranceType,
+    });
+    return false;
   }
 }
 

@@ -838,50 +838,96 @@ function UserRow({ user, role, onClick, rank, imageUrl }) {
 
 function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15 }) {
   // Merge analytics users with all Clerk users so everyone appears.
-  // Use the CANONICAL Clerk user list (one entry per real Clerk account)
-  // — NOT Object.keys(clerkUsers), which contains lookup aliases (first-name,
-  // last-name, email, email-local-part) and would create phantom rows.
-  const analyticsMap = {};
-  for (const u of (users || [])) {
-    analyticsMap[u.user_name] = u;
-  }
-  // Track which analytics rows we've already matched to a Clerk user so we
-  // don't render the same person twice (once under their analytics name and
-  // once under the canonical Clerk name if they differ by case/whitespace).
-  const matchedAnalyticsKeys = new Set();
-  for (const cu of (clerkUsersList || [])) {
-    const name = cu.displayName;
-    if (!name) continue;
-    // Find a matching analytics row via alias lookup so we don't add a
-    // duplicate entry when the stored user_name differs from the canonical
-    // display name (e.g. stored as email, stored lowercased, etc.).
-    let matchedKey = null;
-    if (analyticsMap[name]) {
-      matchedKey = name;
-    } else {
-      for (const akey of Object.keys(analyticsMap)) {
-        if (matchedAnalyticsKeys.has(akey)) continue;
-        const lookup = clerkUsers[akey] || clerkUsers[(akey || "").toLowerCase()];
-        if (lookup && lookup.id === cu.id) {
-          matchedKey = akey;
-          break;
-        }
+  //
+  // CRITICAL invariant: the Clerk user_id is the ONE stable identifier.
+  // Keying by user_name would collide whenever the backend returns two rows
+  // for the same person (e.g. legacy user_id='' row joined via the COALESCE
+  // fallback + a newer user_id-keyed row), causing one of them to silently
+  // overwrite the other. This is what caused Kevin Li's count to read as 1
+  // even though multiple events existed.
+  //
+  // We SUM counts across all analytics rows that resolve to the same Clerk
+  // user_id, so a person is represented exactly once no matter how their
+  // history is distributed across legacy/backfilled rows.
+  const byClerkId = {};         // clerk_id -> aggregated user row
+  const unmatchedByUserKey = {}; // analytics rows with no matching Clerk user (by the row's own stable user_id / user_name alias)
+
+  const addToAgg = (target, src) => {
+    target.total = (target.total || 0) + (src.total || 0);
+    target.quotes_created = (target.quotes_created || 0) + (src.quotes_created || 0);
+    target.pdfs_uploaded = (target.pdfs_uploaded || 0) + (src.pdfs_uploaded || 0);
+    // days_active is a COUNT(DISTINCT date) per row — approximating by max
+    // across the fragments is usually close enough once the backfill runs
+    // (post-backfill the backend returns a single row per user, so this
+    // branch collapses to a direct copy).
+    target.days_active = Math.max(target.days_active || 0, src.days_active || 0);
+    return target;
+  };
+
+  const resolveClerkId = (analyticsRow) => {
+    // Prefer the stable user_id the backend returned (Clerk sub claim after
+    // backfill). Fall back to alias lookup for the rare legacy row whose
+    // user_id is still blank. Case-insensitive so single-name users still
+    // resolve.
+    if (analyticsRow.user_id) {
+      // Backend may have emitted the raw user_id OR (for pre-backfill rows)
+      // the user_name as the COALESCE fallback. Trust it if it looks like a
+      // Clerk id (user_xxx), otherwise try to resolve via alias map.
+      if (analyticsRow.user_id.startsWith("user_")) return analyticsRow.user_id;
+      const lookup = clerkUsers[analyticsRow.user_id]
+        || clerkUsers[(analyticsRow.user_id || "").toLowerCase()];
+      if (lookup?.id) return lookup.id;
+    }
+    const nameKey = analyticsRow.user_name || "";
+    const lookup = clerkUsers[nameKey] || clerkUsers[nameKey.toLowerCase()];
+    return lookup?.id || null;
+  };
+
+  for (const row of (users || [])) {
+    const clerkId = resolveClerkId(row);
+    if (clerkId) {
+      if (!byClerkId[clerkId]) {
+        // Seed the aggregate with the canonical Clerk display name so renames
+        // don't fragment the leaderboard.
+        const canonical = (clerkUsersList || []).find((c) => c.id === clerkId);
+        byClerkId[clerkId] = {
+          user_id: clerkId,
+          user_name: canonical?.displayName || row.user_name,
+          total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0,
+        };
       }
-    }
-    if (matchedKey) {
-      matchedAnalyticsKeys.add(matchedKey);
+      addToAgg(byClerkId[clerkId], row);
     } else {
-      // Clerk user has no analytics activity yet — add a zero-row under
-      // the canonical display name.
-      analyticsMap[name] = { user_name: name, total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0 };
-      matchedAnalyticsKeys.add(name);
+      // Truly orphan row (Clerk account deleted). Key by whatever stable
+      // identifier we have so we don't collide on user_name. Keep these
+      // VISIBLE rather than silently dropping — per the "one source of
+      // truth" rule, if analytics_events shows activity, the dashboard
+      // must show it. Admin can delete via the event-level delete flow.
+      const key = row.user_id || `name:${row.user_name}`;
+      if (!unmatchedByUserKey[key]) {
+        unmatchedByUserKey[key] = {
+          user_id: row.user_id || row.user_name,
+          user_name: row.user_name,
+          total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0,
+        };
+      }
+      addToAgg(unmatchedByUserKey[key], row);
     }
   }
-  // Drop any analytics rows that couldn't be matched to a Clerk user at all
-  // (stale legacy data from deleted Clerk accounts). The admin dashboard
-  // should mirror the Clerk user list, not show ghosts.
-  const allUsers = Object.values(analyticsMap)
-    .filter((u) => matchedAnalyticsKeys.has(u.user_name))
+
+  // Ensure every Clerk user appears, even with zero activity.
+  for (const cu of (clerkUsersList || [])) {
+    if (!cu.id) continue;
+    if (!byClerkId[cu.id]) {
+      byClerkId[cu.id] = {
+        user_id: cu.id,
+        user_name: cu.displayName || "Unknown",
+        total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0,
+      };
+    }
+  }
+
+  const allUsers = [...Object.values(byClerkId), ...Object.values(unmatchedByUserKey)]
     .sort((a, b) => b.total - a.total);
 
   const th = { padding: "10px 14px", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" };
@@ -899,18 +945,20 @@ function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15
         </thead>
         <tbody>
           {allUsers.slice(0, limit).map((u, idx) => {
-            // Match Clerk records case-insensitively so single-name users
-            // (e.g. "jj") still resolve to the right role + avatar.
+            // Look up Clerk metadata (role, avatar) by the stable Clerk id
+            // whenever possible. Fall back to name-based alias lookup for
+            // orphan rows so roles still render.
             const cu =
+              clerkUsers[u.user_id] ||
               clerkUsers[u.user_name] ||
               clerkUsers[(u.user_name || "").toLowerCase()] ||
               null;
             return (
               <UserRow
-                key={u.user_id || u.user_name}
+                key={u.user_id}
                 user={u}
                 role={cu?.role || "advisor"}
-                onClick={() => onSelectUser(u.user_id || u.user_name)}
+                onClick={() => onSelectUser(u.user_id)}
                 rank={idx + 1}
                 imageUrl={cu?.image_url}
               />
@@ -2072,6 +2120,11 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
             const lower = key.toLowerCase();
             if (!map[lower]) map[lower] = info;
           }
+          // Also index by the stable Clerk id so UserTable / UserDetail can
+          // resolve Clerk metadata (role, avatar) directly from user_id
+          // without a name fallback. This is the ONE stable identifier
+          // across analytics_events and Clerk — user_name is display-only.
+          if (u.id) map[u.id] = info;
         }
         setClerkUsers(map);
         setClerkUsersList(canonical);

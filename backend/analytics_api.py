@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from auth import get_current_user, require_admin
 from database import get_pool
+from user_id_backfill import backfill_user_ids_from_clerk
 
 router = APIRouter(prefix="/api/admin/analytics", tags=["analytics"])
 self_router = APIRouter(prefix="/api/analytics", tags=["analytics-self"])
@@ -360,6 +361,15 @@ async def backfill_user_id(
 
     updated = int(result.split()[-1])
     return {"status": "ok", "user_id": user_id, "aliases": user_names, "rows_updated": updated}
+
+
+@router.post("/backfill-clerk-ids")
+async def backfill_clerk_ids(_admin: dict = Depends(require_admin)):
+    """Force a re-run of the Clerk-based user_id backfill. Safe to call at any
+    time — only touches rows whose user_id is blank, so it can never overwrite
+    an existing attribution. Returns the full per-user reconciliation report."""
+    report = await backfill_user_ids_from_clerk()
+    return report
 
 
 @router.delete("/event/{event_id}")

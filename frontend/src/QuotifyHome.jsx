@@ -1763,7 +1763,13 @@ export default function QuotifyHome({ isAdmin }) {
       const clientName = String(
         formForClient.client_name || formForClient.named_insured || ""
       ).trim();
-      trackEvent({
+      // AWAIT the tracking call. Fire-and-forget was causing the backend
+      // POST to be cancelled when the browser started the PDF download
+      // immediately after — the request never reached Railway, so the
+      // row never appeared in analytics_events and the leaderboard
+      // undercounted the user. trackEvent never throws, so this await
+      // cannot break the quote flow; at worst it takes ~200ms extra.
+      await trackEvent({
         userName,
         insuranceType: selectedInsurance,
         advisor: selectedAdvisorName,

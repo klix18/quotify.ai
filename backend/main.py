@@ -26,6 +26,7 @@ from settings_api import router as settings_router, usage_router as api_usage_ro
 from auto_clear_task import start_auto_clear_loop
 from browser_manager import get_browser, close_browser
 from database import init_db, close_pool
+from user_id_backfill import run_startup_backfill
 
 
 @asynccontextmanager
@@ -33,6 +34,10 @@ async def lifespan(app: FastAPI):
     # Startup: launch Chromium + initialize database
     await get_browser()
     await init_db()
+    # Consolidate any legacy analytics/pdf rows (user_id='') onto their
+    # canonical Clerk user_ids. Runs inside init so the dashboard is
+    # self-healing whenever the server restarts — no manual step needed.
+    await run_startup_backfill()
     # Start background auto-clear task
     auto_clear = asyncio.create_task(start_auto_clear_loop())
     yield
