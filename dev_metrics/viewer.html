@@ -305,7 +305,7 @@ function renderGlobalStats() {
     <div class="stat"><div class="stat-label">Designs</div><div class="stat-value">${designs.size}</div></div>
     <div class="stat"><div class="stat-label">Sessions (all)</div><div class="stat-value">${rows.length}</div></div>
     <div class="stat"><div class="stat-label">With quote</div><div class="stat-value">${withQuote.length}</div></div>
-    <div class="stat"><div class="stat-label">Avg latency (all)</div><div class="stat-value">${avgLatency || "—"} ms</div></div>
+    <div class="stat"><div class="stat-label">Avg latency (all)</div><div class="stat-value">${avgLatency ? fmtSec(avgLatency) : "—"} s</div></div>
   `;
 }
 
@@ -405,9 +405,9 @@ function renderTypeSummary(sessions) {
         <tr>
           <th>Insurance type</th>
           <th>Sessions</th>
-          <th>Avg latency (ms)</th>
-          <th>p50 latency</th>
-          <th>p95 latency</th>
+          <th>Avg latency (s)</th>
+          <th>p50 latency (s)</th>
+          <th>p95 latency (s)</th>
           <th>Avg manual (all)</th>
           <th>Avg manual (non-client)</th>
         </tr>
@@ -428,9 +428,9 @@ function renderTypeSummary(sessions) {
           return `<tr>
             <td><span class="chip">${escapeHtml(type)}</span></td>
             <td>${arr.length}</td>
-            <td>${avgLat != null ? avgLat.toLocaleString() : "—"}</td>
-            <td>${p50 ? p50.toLocaleString() : "—"}</td>
-            <td>${p95 ? p95.toLocaleString() : "—"}</td>
+            <td>${avgLat != null ? fmtSec(avgLat) : "—"}</td>
+            <td>${p50 ? fmtSec(p50) : "—"}</td>
+            <td>${p95 ? fmtSec(p95) : "—"}</td>
             <td>${avgAll}</td>
             <td>${avgNon}</td>
           </tr>`;
@@ -449,7 +449,7 @@ function renderSessionsTable(sessions) {
           <th>Parsed at</th>
           <th>Type</th>
           <th>PDFs</th>
-          <th>Latency (ms)</th>
+          <th>Latency (s)</th>
           <th># Manual (all)</th>
           <th># Manual (non-client)</th>
           <th>Manual changes</th>
@@ -467,7 +467,7 @@ function renderSessionsTable(sessions) {
             <td>${escapeHtml(fmtDate(ts))}</td>
             <td><span class="chip">${escapeHtml(r.insurance_type || "?")}</span></td>
             <td>${r.pdf_count ?? "—"}</td>
-            <td>${r.latency_ms != null ? r.latency_ms.toLocaleString() : "—"}</td>
+            <td>${r.latency_ms != null ? fmtSec(r.latency_ms) : "—"}</td>
             <td>${r.manual_changes_all_count ?? "—"}</td>
             <td>${r.manual_changes_non_client_count ?? "—"}</td>
             <td>${manual}</td>
@@ -501,6 +501,17 @@ function percentile(arr, p) {
   const sorted = [...arr].sort((a, b) => a - b);
   const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
   return Math.round(sorted[idx]);
+}
+
+/* Format a latency value (milliseconds) as seconds with 2 decimal places,
+ * thousands-separated. 32947 → "32.95", 1234567 → "1,234.57". */
+function fmtSec(ms) {
+  if (ms == null || isNaN(ms)) return "—";
+  const secs = Number(ms) / 1000;
+  return secs.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function fmtDate(iso) {

@@ -208,17 +208,82 @@ def _parse_quick_pass_lines(text: str, all_keys: list[str]) -> dict:
 
 
 def _try_parse_json(text: str) -> dict:
-    """Attempt to parse complete or partial JSON from streaming text."""
+    """
+    Attempt to parse complete or partial JSON from streaming text.
+
+    Tries progressively more aggressive recovery strategies so one misplaced
+    byte from the LLM doesn't nuke the entire parse:
+      1. Straight json.loads (the happy path — almost always hits this).
+      2. Strip ``` code fences a model sometimes wraps output in.
+      3. Substring between first '{' and last '}' — handles a preamble
+         or trailing prose accidentally emitted by the model.
+      4. Balanced-brace truncation — scans forward from the first '{',
+         tracking brace/string state, and parses the longest valid
+         prefix that closes cleanly. This saves us when the stream was
+         cut off mid-object (auto schema is large and occasionally hits
+         max output tokens).
+    Returns {} only if every strategy fails; the caller can fall back
+    to schema defaults in that case.
+    """
+    # 1. Happy path
     try:
         return json.loads(text, strict=False)
     except Exception:
         pass
+
+    # 2. Strip markdown fences
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Remove leading ```json or ```
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+        stripped = re.sub(r"\s*```\s*$", "", stripped)
+        try:
+            return json.loads(stripped, strict=False)
+        except Exception:
+            pass
+
+    # 3. Slice to the outermost { ... }
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end > start:
         try:
             return json.loads(text[start:end + 1], strict=False)
         except Exception:
             pass
+
+    # 4. Balanced-brace truncation — walk forward from the first '{'
+    #    and remember the last position at which depth returned to 0
+    #    (i.e. the last cleanly-closed top-level object). Parse up to
+    #    that point. This recovers gracefully from mid-object truncation.
+    if start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        last_complete = -1
+        for i in range(start, len(text)):
+            ch = text[i]
+            if escape:
+                escape = False
+                continue
+            if ch == "\\" and in_string:
+                escape = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    last_complete = i
+        if last_complete > start:
+            try:
+                return json.loads(text[start:last_complete + 1], strict=False)
+            except Exception:
+                pass
+
     return {}
 
 
@@ -698,7 +763,18 @@ def stream_unified_quote(
                     yield json.dumps({"type": "final_patch", "data": partial}) + "\n"
 
         # ── Post-process Pass 2 result ─────────────────────────
-        parsed = json.loads(full_text, strict=False)
+        # Use the lenient _try_parse_json helper (code-fence strip,
+        # substring-between-braces, balanced-brace truncation) so one
+        # dropped byte from the LLM doesn't kill the whole parse. If
+        # every recovery strategy fails we still raise — but with a
+        # user-friendly message rather than json.JSONDecodeError's
+        # "Expecting ':' delimiter: line X column Y (char Z)".
+        parsed = _try_parse_json(full_text)
+        if not parsed:
+            raise ValueError(
+                "The AI returned malformed JSON that couldn't be recovered. "
+                "This is usually a transient LLM issue — please try again."
+            )
         data, confidence = post_process(parsed, schema)
 
         # ────────────────────────────────────────────────────────

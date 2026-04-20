@@ -188,7 +188,12 @@ async def get_dev_metrics(
         # asyncpg returns UUID and datetime objects — serialize them so the
         # viewer (which reads JSON over fetch) doesn't have to care.
         d["parse_id"] = str(d["parse_id"])
-        d["created_at"] = d["created_at"].isoformat()
+        iso = d["created_at"].isoformat()
+        d["created_at"] = iso
+        # The viewer reads `timestamp` (matching the event-log shape in
+        # SYSTEM_DESIGN.md). Expose both names so existing + future viewers
+        # work without a rename migration.
+        d["timestamp"] = iso
         # JSONB column: asyncpg returns it as a string in some versions and
         # as a parsed list in others. Normalize to a Python list here.
         mc = d.get("manual_changes")

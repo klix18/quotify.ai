@@ -190,19 +190,59 @@ export async function logQuoteGenerated({
 // ── internals ─────────────────────────────────────────────────────────
 
 async function postSilently(payload) {
+  const url = `${API_BASE_URL}/api/dev-metrics/log`;
+
+  // For "quote" events the flow kicks off a file download right after, which
+  // can kill any in-flight fetch. sendBeacon is purpose-built for "send this
+  // before the page goes away" and survives navigation/downloads reliably.
+  // For "parse" events the user stays on the page, so a normal fetch is both
+  // more reliable (sendBeacon has a 64KB cap) and lets us log the response.
+  const isQuote = payload && payload.event === "quote";
+
+  if (isQuote && typeof navigator !== "undefined" && navigator.sendBeacon) {
+    try {
+      const blob = new Blob([JSON.stringify(payload)], {
+        type: "application/json",
+      });
+      const ok = navigator.sendBeacon(url, blob);
+      if (ok) {
+        if (typeof console !== "undefined" && console.debug) {
+          console.debug("[devMetrics] sent via beacon:", payload.event);
+        }
+        return;
+      }
+      // sendBeacon returned false (queue full, too large, etc.) — fall through
+      // to fetch so we still have a chance of landing the row.
+    } catch (_) {
+      // fall through
+    }
+  }
+
+  // Parse events and the beacon fallback both come through here.
+  // NOTE: no `keepalive: true` here. For parse events the user stays on the
+  // page, and Chrome silently deprioritizes/drops keepalive requests under
+  // concurrent network load (the parse stream itself is active at this
+  // moment), which caused intermittent misses. Plain fetch lands more
+  // reliably and — importantly — gives us a response status to log.
   try {
-    await fetch(`${API_BASE_URL}/api/dev-metrics/log`, {
+    const resp = await fetch(url, {
       method: "POST",
-      // keepalive: match trackEvent.js — the quote-generation flow kicks
-      // off a file download immediately after, which can cancel an
-      // in-flight POST without keepalive.
-      keepalive: true,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    if (typeof console !== "undefined" && console.debug) {
+      console.debug(
+        `[devMetrics] ${payload.event} → ${resp.status} ${resp.ok ? "OK" : "FAIL"}`
+      );
+    }
+    if (!resp.ok && typeof console !== "undefined" && console.warn) {
+      // Surface non-2xx so a 500 from a bad payload or DB issue is visible.
+      const body = await resp.text().catch(() => "");
+      console.warn("[devMetrics] non-OK response:", resp.status, body.slice(0, 200));
+    }
   } catch (err) {
-    // Completely silent on failure. Dev metrics are not allowed to break
-    // the user flow, and the user-facing UI already surfaces parse/quote
+    // Completely silent on network failure. Dev metrics are not allowed to
+    // break the user flow; the user-facing UI already surfaces parse/quote
     // errors through its own paths.
     if (typeof console !== "undefined" && console.warn) {
       console.warn("[devMetrics] log failed (non-fatal):", err);
