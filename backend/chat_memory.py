@@ -7,7 +7,7 @@ and LLM-powered summarization/deduplication.
 import os
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from dotenv import load_dotenv

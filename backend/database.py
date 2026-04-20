@@ -5,7 +5,6 @@ Uses asyncpg for async operations with FastAPI.
 """
 
 import os
-from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
@@ -52,14 +51,17 @@ async def init_db():
                 manually_changed_fields TEXT NOT NULL DEFAULT '',
                 created_quote           BOOLEAN NOT NULL DEFAULT FALSE,
                 generated_pdf           TEXT NOT NULL DEFAULT '',
-                client_name             TEXT NOT NULL DEFAULT ''
+                client_name             TEXT NOT NULL DEFAULT '',
+                skill_version           TEXT NOT NULL DEFAULT ''
             );
 
-            -- Ensure client_name and user_id exist on pre-existing databases
+            -- Ensure client_name, user_id, and skill_version exist on pre-existing databases
             ALTER TABLE analytics_events
                 ADD COLUMN IF NOT EXISTS client_name TEXT NOT NULL DEFAULT '';
             ALTER TABLE analytics_events
                 ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
+            ALTER TABLE analytics_events
+                ADD COLUMN IF NOT EXISTS skill_version TEXT NOT NULL DEFAULT '';
 
             CREATE INDEX IF NOT EXISTS idx_events_created_at ON analytics_events (created_at);
             CREATE INDEX IF NOT EXISTS idx_events_user_name ON analytics_events (user_name);
@@ -266,6 +268,7 @@ async def log_event(
     created_quote: bool = False,
     generated_pdf: str = "",
     client_name: str = "",
+    skill_version: str = "",
 ):
     """Insert an analytics event row."""
     pool = await get_pool()
@@ -273,8 +276,10 @@ async def log_event(
         await conn.execute(
             """
             INSERT INTO analytics_events
-                (user_id, user_name, insurance_type, advisor, uploaded_pdf, manually_changed_fields, created_quote, generated_pdf, client_name)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                (user_id, user_name, insurance_type, advisor, uploaded_pdf,
+                 manually_changed_fields, created_quote, generated_pdf,
+                 client_name, skill_version)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             """,
             user_id,
             user_name,
@@ -285,6 +290,7 @@ async def log_event(
             created_quote,
             generated_pdf,
             client_name,
+            skill_version,
         )
 
 

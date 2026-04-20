@@ -41,8 +41,8 @@
       <img src="assets/logo.png" alt="Sizemore Insurance">
     </div>
 
-    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Property {{ loop.index }} — Protection Details</div>
-    <div class="section-sub">Coverage details for the insured rental property listed below.</div>
+    <div class="section-heading sentient" style="margin-top: 12px; margin-bottom: 4px;">Property {{ loop.index }} — Protection Details</div>
+    <div class="section-sub" style="margin-bottom: 10px;">Coverage details for the insured rental property listed below.</div>
 
     <!-- Property info banner -->
     <div class="property-banner r8">
@@ -66,7 +66,10 @@
       {% endif %}
     </div>
 
-    <!-- Coverage grid -->
+    {# ───── Section 1: Coverage & Liability Limits — coverage-grid pattern (2×N) ───── #}
+    {% set _has_limits = property.dwelling_limit or property.other_structures_limit or property.personal_property_limit or property.fair_rental_value_limit or property.premises_liability_limit or property.medical_payments_limit %}
+    {% if _has_limits %}
+    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 8px;">Coverage &amp; Liability Limits</div>
     <div class="coverage-grid">
       {% if property.dwelling_limit %}
       <div class="cov-card r8">
@@ -74,70 +77,61 @@
           <span class="cov-name">Dwelling</span>
           <span class="cov-value">{{ property.dwelling_limit }}</span>
         </div>
-        <div class="cov-desc">Covers the cost to repair or rebuild the rental property's structure after a covered loss.</div>
+        <div class="cov-desc">Rebuilds the primary structure after a covered loss.</div>
       </div>
       {% endif %}
-
       {% if property.other_structures_limit %}
       <div class="cov-card r8">
         <div class="cov-header">
           <span class="cov-name">Other Structures</span>
           <span class="cov-value">{{ property.other_structures_limit }}</span>
         </div>
-        <div class="cov-desc">Protects detached structures on the property such as garages, storage sheds, or fences.</div>
+        <div class="cov-desc">Covers detached garages, sheds, and fences.</div>
       </div>
       {% endif %}
-
       {% if property.personal_property_limit %}
       <div class="cov-card r8">
         <div class="cov-header">
           <span class="cov-name">Personal Property</span>
           <span class="cov-value">{{ property.personal_property_limit }}</span>
         </div>
-        <div class="cov-desc">Covers appliances, fixtures, and personal property you keep at the rental for maintenance or tenant use.</div>
+        <div class="cov-desc">Protects landlord-owned appliances and fixtures.</div>
       </div>
       {% endif %}
-
       {% if property.fair_rental_value_limit %}
       <div class="cov-card r8">
         <div class="cov-header">
           <span class="cov-name">Fair Rental Value</span>
           <span class="cov-value">{{ property.fair_rental_value_limit }}</span>
         </div>
-        <div class="cov-desc">Reimburses lost rental income if the property becomes uninhabitable due to a covered event.</div>
+        <div class="cov-desc">Lost rent while the property is uninhabitable.</div>
+      </div>
+      {% endif %}
+      {% if property.premises_liability_limit %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Premises Liability</span>
+          <span class="cov-value">{{ property.premises_liability_limit }}</span>
+        </div>
+        <div class="cov-desc">Defends against tenant or visitor injury claims.</div>
+      </div>
+      {% endif %}
+      {% if property.medical_payments_limit %}
+      <div class="cov-card r8">
+        <div class="cov-header">
+          <span class="cov-name">Medical Payments</span>
+          <span class="cov-value">{{ property.medical_payments_limit }}</span>
+        </div>
+        <div class="cov-desc">Covers minor medical bills for on-site injuries.</div>
       </div>
       {% endif %}
     </div>
-
-    <!-- Liability -->
-    {% if property.premises_liability_limit or property.medical_payments_limit %}
-    <div class="section-heading sentient" style="font-size: 22px; margin-top: 8px; margin-bottom: 4px;">Liability Protection</div>
-    <div class="section-sub">Covers claims from tenants or visitors who are injured on the property.</div>
-
-    {% if property.premises_liability_limit %}
-    <div class="liab-card r8">
-      <div class="liab-left">
-        <div class="liab-name">Premises Liability</div>
-        <div class="liab-val">{{ property.premises_liability_limit }}</div>
-      </div>
-      <div class="liab-desc">Protects you against lawsuits if a tenant or visitor is injured on the rental property and you are found responsible.</div>
-    </div>
     {% endif %}
 
-    {% if property.medical_payments_limit %}
-    <div class="liab-card r8">
-      <div class="liab-left">
-        <div class="liab-name">Medical Payments</div>
-        <div class="liab-val">{{ property.medical_payments_limit }}</div>
-      </div>
-      <div class="liab-desc">Covers minor medical expenses for someone injured on your property regardless of fault.</div>
-    </div>
-    {% endif %}
-    {% endif %}
-
-    <!-- Other / Deductibles -->
-    <div class="section-heading sentient" style="font-size: 22px; margin-top: 14px; margin-bottom: 14px;">Other Details</div>
-
+    {# ───── Section 2: Policy Terms, Endorsements & Deductibles — other-container pattern (stacked list) ───── #}
+    {% set _has_terms = property.dwelling_loss_settlement or property.personal_property_loss_settlement or property.water_backup_limit or property.ordinance_or_law_limit or property.extended_replacement_cost or property.aop_deductible or property.wind_hail_deductible or property.deductible %}
+    {% if _has_terms %}
+    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 8px;">Policy Terms, Endorsements &amp; Deductibles</div>
     <div class="other-container r8">
       {% if property.dwelling_loss_settlement %}
       <div class="other-entry">
@@ -145,80 +139,75 @@
           <span class="other-name">Dwelling Loss Settlement</span>
           <span class="other-val">{{ property.dwelling_loss_settlement }}</span>
         </div>
-        <div class="other-desc">Determines whether claims are settled at replacement cost value (RCV) or actual cash value (ACV).</div>
+        <div class="other-desc">How a dwelling claim is valued — replacement cost or actual cash value.</div>
       </div>
       {% endif %}
-
       {% if property.personal_property_loss_settlement %}
       <div class="other-entry">
         <div class="other-header">
           <span class="other-name">Personal Property Settlement</span>
           <span class="other-val">{{ property.personal_property_loss_settlement }}</span>
         </div>
-        <div class="other-desc">Specifies whether personal property claims are paid at full replacement cost or depreciated value.</div>
+        <div class="other-desc">How personal property claims are valued at the time of loss.</div>
       </div>
       {% endif %}
-
       {% if property.water_backup_limit %}
       <div class="other-entry">
         <div class="other-header">
           <span class="other-name">Water Backup</span>
           <span class="other-val">{{ property.water_backup_limit }}</span>
         </div>
-        <div class="other-desc">Covers damage caused by water backing up through sewers, drains, or sump pumps.</div>
+        <div class="other-desc">Coverage for damage caused by sewer, drain, or sump-pump backups.</div>
       </div>
       {% endif %}
-
       {% if property.ordinance_or_law_limit %}
       <div class="other-entry">
         <div class="other-header">
           <span class="other-name">Ordinance or Law</span>
           <span class="other-val">{{ property.ordinance_or_law_limit }}</span>
         </div>
-        <div class="other-desc">Covers the additional cost to bring your property up to current building codes during repairs.</div>
+        <div class="other-desc">Pays added costs to rebuild to current building codes after a loss.</div>
       </div>
       {% endif %}
-
       {% if property.extended_replacement_cost %}
       <div class="other-entry">
         <div class="other-header">
           <span class="other-name">Extended Replacement Cost</span>
           <span class="other-val">{{ property.extended_replacement_cost }}</span>
         </div>
-        <div class="other-desc">Provides extra coverage beyond the dwelling limit if rebuilding costs exceed the insured amount.</div>
+        <div class="other-desc">Additional limit beyond the dwelling amount when rebuild costs exceed it.</div>
       </div>
       {% endif %}
-
       {% if property.aop_deductible %}
       <div class="other-entry">
         <div class="other-header">
-          <span class="other-name">All Other Perils (AOP)</span>
+          <span class="other-name">All Other Perils Deductible</span>
           <span class="other-val">{{ property.aop_deductible }}</span>
         </div>
-        <div class="other-desc">Your out-of-pocket cost before coverage applies for most types of property claims.</div>
+        <div class="other-desc">Your out-of-pocket cost for most non-wind property claims.</div>
       </div>
       {% endif %}
-
       {% if property.wind_hail_deductible %}
       <div class="other-entry">
         <div class="other-header">
-          <span class="other-name">Wind/Hail Deductible</span>
+          <span class="other-name">Wind / Hail Deductible</span>
           <span class="other-val">{{ property.wind_hail_deductible }}</span>
         </div>
-        <div class="other-desc">The amount or percentage you pay before coverage begins for wind or hail damage specifically.</div>
+        <div class="other-desc">Separate deductible applied to damage from wind or hail events.</div>
       </div>
       {% endif %}
-
-      {% if property.deductible %}
+      {# Combined Deductible is semantically "AOP + Wind/Hail merged" — only show when neither split field is populated. #}
+      {% if property.deductible and not property.aop_deductible and not property.wind_hail_deductible %}
       <div class="other-entry">
         <div class="other-header">
-          <span class="other-name">Deductible</span>
+          <span class="other-name">Combined Deductible</span>
           <span class="other-val">{{ property.deductible }}</span>
         </div>
-        <div class="other-desc">Your combined deductible for all covered perils including wind and hail.</div>
+        <div class="other-desc">Single deductible applied to all covered property losses.</div>
       </div>
       {% endif %}
     </div>
+    {% endif %}
 
   </div>
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
@@ -227,7 +216,22 @@
 
 
 <!-- ════════════════════  FINAL PAGE — PAYMENT OPTIONS  ═══════════════ -->
-{% if payment_plans %}
+{# Page renders if EITHER real payment plans OR a Paid-in-Full Discount has
+   data. The "Payment Options" heading + "Available payment plans…" subtitle
+   + grid only render when actual plans have data, so a PIF-only page doesn't
+   show a misleading "Available payment plans" line above an empty grid. #}
+{% set _has_plans = payment_plans and (
+     (payment_plans.full_pay and (payment_plans.full_pay.amount_due or payment_plans.full_pay.full_pay_amount))
+  or (payment_plans.two_pay  and (payment_plans.two_pay.amount_due  or payment_plans.two_pay.down_payment  or payment_plans.two_pay.amount_per_installment  or payment_plans.two_pay.number_of_installments  or payment_plans.two_pay.installment_details  or payment_plans.two_pay.installment_fee))
+  or (payment_plans.four_pay and (payment_plans.four_pay.amount_due or payment_plans.four_pay.down_payment or payment_plans.four_pay.amount_per_installment or payment_plans.four_pay.number_of_installments or payment_plans.four_pay.installment_details or payment_plans.four_pay.installment_fee))
+  or (payment_plans.monthly  and (payment_plans.monthly.amount_due  or payment_plans.monthly.down_payment  or payment_plans.monthly.amount_per_installment  or payment_plans.monthly.number_of_installments  or payment_plans.monthly.installment_details  or payment_plans.monthly.installment_fee))
+) %}
+{% set _has_pif = payment_plans and payment_plans.show_paid_in_full_discount and payment_plans.paid_in_full_discount and (
+     payment_plans.paid_in_full_discount.gross_premium
+  or payment_plans.paid_in_full_discount.discount_amount
+  or payment_plans.paid_in_full_discount.net_pay_in_full
+) %}
+{% if _has_plans or _has_pif %}
 <div class="page">
   <div class="page-inner">
 
@@ -235,44 +239,81 @@
       <img src="assets/logo.png" alt="Sizemore Insurance">
     </div>
 
+    {% if _has_plans %}
     <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Payment Options</div>
     <div class="section-sub">Available payment plans for this dwelling policy.</div>
 
     <div class="payment-grid">
-      {% if payment_plans.full_pay and payment_plans.full_pay.amount_due %}
+      {% if payment_plans.full_pay and (payment_plans.full_pay.full_pay_amount or payment_plans.full_pay.amount_due) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Full Pay</div>
-        <div class="payment-row"><span class="payment-row-label">Amount Due</span><span class="payment-row-value">{{ payment_plans.full_pay.amount_due }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Full Pay Amount</span><span class="payment-row-value">{{ payment_plans.full_pay.full_pay_amount or payment_plans.full_pay.amount_due }}</span></div>
       </div>
       {% endif %}
 
-      {% if payment_plans.two_pay and payment_plans.two_pay.amount_due %}
+      {% if payment_plans.two_pay and (payment_plans.two_pay.down_payment or payment_plans.two_pay.amount_per_installment or payment_plans.two_pay.number_of_installments or payment_plans.two_pay.amount_due) %}
       <div class="payment-card r8">
         <div class="payment-card-title">2-Pay</div>
-        <div class="payment-row"><span class="payment-row-label">Amount Due</span><span class="payment-row-value">{{ payment_plans.two_pay.amount_due }}</span></div>
-        {% if payment_plans.two_pay.installment_details %}<div class="payment-row"><span class="payment-row-label">Installment</span><span class="payment-row-value">{{ payment_plans.two_pay.installment_details }}</span></div>{% endif %}
-        {% if payment_plans.two_pay.installment_fee %}<div class="payment-row"><span class="payment-row-label">Installment Fee</span><span class="payment-row-value">{{ payment_plans.two_pay.installment_fee }}</span></div>{% endif %}
+        {% if payment_plans.two_pay.down_payment %}<div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_plans.two_pay.down_payment }}</span></div>{% endif %}
+        {% if payment_plans.two_pay.amount_per_installment %}<div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_plans.two_pay.amount_per_installment }}</span></div>{% endif %}
+        {% if payment_plans.two_pay.number_of_installments %}<div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_plans.two_pay.number_of_installments }}</span></div>{% endif %}
       </div>
       {% endif %}
 
-      {% if payment_plans.four_pay and payment_plans.four_pay.amount_due %}
+      {% if payment_plans.four_pay and (payment_plans.four_pay.down_payment or payment_plans.four_pay.amount_per_installment or payment_plans.four_pay.number_of_installments or payment_plans.four_pay.amount_due) %}
       <div class="payment-card r8">
         <div class="payment-card-title">4-Pay</div>
-        <div class="payment-row"><span class="payment-row-label">Amount Due</span><span class="payment-row-value">{{ payment_plans.four_pay.amount_due }}</span></div>
-        {% if payment_plans.four_pay.installment_details %}<div class="payment-row"><span class="payment-row-label">Installment</span><span class="payment-row-value">{{ payment_plans.four_pay.installment_details }}</span></div>{% endif %}
-        {% if payment_plans.four_pay.installment_fee %}<div class="payment-row"><span class="payment-row-label">Installment Fee</span><span class="payment-row-value">{{ payment_plans.four_pay.installment_fee }}</span></div>{% endif %}
+        {% if payment_plans.four_pay.down_payment %}<div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_plans.four_pay.down_payment }}</span></div>{% endif %}
+        {% if payment_plans.four_pay.amount_per_installment %}<div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_plans.four_pay.amount_per_installment }}</span></div>{% endif %}
+        {% if payment_plans.four_pay.number_of_installments %}<div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_plans.four_pay.number_of_installments }}</span></div>{% endif %}
       </div>
       {% endif %}
 
-      {% if payment_plans.monthly and payment_plans.monthly.amount_due %}
+      {% if payment_plans.monthly and (payment_plans.monthly.down_payment or payment_plans.monthly.amount_per_installment or payment_plans.monthly.number_of_installments or payment_plans.monthly.amount_due) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Monthly</div>
-        <div class="payment-row"><span class="payment-row-label">Amount Due</span><span class="payment-row-value">{{ payment_plans.monthly.amount_due }}</span></div>
-        {% if payment_plans.monthly.installment_details %}<div class="payment-row"><span class="payment-row-label">Installment</span><span class="payment-row-value">{{ payment_plans.monthly.installment_details }}</span></div>{% endif %}
-        {% if payment_plans.monthly.installment_fee %}<div class="payment-row"><span class="payment-row-label">Installment Fee</span><span class="payment-row-value">{{ payment_plans.monthly.installment_fee }}</span></div>{% endif %}
+        {% if payment_plans.monthly.down_payment %}<div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_plans.monthly.down_payment }}</span></div>{% endif %}
+        {% if payment_plans.monthly.amount_per_installment %}<div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_plans.monthly.amount_per_installment }}</span></div>{% endif %}
+        {% if payment_plans.monthly.number_of_installments %}<div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_plans.monthly.number_of_installments }}</span></div>{% endif %}
       </div>
       {% endif %}
     </div>
+    {% endif %}
+
+    {% if _has_pif %}
+    <div class="section-heading sentient" style="margin-top: {% if _has_plans %}20px{% else %}20px{% endif %}; margin-bottom: 4px;">Paid-in-Full Discount</div>
+    <div class="section-sub">Savings available when paying the full dwelling premium up front.</div>
+
+    <div class="other-container r8">
+      {% if payment_plans.paid_in_full_discount.gross_premium %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Gross Premium</span>
+          <span class="other-val">{{ payment_plans.paid_in_full_discount.gross_premium }}</span>
+        </div>
+        <div class="other-desc">Total premium before any pay-in-full discount is applied.</div>
+      </div>
+      {% endif %}
+      {% if payment_plans.paid_in_full_discount.discount_amount %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Discount Amount</span>
+          <span class="other-val">{{ payment_plans.paid_in_full_discount.discount_amount }}</span>
+        </div>
+        <div class="other-desc">Amount saved by choosing to pay in full.</div>
+      </div>
+      {% endif %}
+      {% if payment_plans.paid_in_full_discount.net_pay_in_full %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Net Pay-in-Full</span>
+          <span class="other-val">{{ payment_plans.paid_in_full_discount.net_pay_in_full }}</span>
+        </div>
+        <div class="other-desc">Your final amount due when paying the full premium upfront.</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
 
   </div>
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>

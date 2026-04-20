@@ -88,6 +88,12 @@ export const BUNDLE_AUTO_VEHICLE_FIELDS = [
   ["garaging_zip_county", "Garaging ZIP / County"],
 ];
 
+// Per-vehicle deductibles (Comprehensive + Collision vary by vehicle).
+export const BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS = [
+  ["comprehensive_deductible", "Comprehensive Deductible"],
+  ["collision_deductible", "Collision Deductible"],
+];
+
 export const emptyVehicle = () => ({
   year_make_model_trim: "",
   vin: "",
@@ -104,10 +110,14 @@ export const emptyVehicle = () => ({
     rental_premium: "",
     towing_premium: "",
   },
+  comprehensive_deductible: "",
+  collision_deductible: "",
   subtotal: "",
 });
 
 // ─── Auto Coverages ──────────────────────────────────────────────
+// Comprehensive + Collision deductibles are captured per-vehicle (see
+// BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS) since they can vary between vehicles.
 export const BUNDLE_AUTO_COVERAGE_FIELDS = [
   ["bi_limit", "Bodily Injury (BI) Limit"],
   ["pd_limit", "Property Damage (PD) Limit"],
@@ -115,26 +125,22 @@ export const BUNDLE_AUTO_COVERAGE_FIELDS = [
   ["um_uim_bi_limit", "UM/UIM Bodily Injury Limit"],
   ["umpd_limit", "Uninsured Motorist PD (UMPD) Limit"],
   ["umpd_deductible", "UMPD Deductible"],
-  ["comprehensive_deductible", "Comprehensive Deductible"],
-  ["collision_deductible", "Collision Deductible"],
   ["rental_limit", "Rental / Transportation Limit"],
   ["towing_limit", "Towing & Labor / Roadside Limit"],
 ];
 
 // ─── Auto Payment Options ────────────────────────────────────────
-// Full Pay shows a single full-pay amount + EFT/Auto-Pay flag.
-// Installment plans show the required down payment, the per-installment
-// amount, the number of installments, and the EFT/Auto-Pay flag.
+// Full Pay shows a single full-pay amount. Installment plans show the
+// required down payment, the per-installment amount, and the number of
+// installments.
 export const BUNDLE_FULL_PAY_FIELDS = [
   ["full_pay_amount", "Full Pay Amount"],
-  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
 
 export const BUNDLE_INSTALLMENT_PLAN_FIELDS = [
   ["down_payment", "Required Down Payment"],
   ["amount_per_installment", "Amount per Installment"],
   ["number_of_installments", "Number of Installments"],
-  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
 
 // Back-compat alias.
@@ -160,14 +166,12 @@ export const BUNDLE_PAID_IN_FULL_DISCOUNT_FIELDS = [
 
 const emptyBundleFullPayPlan = () => ({
   full_pay_amount: "",
-  eft_reduces_fee: "",
 });
 
 const emptyBundleInstallmentPlan = () => ({
   down_payment: "",
   amount_per_installment: "",
   number_of_installments: "",
-  eft_reduces_fee: "",
 });
 
 // ─── Complete Empty Form ─────────────────────────────────────────
@@ -217,7 +221,8 @@ export const EMPTY_BUNDLE_FORM = {
   // ── Auto Vehicles ──
   vehicles: [],
 
-  // ── Auto Coverages ──
+  // ── Auto Coverages (policy-level) ──
+  // Comprehensive + Collision deductibles live on each vehicle, not here.
   coverages: {
     bi_limit: "",
     pd_limit: "",
@@ -225,8 +230,6 @@ export const EMPTY_BUNDLE_FORM = {
     um_uim_bi_limit: "",
     umpd_limit: "",
     umpd_deductible: "",
-    comprehensive_deductible: "",
-    collision_deductible: "",
     rental_limit: "",
     towing_limit: "",
   },

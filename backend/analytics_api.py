@@ -5,7 +5,7 @@ Provides usage stats with time period filtering and reset capability.
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from auth import get_current_user, require_admin

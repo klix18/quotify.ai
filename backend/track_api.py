@@ -22,6 +22,7 @@ class TrackEventRequest(BaseModel):
     created_quote: bool = False
     generated_pdf: str = ""
     client_name: str = ""
+    skill_version: str = ""            # from parse result, e.g. "1.2"
 
 
 @router.post("/api/track-event")
@@ -43,5 +44,6 @@ async def track_event(
         created_quote=payload.created_quote,
         generated_pdf=payload.generated_pdf,
         client_name=payload.client_name,
+        skill_version=payload.skill_version,
     )
     return {"status": "ok"}

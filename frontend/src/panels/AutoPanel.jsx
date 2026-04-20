@@ -5,6 +5,7 @@ import {
   AUTO_AGENT_FIELDS,
   DRIVER_GENDER_OPTIONS,
   AUTO_COVERAGE_FIELDS,
+  AUTO_VEHICLE_DEDUCTIBLE_FIELDS,
   PAYMENT_PLANS,
   fieldsForPaymentPlan,
   PAID_IN_FULL_DISCOUNT_FIELDS,
@@ -51,18 +52,25 @@ export default function AutoPanel({
   const policySection = (
     <SectionCard title="Auto Policy">
       <div style={gridRow}>
-        {AUTO_POLICY_FIELDS.map(([key, label]) => (
-          <div key={key} style={cell4}>
-            <FieldControl
-              fieldKey={key}
-              label={label}
-              value={form[key] || ""}
-              onChange={onFieldChange}
-              selectOptions={key === "policy_term" ? AUTO_POLICY_TERM_OPTIONS : null}
-              {...fp(key)}
-            />
-          </div>
-        ))}
+        {AUTO_POLICY_FIELDS.map(([key, label], i) => {
+          // 5 fields → 3 + 2. First 3 span 4; last 2 span 6 so the row fills.
+          const total = AUTO_POLICY_FIELDS.length;
+          const remainder = total % 3;
+          const isLastRow = remainder > 0 && i >= total - remainder;
+          const span = isLastRow ? 12 / remainder : 4;
+          return (
+            <div key={key} style={{ gridColumn: `span ${span}`, minWidth: 0 }}>
+              <FieldControl
+                fieldKey={key}
+                label={label}
+                value={form[key] || ""}
+                onChange={onFieldChange}
+                selectOptions={key === "policy_term" ? AUTO_POLICY_TERM_OPTIONS : null}
+                {...fp(key)}
+              />
+            </div>
+          );
+        })}
         <div style={{ gridColumn: "span 12", minWidth: 0 }}>
           <FieldControl
             fieldKey="why_selected"
@@ -236,7 +244,7 @@ export default function AutoPanel({
                   gap: 14,
                 }}
               >
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                <div style={{ gridColumn: "span 4", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="year_make_model_trim"
                     label="Year / Make / Model / Trim"
@@ -245,7 +253,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.year_make_model_trim`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                <div style={{ gridColumn: "span 4", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="vin"
                     label="VIN"
@@ -254,7 +262,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.vin`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                <div style={{ gridColumn: "span 4", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="vehicle_use"
                     label="Vehicle Use"
@@ -263,7 +271,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.vehicle_use`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
+                <div style={{ gridColumn: "span 4", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="garaging_zip_county"
                     label="Garaging ZIP / County"
@@ -272,6 +280,22 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.garaging_zip_county`)}
                   />
                 </div>
+
+                {/* Per-vehicle deductibles (Comprehensive + Collision) */}
+                {AUTO_VEHICLE_DEDUCTIBLE_FIELDS.map(([dkey, dlabel]) => (
+                  <div
+                    key={dkey}
+                    style={{ gridColumn: "span 4", minWidth: 0 }}
+                  >
+                    <FieldControl
+                      fieldKey={dkey}
+                      label={dlabel}
+                      value={vehicle[dkey] || ""}
+                      onChange={(k, v) => onVehicleChange(vi, k, v)}
+                      {...fp(`vehicles.${vi}.${dkey}`)}
+                    />
+                  </div>
+                ))}
               </div>
             </SubCard>
           ))
@@ -292,9 +316,9 @@ export default function AutoPanel({
           gap: 14,
         }}
       >
-        {/* Row 1: BI, PD, MedPay, UM/UIM BI */}
-        {AUTO_COVERAGE_FIELDS.slice(0, 4).map(([key, label]) => (
-          <div key={key} style={{ gridColumn: "span 3", minWidth: 0 }}>
+        {/* Rows 1–2: BI, PD, MedPay, UM/UIM BI, UMPD Limit, UMPD Deductible (3 per row) */}
+        {AUTO_COVERAGE_FIELDS.slice(0, 6).map(([key, label]) => (
+          <div key={key} style={{ gridColumn: "span 4", minWidth: 0 }}>
             <FieldControl
               fieldKey={`coverages.${key}`}
               label={label}
@@ -305,21 +329,8 @@ export default function AutoPanel({
           </div>
         ))}
 
-        {/* Row 2: UMPD Limit, UMPD Deductible, Comprehensive, Collision */}
-        {AUTO_COVERAGE_FIELDS.slice(4, 8).map(([key, label]) => (
-          <div key={key} style={{ gridColumn: "span 3", minWidth: 0 }}>
-            <FieldControl
-              fieldKey={`coverages.${key}`}
-              label={label}
-              value={form.coverages?.[key] || ""}
-              onChange={onFieldChange}
-              {...fp(`coverages.${key}`)}
-            />
-          </div>
-        ))}
-
-        {/* Row 3: Rental, Towing */}
-        {AUTO_COVERAGE_FIELDS.slice(8).map(([key, label]) => (
+        {/* Row 3: Rental, Towing (2 per row) */}
+        {AUTO_COVERAGE_FIELDS.slice(6).map(([key, label]) => (
           <div key={key} style={{ gridColumn: "span 6", minWidth: 0 }}>
             <FieldControl
               fieldKey={`coverages.${key}`}
@@ -340,9 +351,9 @@ export default function AutoPanel({
   const paymentPlansBlock = PAYMENT_PLANS.map(([planKey, planLabel]) => {
     const plan = form.payment_options?.[planKey] || {};
     const planFields = fieldsForPaymentPlan(planKey);
-    // Full Pay shows 2 fields side-by-side (span 6 each); installment plans
-    // show 4 fields in a single row (span 3 each on a 12-col grid).
-    const cellSpan = planKey === "full_pay" ? 6 : 3;
+    // Full Pay has 1 field → span 12 (full width). Installment plans have
+    // 3 fields → span 4 each so the row fills the full 12-col grid.
+    const cellSpan = planKey === "full_pay" ? 12 : 4;
     return (
       <SubCard key={planKey} title={planLabel}>
         <div

@@ -762,15 +762,14 @@ function QuotesTimeline({ events, period }) {
 
 /* ── Clickable User Row ──────────────────────────────────────── */
 function RoleBadge({ role }) {
-  // Both admin and advisor badges use the brand blue palette so the
-  // advisor experience matches the admin's on their own profile.
+  const isAdmin = (role || "advisor") === "admin";
   return (
     <span style={{
       display: "inline-block", padding: "3px 10px", borderRadius: 8, fontSize: 11, fontWeight: 600,
       textTransform: "capitalize",
-      background: "rgba(23,101,212,0.08)",
-      color: COLORS.blue,
-      border: `1px solid rgba(23,101,212,0.15)`,
+      background: isAdmin ? COLORS.blue : "rgba(23,101,212,0.08)",
+      color: isAdmin ? "#fff" : COLORS.blue,
+      border: isAdmin ? "none" : `1px solid rgba(23,101,212,0.15)`,
     }}>{role || "advisor"}</span>
   );
 }

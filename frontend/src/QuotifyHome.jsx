@@ -34,6 +34,27 @@ import { triggerSparkleFlow } from "./sparkleFlow";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
+// FastAPI returns validation errors (e.g. 422) with `detail` as an ARRAY
+// of objects ({ loc, msg, type, ... }). Rendering that directly produces
+// "[object Object]" in the UI. This helper coerces whatever shape `detail`
+// has into a readable string.
+function extractErrorDetail(payload, fallback) {
+  const raw = payload?.detail;
+  if (!raw) return fallback;
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) {
+    const joined = raw
+      .map((e) => (typeof e === "string" ? e : e?.msg || JSON.stringify(e)))
+      .filter(Boolean)
+      .join("; ");
+    return joined || fallback;
+  }
+  if (typeof raw === "object") {
+    return raw.msg || JSON.stringify(raw);
+  }
+  return String(raw);
+}
+
 export default function QuotifyHome({ isAdmin }) {
   const { user } = useUser();
   const { getToken } = useAuth();
@@ -54,6 +75,21 @@ export default function QuotifyHome({ isAdmin }) {
   const [separateAutoFile, setSeparateAutoFile] = React.useState(null);
   const separateHomeInputRef = React.useRef(null);
   const separateAutoInputRef = React.useRef(null);
+  // Homeowners + wind/hail (separate) — used when the primary homeowners
+  // quote doesn't include wind coverage and a standalone wind/hail quote
+  // must be merged in.
+  const [homeownersUploadMode, setHomeownersUploadMode] = React.useState("combined"); // "combined" | "separate"
+  const [homeMainFile, setHomeMainFile] = React.useState(null);
+  const [homeWindFile, setHomeWindFile] = React.useState(null);
+  const homeMainInputRef = React.useRef(null);
+  const homeWindInputRef = React.useRef(null);
+  // Dwelling + wind/hail (separate) — same pattern, wind quote covers the
+  // same set of properties as the primary dwelling quote.
+  const [dwellingUploadMode, setDwellingUploadMode] = React.useState("combined"); // "combined" | "separate"
+  const [dwellingMainFile, setDwellingMainFile] = React.useState(null);
+  const [dwellingWindFile, setDwellingWindFile] = React.useState(null);
+  const dwellingMainInputRef = React.useRef(null);
+  const dwellingWindInputRef = React.useRef(null);
   const [homeownersForm, setHomeownersForm] = React.useState(EMPTY_HOMEOWNERS_FORM);
   const [autoForm, setAutoForm] = React.useState({
     ...EMPTY_AUTO_FORM,
@@ -125,6 +161,8 @@ export default function QuotifyHome({ isAdmin }) {
   const [bundleIsParsed, setBundleIsParsed] = React.useState(false);
   const [bundleManual, setBundleManual] = React.useState({});
   const [bundleConfidence, setBundleConfidence] = React.useState({});
+  // Skill version from the most recent parse — passed to analytics on quote generation
+  const [lastSkillVersion, setLastSkillVersion] = React.useState("");
 
   const abortControllerRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
@@ -473,10 +511,12 @@ export default function QuotifyHome({ isAdmin }) {
     });
   };
 
-  const parseHomeownersFile = async (file) => {
-    setFileName(file.name);
+  const parseHomeownersFile = async (file, windFile = null) => {
+    // When a separate wind/hail PDF is attached, show both names so the
+    // user can see that the merge is happening on the backend.
+    setFileName(windFile ? `${file.name} + ${windFile.name}` : file.name);
     setErrorMessage("");
-    setParseStatus("Uploading PDF...");
+    setParseStatus(windFile ? "Uploading homeowners + wind PDFs..." : "Uploading PDF...");
     setIsParsing(true);
     startHomeownersFieldState();
 
@@ -486,8 +526,9 @@ export default function QuotifyHome({ isAdmin }) {
     try {
       const body = new FormData();
       body.append("file", file);
+      if (windFile) body.append("wind_file", windFile);
 
-      const response = await fetch(`${API_BASE_URL}/api/parse-homeowners-quote`, {
+      const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=homeowners`, {
         method: "POST",
         body,
         signal: controller.signal,
@@ -497,7 +538,7 @@ export default function QuotifyHome({ isAdmin }) {
         let detail = "Failed to parse homeowners quote.";
         try {
           const payload = await response.json();
-          detail = payload?.detail || detail;
+          detail = extractErrorDetail(payload, detail);
         } catch (_) {}
         throw new Error(detail);
       }
@@ -584,9 +625,21 @@ export default function QuotifyHome({ isAdmin }) {
             applyPatch(message.data, true);
           }
 
+          if (message.type === "carrier_detected") {
+            setParseStatus(message.hint_loaded
+              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
+              : "Carrier identified...");
+          }
+
+          if (message.type === "healing_patch" && message.data) {
+            setParseStatus("Re-checking uncertain fields...");
+            applyPatch(message.data, true);
+          }
+
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
+            setLastSkillVersion(message.skill_version || "");
             setParseStatus("Applying final values...");
           }
 
@@ -604,9 +657,12 @@ export default function QuotifyHome({ isAdmin }) {
             applyPatch(message.data, false);
           } else if (message.type === "final_patch" && message.data) {
             applyPatch(message.data, true);
+          } else if (message.type === "healing_patch" && message.data) {
+            applyPatch(message.data, true);
           } else if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
+            setLastSkillVersion(message.skill_version || "");
           } else if (message.type === "error") {
             throw new Error(message.error || "Streaming parse failed.");
           }
@@ -675,6 +731,13 @@ export default function QuotifyHome({ isAdmin }) {
             next.payment_options[pk] = pv;
           }
         }
+        // Auto-reveal the Paid-in-Full Discount section whenever the AI
+        // actually populates any of its fields — simulates the user
+        // clicking "+ Add Paid-in-Full Discount" for them.
+        const pif = next.payment_options.paid_in_full_discount;
+        if (pif && Object.values(pif).some((v) => String(v || "").trim() !== "")) {
+          next.payment_options.show_paid_in_full_discount = true;
+        }
       } else if (key === "premium_summary" && typeof value === "object") {
         // Map legacy premium_summary from parser to top-level fields
         if (value.total_premium) next.total_premium = value.total_premium;
@@ -704,7 +767,7 @@ export default function QuotifyHome({ isAdmin }) {
       const body = new FormData();
       body.append("file", file);
 
-      const response = await fetch(`${API_BASE_URL}/api/parse-auto-quote`, {
+      const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=auto`, {
         method: "POST",
         body,
         signal: controller.signal,
@@ -714,7 +777,7 @@ export default function QuotifyHome({ isAdmin }) {
         let detail = "Failed to parse auto quote.";
         try {
           const payload = await response.json();
-          detail = payload?.detail || detail;
+          detail = extractErrorDetail(payload, detail);
         } catch (_) {}
         throw new Error(detail);
       }
@@ -785,9 +848,21 @@ export default function QuotifyHome({ isAdmin }) {
             applyAutoPatch(message.data);
           }
 
+          if (message.type === "carrier_detected") {
+            setParseStatus(message.hint_loaded
+              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
+              : "Carrier identified...");
+          }
+
+          if (message.type === "healing_patch" && message.data) {
+            setParseStatus("Re-checking uncertain fields...");
+            applyAutoPatch(message.data);
+          }
+
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
+            setLastSkillVersion(message.skill_version || "");
             setParseStatus("Applying final values...");
           }
 
@@ -804,9 +879,12 @@ export default function QuotifyHome({ isAdmin }) {
             applyAutoPatch(message.data);
           } else if (message.type === "final_patch" && message.data) {
             applyAutoPatch(message.data);
+          } else if (message.type === "healing_patch" && message.data) {
+            applyAutoPatch(message.data);
           } else if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
+            setLastSkillVersion(message.skill_version || "");
           } else if (message.type === "error") {
             throw new Error(message.error || "Streaming parse failed.");
           }
@@ -884,6 +962,16 @@ export default function QuotifyHome({ isAdmin }) {
     }));
   };
 
+  const toggleDwellingPaidInFullDiscount = () => {
+    setDwellingForm((prev) => ({
+      ...prev,
+      payment_plans: {
+        ...prev.payment_plans,
+        show_paid_in_full_discount: !prev.payment_plans.show_paid_in_full_discount,
+      },
+    }));
+  };
+
   /* ── Dwelling parser ────────────────────────────────────────── */
   const deepMergeDwellingForm = (prev, patch) => {
     const next = { ...prev };
@@ -895,8 +983,6 @@ export default function QuotifyHome({ isAdmin }) {
         if (value.length > 0) {
           const ps = value[0];
           if (ps.total_premium) next.total_premium = ps.total_premium;
-          if (ps.pay_in_full_discount) next.pay_in_full_discount = ps.pay_in_full_discount;
-          if (ps.total_if_paid_in_full) next.total_if_paid_in_full = ps.total_if_paid_in_full;
         }
       } else if (key === "payment_plans" && typeof value === "object") {
         next.payment_plans = { ...prev.payment_plans };
@@ -907,6 +993,13 @@ export default function QuotifyHome({ isAdmin }) {
             next.payment_plans[pk] = pv;
           }
         }
+        // Auto-reveal the Paid-in-Full Discount section whenever the AI
+        // actually populates any of its fields — simulates the user
+        // clicking "+ Add Paid-in-Full Discount" for them.
+        const pif = next.payment_plans.paid_in_full_discount;
+        if (pif && Object.values(pif).some((v) => String(v || "").trim() !== "")) {
+          next.payment_plans.show_paid_in_full_discount = true;
+        }
       } else {
         next[key] = value;
       }
@@ -914,10 +1007,11 @@ export default function QuotifyHome({ isAdmin }) {
     return next;
   };
 
-  const parseDwellingFile = async (file) => {
-    setFileName(file.name);
+  const parseDwellingFile = async (file, windFile = null) => {
+    // Show both filenames when a separate wind/hail PDF is merged in.
+    setFileName(windFile ? `${file.name} + ${windFile.name}` : file.name);
     setErrorMessage("");
-    setParseStatus("Uploading PDF...");
+    setParseStatus(windFile ? "Uploading dwelling + wind PDFs..." : "Uploading PDF...");
     setIsParsing(true);
     setDwellingIsLoading(true);
     setDwellingIsParsed(false);
@@ -930,8 +1024,9 @@ export default function QuotifyHome({ isAdmin }) {
     try {
       const body = new FormData();
       body.append("file", file);
+      if (windFile) body.append("wind_file", windFile);
 
-      const response = await fetch(`${API_BASE_URL}/api/parse-dwelling-quote`, {
+      const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=dwelling`, {
         method: "POST",
         body,
         signal: controller.signal,
@@ -941,7 +1036,7 @@ export default function QuotifyHome({ isAdmin }) {
         let detail = "Failed to parse dwelling quote.";
         try {
           const payload = await response.json();
-          detail = payload?.detail || detail;
+          detail = extractErrorDetail(payload, detail);
         } catch (_) {}
         throw new Error(detail);
       }
@@ -994,9 +1089,19 @@ export default function QuotifyHome({ isAdmin }) {
             setParseStatus("Verifying and refining fields...");
             applyDwellingPatch(message.data);
           }
+          if (message.type === "carrier_detected") {
+            setParseStatus(message.hint_loaded
+              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
+              : "Carrier identified...");
+          }
+          if (message.type === "healing_patch" && message.data) {
+            setParseStatus("Re-checking uncertain fields...");
+            applyDwellingPatch(message.data);
+          }
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
+            setLastSkillVersion(message.skill_version || "");
             setParseStatus("Applying final values...");
           }
           if (message.type === "error") {
@@ -1010,7 +1115,8 @@ export default function QuotifyHome({ isAdmin }) {
           const message = JSON.parse(buffer);
           if (message.type === "draft_patch" && message.data) applyDwellingPatch(message.data);
           else if (message.type === "final_patch" && message.data) applyDwellingPatch(message.data);
-          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; }
+          else if (message.type === "healing_patch" && message.data) applyDwellingPatch(message.data);
+          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; setLastSkillVersion(message.skill_version || ""); }
           else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
         } catch (_) {}
       }
@@ -1170,6 +1276,13 @@ export default function QuotifyHome({ isAdmin }) {
             next.payment_options[pk] = pv;
           }
         }
+        // Auto-reveal the Paid-in-Full Discount section whenever the AI
+        // actually populates any of its fields — simulates the user
+        // clicking "+ Add Paid-in-Full Discount" for them.
+        const pif = next.payment_options.paid_in_full_discount;
+        if (pif && Object.values(pif).some((v) => String(v || "").trim() !== "")) {
+          next.payment_options.show_paid_in_full_discount = true;
+        }
       } else {
         next[key] = value;
       }
@@ -1195,11 +1308,13 @@ export default function QuotifyHome({ isAdmin }) {
 
     try {
       const body = new FormData();
-      for (const f of fileArr) {
-        body.append("files", f);
-      }
+      // Backend expects `file` (primary PDF) and an optional `secondary_file`
+      // (second PDF). Bundle separate mode fills both; combined mode only
+      // fills the first. Sending repeated `files` fields returns 422.
+      if (fileArr[0]) body.append("file", fileArr[0]);
+      if (fileArr[1]) body.append("secondary_file", fileArr[1]);
 
-      const response = await fetch(`${API_BASE_URL}/api/parse-bundle-quote`, {
+      const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=bundle`, {
         method: "POST",
         body,
         signal: controller.signal,
@@ -1209,7 +1324,7 @@ export default function QuotifyHome({ isAdmin }) {
         let detail = "Failed to parse bundle quote.";
         try {
           const payload = await response.json();
-          detail = payload?.detail || detail;
+          detail = extractErrorDetail(payload, detail);
         } catch (_) {}
         throw new Error(detail);
       }
@@ -1263,9 +1378,19 @@ export default function QuotifyHome({ isAdmin }) {
             setParseStatus("Verifying and refining fields...");
             applyBundlePatch(message.data);
           }
+          if (message.type === "carrier_detected") {
+            setParseStatus(message.hint_loaded
+              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
+              : "Carrier identified...");
+          }
+          if (message.type === "healing_patch" && message.data) {
+            setParseStatus("Re-checking uncertain fields...");
+            applyBundlePatch(message.data);
+          }
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
+            setLastSkillVersion(message.skill_version || "");
             setParseStatus("Applying final values...");
           }
           if (message.type === "error") {
@@ -1279,7 +1404,8 @@ export default function QuotifyHome({ isAdmin }) {
           const message = JSON.parse(buffer);
           if (message.type === "draft_patch" && message.data) applyBundlePatch(message.data);
           else if (message.type === "final_patch" && message.data) applyBundlePatch(message.data);
-          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; }
+          else if (message.type === "healing_patch" && message.data) applyBundlePatch(message.data);
+          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; setLastSkillVersion(message.skill_version || ""); }
           else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
         } catch (_) {}
       }
@@ -1349,7 +1475,7 @@ export default function QuotifyHome({ isAdmin }) {
       const body = new FormData();
       body.append("file", file);
 
-      const response = await fetch(`${API_BASE_URL}/api/parse-commercial-quote`, {
+      const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=commercial`, {
         method: "POST",
         body,
         signal: controller.signal,
@@ -1359,7 +1485,7 @@ export default function QuotifyHome({ isAdmin }) {
         let detail = "Failed to parse commercial quote.";
         try {
           const payload = await response.json();
-          detail = payload?.detail || detail;
+          detail = extractErrorDetail(payload, detail);
         } catch (_) {}
         throw new Error(detail);
       }
@@ -1411,9 +1537,19 @@ export default function QuotifyHome({ isAdmin }) {
             setParseStatus("Verifying and refining fields...");
             applyCommercialPatch(message.data);
           }
+          if (message.type === "carrier_detected") {
+            setParseStatus(message.hint_loaded
+              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
+              : "Carrier identified...");
+          }
+          if (message.type === "healing_patch" && message.data) {
+            setParseStatus("Re-checking uncertain fields...");
+            applyCommercialPatch(message.data);
+          }
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
+            setLastSkillVersion(message.skill_version || "");
             setParseStatus("Applying final values...");
           }
           if (message.type === "error") {
@@ -1427,7 +1563,8 @@ export default function QuotifyHome({ isAdmin }) {
           const message = JSON.parse(buffer);
           if (message.type === "draft_patch" && message.data) applyCommercialPatch(message.data);
           else if (message.type === "final_patch" && message.data) applyCommercialPatch(message.data);
-          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; }
+          else if (message.type === "healing_patch" && message.data) applyCommercialPatch(message.data);
+          else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; setLastSkillVersion(message.skill_version || ""); }
           else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
         } catch (_) {}
       }
@@ -1464,7 +1601,7 @@ export default function QuotifyHome({ isAdmin }) {
       const body = new FormData();
       body.append("file", file);
 
-      const response = await fetch(`${API_BASE_URL}/api/parse-wind-quote`, {
+      const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=wind`, {
         method: "POST",
         body,
       });
@@ -1473,7 +1610,7 @@ export default function QuotifyHome({ isAdmin }) {
         let detail = "Failed to parse wind quote.";
         try {
           const payload = await response.json();
-          detail = payload?.detail || detail;
+          detail = extractErrorDetail(payload, detail);
         } catch (_) {}
         throw new Error(detail);
       }
@@ -1499,12 +1636,18 @@ export default function QuotifyHome({ isAdmin }) {
           try { message = JSON.parse(line); } catch { continue; }
 
           if (message.type === "status") setWindParseStatus(message.message || "Parsing...");
-          if ((message.type === "draft_patch" || message.type === "final_patch") && message.data) {
+          if (message.type === "carrier_detected") {
+            setWindParseStatus(message.hint_loaded
+              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
+              : "Carrier identified...");
+          }
+          if ((message.type === "draft_patch" || message.type === "final_patch" || message.type === "healing_patch") && message.data) {
             setCommercialForm((prev) => ({ ...prev, ...message.data }));
           }
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
+            setLastSkillVersion(message.skill_version || "");
           }
           if (message.type === "error") throw new Error(message.error || "Wind parse failed.");
         }
@@ -1513,7 +1656,7 @@ export default function QuotifyHome({ isAdmin }) {
       if (buffer.trim()) {
         try {
           const message = JSON.parse(buffer);
-          if ((message.type === "draft_patch" || message.type === "final_patch") && message.data) {
+          if ((message.type === "draft_patch" || message.type === "final_patch" || message.type === "healing_patch") && message.data) {
             setCommercialForm((prev) => ({ ...prev, ...message.data }));
           } else if (message.type === "result") {
             finalData = message.data;
@@ -1629,6 +1772,7 @@ export default function QuotifyHome({ isAdmin }) {
         createdQuote: true,
         generatedPdf: outFileName,
         clientName,
+        skillVersion: lastSkillVersion,
         getToken,
       });
     } catch (error) {
@@ -1680,6 +1824,74 @@ export default function QuotifyHome({ isAdmin }) {
     setErrorMessage("");
   };
 
+  /* ── Homeowners separate-mode helpers ─────────────────────── */
+  const handleHomeMainFile = (file) => {
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
+    setHomeMainFile(file);
+    setErrorMessage("");
+  };
+  const handleHomeWindFile = (file) => {
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
+    setHomeWindFile(file);
+    setErrorMessage("");
+  };
+
+  /* ── Dwelling separate-mode helpers ───────────────────────── */
+  const handleDwellingMainFile = (file) => {
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
+    setDwellingMainFile(file);
+    setErrorMessage("");
+  };
+  const handleDwellingWindFile = (file) => {
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
+    setDwellingWindFile(file);
+    setErrorMessage("");
+  };
+
+  /* ── Auto-parse trigger when both files are staged ──────────
+     Separate-mode uploads fire parsing automatically the moment the
+     second PDF is chosen, per the spec ("just make it immediately
+     start parsing after both files are uploaded"). No manual
+     "Parse Both Quotes" button in any insurance type. */
+  React.useEffect(() => {
+    if (
+      selectedInsurance === "homeowners" &&
+      homeownersUploadMode === "separate" &&
+      homeMainFile &&
+      homeWindFile &&
+      !isParsing
+    ) {
+      parseHomeownersFile(homeMainFile, homeWindFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeMainFile, homeWindFile, homeownersUploadMode, selectedInsurance]);
+
+  React.useEffect(() => {
+    if (
+      selectedInsurance === "dwelling" &&
+      dwellingUploadMode === "separate" &&
+      dwellingMainFile &&
+      dwellingWindFile &&
+      !isParsing
+    ) {
+      parseDwellingFile(dwellingMainFile, dwellingWindFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dwellingMainFile, dwellingWindFile, dwellingUploadMode, selectedInsurance]);
+
+  React.useEffect(() => {
+    if (
+      selectedInsurance === "bundle" &&
+      bundleUploadMode === "separate" &&
+      separateHomeFile &&
+      separateAutoFile &&
+      !isParsing
+    ) {
+      parseBundleFiles([separateHomeFile, separateAutoFile]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [separateHomeFile, separateAutoFile, bundleUploadMode, selectedInsurance]);
+
   const handleDrop = async (e) => {
     e.preventDefault();
     setIsDragging(false);
@@ -1701,9 +1913,18 @@ export default function QuotifyHome({ isAdmin }) {
 
   const insuranceReady = !!selectedInsurance;
   const advisorReady = !!selectedAdvisorName;
-  const uploadReady = selectedInsurance === "bundle" && bundleUploadMode === "separate"
-    ? !!(separateHomeFile && separateAutoFile)
-    : !!fileName;
+  const uploadReady = (() => {
+    if (selectedInsurance === "bundle" && bundleUploadMode === "separate") {
+      return !!(separateHomeFile && separateAutoFile);
+    }
+    if (selectedInsurance === "homeowners" && homeownersUploadMode === "separate") {
+      return !!(homeMainFile && homeWindFile);
+    }
+    if (selectedInsurance === "dwelling" && dwellingUploadMode === "separate") {
+      return !!(dwellingMainFile && dwellingWindFile);
+    }
+    return !!fileName;
+  })();
 
   // Required fields per insurance type: client info, advisor info, and policy
   const REQUIRED_FIELDS_MAP = {
@@ -2029,54 +2250,81 @@ export default function QuotifyHome({ isAdmin }) {
           </SidebarBlock>
 
           <SidebarBlock title="Upload Quote" status={uploadReady} style={{ flexShrink: 1, minHeight: 0, overflow: "hidden" }}>
-            {/* ── Apple-style toggle for bundle mode ─────────────── */}
-            {selectedInsurance === "bundle" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: bundleUploadMode === "combined" ? COLORS.blue : COLORS.mutedText, transition: "color 200ms ease" }}>Combined</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = bundleUploadMode === "combined" ? "separate" : "combined";
-                    setBundleUploadMode(next);
-                    setFileName("");
-                    setBundleFileNames([]);
-                    setSeparateHomeFile(null);
-                    setSeparateAutoFile(null);
-                    setErrorMessage("");
-                    setParseStatus("");
-                  }}
-                  style={{
-                    position: "relative",
-                    width: 44,
-                    height: 24,
-                    borderRadius: 12,
-                    border: "none",
-                    background: bundleUploadMode === "separate" ? COLORS.blue : "#D1D5DB",
-                    cursor: isParsing ? "not-allowed" : "pointer",
-                    transition: "background 300ms ease",
-                    flexShrink: 0,
-                    padding: 0,
-                  }}
-                  disabled={isParsing}
-                >
-                  <div style={{
-                    position: "absolute",
-                    top: 2,
-                    left: bundleUploadMode === "separate" ? 22 : 2,
-                    width: 20,
-                    height: 20,
-                    borderRadius: 10,
-                    background: "#fff",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                    transition: "left 300ms cubic-bezier(0.4, 0, 0.2, 1)",
-                  }} />
-                </button>
-                <span style={{ fontSize: 12, fontWeight: 600, color: bundleUploadMode === "separate" ? COLORS.blue : COLORS.mutedText, transition: "color 200ms ease" }}>Separate</span>
-              </div>
-            )}
+            {/* ── Apple-style toggle: combined vs separate ────────
+                Shown for bundle (home + auto), homeowners (home + wind),
+                and dwelling (dwelling + wind). Each type uses its own
+                mode state and resets its own file buffers. */}
+            {(selectedInsurance === "bundle" ||
+              selectedInsurance === "homeowners" ||
+              selectedInsurance === "dwelling") && (() => {
+              const currentMode =
+                selectedInsurance === "bundle" ? bundleUploadMode
+                : selectedInsurance === "homeowners" ? homeownersUploadMode
+                : dwellingUploadMode;
+              const flipMode = () => {
+                const next = currentMode === "combined" ? "separate" : "combined";
+                if (selectedInsurance === "bundle") {
+                  setBundleUploadMode(next);
+                  setBundleFileNames([]);
+                  setSeparateHomeFile(null);
+                  setSeparateAutoFile(null);
+                } else if (selectedInsurance === "homeowners") {
+                  setHomeownersUploadMode(next);
+                  setHomeMainFile(null);
+                  setHomeWindFile(null);
+                } else {
+                  setDwellingUploadMode(next);
+                  setDwellingMainFile(null);
+                  setDwellingWindFile(null);
+                }
+                setFileName("");
+                setErrorMessage("");
+                setParseStatus("");
+              };
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: currentMode === "combined" ? COLORS.blue : COLORS.mutedText, transition: "color 200ms ease" }}>Combined</span>
+                  <button
+                    type="button"
+                    onClick={flipMode}
+                    style={{
+                      position: "relative",
+                      width: 44,
+                      height: 24,
+                      borderRadius: 12,
+                      border: "none",
+                      background: currentMode === "separate" ? COLORS.blue : "#D1D5DB",
+                      cursor: isParsing ? "not-allowed" : "pointer",
+                      transition: "background 300ms ease",
+                      flexShrink: 0,
+                      padding: 0,
+                    }}
+                    disabled={isParsing}
+                  >
+                    <div style={{
+                      position: "absolute",
+                      top: 2,
+                      left: currentMode === "separate" ? 22 : 2,
+                      width: 20,
+                      height: 20,
+                      borderRadius: 10,
+                      background: "#fff",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      transition: "left 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+                    }} />
+                  </button>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: currentMode === "separate" ? COLORS.blue : COLORS.mutedText, transition: "color 200ms ease" }}>Separate</span>
+                </div>
+              );
+            })()}
 
-            {/* ── Combined mode OR non-bundle upload zone ─────────── */}
-            {(selectedInsurance !== "bundle" || bundleUploadMode === "combined") && (
+            {/* ── Combined mode: single combined upload zone ──────── */}
+            {(() => {
+              if (selectedInsurance === "bundle") return bundleUploadMode === "combined";
+              if (selectedInsurance === "homeowners") return homeownersUploadMode === "combined";
+              if (selectedInsurance === "dwelling") return dwellingUploadMode === "combined";
+              return true;
+            })() && (
             <div
               onDragEnter={(e) => {
                 if (!uploaderEnabled) return;
@@ -2123,7 +2371,13 @@ export default function QuotifyHome({ isAdmin }) {
                   marginBottom: 6,
                 }}
               >
-                {fileName || (selectedInsurance === "bundle" ? "Drag & drop combined PDF" : "Drag & drop PDF")}
+                {fileName || (
+                  selectedInsurance === "bundle" ||
+                  selectedInsurance === "homeowners" ||
+                  selectedInsurance === "dwelling"
+                    ? "Drag & drop combined PDF"
+                    : "Drag & drop PDF"
+                )}
               </div>
 
               <div
@@ -2134,7 +2388,13 @@ export default function QuotifyHome({ isAdmin }) {
                   marginBottom: 12,
                 }}
               >
-                {selectedInsurance === "bundle" ? "PDF only · single combined quote · up to 200MB" : "PDF only · up to 200MB"}
+                {selectedInsurance === "bundle"
+                  ? "PDF only · single combined home & auto · up to 200MB"
+                  : selectedInsurance === "homeowners"
+                    ? "PDF only · single combined home & wind · up to 200MB"
+                    : selectedInsurance === "dwelling"
+                      ? "PDF only · single combined dwelling & auto · up to 200MB"
+                      : "PDF only · up to 200MB"}
               </div>
 
               {isParsing && parseStatus ? (
@@ -2357,29 +2617,314 @@ export default function QuotifyHome({ isAdmin }) {
                   )}
                 </div>
 
-                {/* Parse button — only when both files ready */}
-                {separateHomeFile && separateAutoFile && !isParsing && (
+                {/* Parsing kicks off automatically via useEffect when both
+                    home + auto PDFs are staged — no manual button. */}
+
+                {isParsing && parseStatus ? (
+                  <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, textAlign: "center", padding: "4px 0" }}>
+                    {parseStatus}
+                  </div>
+                ) : null}
+
+                {isParsing && (
                   <button
                     type="button"
-                    onClick={() => parseBundleFiles([separateHomeFile, separateAutoFile])}
+                    onClick={cancelParsing}
                     style={{
                       width: "100%",
-                      height: 42,
+                      height: 36,
                       borderRadius: 12,
-                      border: `1px solid ${COLORS.blue}`,
-                      background: COLORS.blue,
-                      color: COLORS.white,
+                      border: `1px solid ${COLORS.danger}`,
+                      background: COLORS.dangerSoft,
+                      color: COLORS.danger,
                       fontWeight: 600,
-                      fontSize: 13,
+                      fontSize: 12,
                       fontFamily: "Poppins, sans-serif",
                       cursor: "pointer",
                       transition: "all 200ms ease",
-                      marginTop: 2,
                     }}
                   >
-                    Parse Both Quotes
+                    Cancel Operation
                   </button>
                 )}
+
+                {errorMessage && (
+                  <div style={{ color: COLORS.danger, fontSize: 12, fontWeight: 500, textAlign: "center", lineHeight: 1.4 }}>
+                    {errorMessage}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Homeowners separate mode: home + wind dropzones ── */}
+            {selectedInsurance === "homeowners" && homeownersUploadMode === "separate" && (
+              <div style={{ display: "grid", gap: 8 }}>
+                {/* Homeowners primary zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleHomeMainFile(file);
+                  }}
+                  style={{
+                    borderRadius: 16,
+                    border: `1.5px dashed ${homeMainFile ? COLORS.blue : COLORS.borderStrong}`,
+                    background: homeMainFile ? COLORS.blueSoft : COLORS.white,
+                    padding: "14px 14px 16px",
+                    transition: "all 200ms ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <img src="/i-homeowners.png" alt="Home" style={{ width: 18, height: 18, objectFit: "contain" }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.blue }}>Homeowners Quote</span>
+                    {homeMainFile && !isParsing && (
+                      <button type="button" onClick={() => setHomeMainFile(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {homeMainFile ? (
+                    <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {homeMainFile.name}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, color: COLORS.mutedText, lineHeight: 1.4, marginBottom: 10 }}>Drag PDF or browse</div>
+                      <input ref={homeMainInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) handleHomeMainFile(e.target.files[0]); }} />
+                      <button
+                        type="button"
+                        disabled={isParsing}
+                        onClick={() => homeMainInputRef.current?.click()}
+                        style={{
+                          width: "100%",
+                          height: 38,
+                          borderRadius: 10,
+                          border: `1px solid ${COLORS.borderGrey}`,
+                          background: COLORS.lightGrey,
+                          color: COLORS.blue,
+                          fontWeight: 600,
+                          fontSize: 13,
+                          fontFamily: "Poppins, sans-serif",
+                          cursor: isParsing ? "not-allowed" : "pointer",
+                          transition: "all 200ms ease",
+                        }}
+                      >
+                        Browse
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Wind / Hail zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleHomeWindFile(file);
+                  }}
+                  style={{
+                    borderRadius: 16,
+                    border: `1.5px dashed ${homeWindFile ? COLORS.blue : COLORS.borderStrong}`,
+                    background: homeWindFile ? COLORS.blueSoft : COLORS.white,
+                    padding: "14px 14px 16px",
+                    transition: "all 200ms ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <img src="/i-wind.png" alt="Wind" style={{ width: 18, height: 18, objectFit: "contain" }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.blue }}>Wind / Hail Quote</span>
+                    {homeWindFile && !isParsing && (
+                      <button type="button" onClick={() => setHomeWindFile(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {homeWindFile ? (
+                    <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {homeWindFile.name}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, color: COLORS.mutedText, lineHeight: 1.4, marginBottom: 10 }}>Drag PDF or browse</div>
+                      <input ref={homeWindInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) handleHomeWindFile(e.target.files[0]); }} />
+                      <button
+                        type="button"
+                        disabled={isParsing}
+                        onClick={() => homeWindInputRef.current?.click()}
+                        style={{
+                          width: "100%",
+                          height: 38,
+                          borderRadius: 10,
+                          border: `1px solid ${COLORS.borderGrey}`,
+                          background: COLORS.lightGrey,
+                          color: COLORS.blue,
+                          fontWeight: 600,
+                          fontSize: 13,
+                          fontFamily: "Poppins, sans-serif",
+                          cursor: isParsing ? "not-allowed" : "pointer",
+                          transition: "all 200ms ease",
+                        }}
+                      >
+                        Browse
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {isParsing && parseStatus ? (
+                  <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, textAlign: "center", padding: "4px 0" }}>
+                    {parseStatus}
+                  </div>
+                ) : null}
+
+                {isParsing && (
+                  <button
+                    type="button"
+                    onClick={cancelParsing}
+                    style={{
+                      width: "100%",
+                      height: 36,
+                      borderRadius: 12,
+                      border: `1px solid ${COLORS.danger}`,
+                      background: COLORS.dangerSoft,
+                      color: COLORS.danger,
+                      fontWeight: 600,
+                      fontSize: 12,
+                      fontFamily: "Poppins, sans-serif",
+                      cursor: "pointer",
+                      transition: "all 200ms ease",
+                    }}
+                  >
+                    Cancel Operation
+                  </button>
+                )}
+
+                {errorMessage && (
+                  <div style={{ color: COLORS.danger, fontSize: 12, fontWeight: 500, textAlign: "center", lineHeight: 1.4 }}>
+                    {errorMessage}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Dwelling separate mode: dwelling + wind dropzones ── */}
+            {selectedInsurance === "dwelling" && dwellingUploadMode === "separate" && (
+              <div style={{ display: "grid", gap: 8 }}>
+                {/* Dwelling primary zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleDwellingMainFile(file);
+                  }}
+                  style={{
+                    borderRadius: 16,
+                    border: `1.5px dashed ${dwellingMainFile ? COLORS.blue : COLORS.borderStrong}`,
+                    background: dwellingMainFile ? COLORS.blueSoft : COLORS.white,
+                    padding: "14px 14px 16px",
+                    transition: "all 200ms ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <img src="/i-dwelling.png" alt="Dwelling" style={{ width: 18, height: 18, objectFit: "contain" }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.blue }}>Dwelling Quote</span>
+                    {dwellingMainFile && !isParsing && (
+                      <button type="button" onClick={() => setDwellingMainFile(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {dwellingMainFile ? (
+                    <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {dwellingMainFile.name}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, color: COLORS.mutedText, lineHeight: 1.4, marginBottom: 10 }}>Drag PDF or browse</div>
+                      <input ref={dwellingMainInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) handleDwellingMainFile(e.target.files[0]); }} />
+                      <button
+                        type="button"
+                        disabled={isParsing}
+                        onClick={() => dwellingMainInputRef.current?.click()}
+                        style={{
+                          width: "100%",
+                          height: 38,
+                          borderRadius: 10,
+                          border: `1px solid ${COLORS.borderGrey}`,
+                          background: COLORS.lightGrey,
+                          color: COLORS.blue,
+                          fontWeight: 600,
+                          fontSize: 13,
+                          fontFamily: "Poppins, sans-serif",
+                          cursor: isParsing ? "not-allowed" : "pointer",
+                          transition: "all 200ms ease",
+                        }}
+                      >
+                        Browse
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Wind / Hail zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleDwellingWindFile(file);
+                  }}
+                  style={{
+                    borderRadius: 16,
+                    border: `1.5px dashed ${dwellingWindFile ? COLORS.blue : COLORS.borderStrong}`,
+                    background: dwellingWindFile ? COLORS.blueSoft : COLORS.white,
+                    padding: "14px 14px 16px",
+                    transition: "all 200ms ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <img src="/i-wind.png" alt="Wind" style={{ width: 18, height: 18, objectFit: "contain" }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.blue }}>Wind / Hail Quote</span>
+                    {dwellingWindFile && !isParsing && (
+                      <button type="button" onClick={() => setDwellingWindFile(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: COLORS.danger, fontSize: 11, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {dwellingWindFile ? (
+                    <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {dwellingWindFile.name}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, color: COLORS.mutedText, lineHeight: 1.4, marginBottom: 10 }}>Drag PDF or browse</div>
+                      <input ref={dwellingWindInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) handleDwellingWindFile(e.target.files[0]); }} />
+                      <button
+                        type="button"
+                        disabled={isParsing}
+                        onClick={() => dwellingWindInputRef.current?.click()}
+                        style={{
+                          width: "100%",
+                          height: 38,
+                          borderRadius: 10,
+                          border: `1px solid ${COLORS.borderGrey}`,
+                          background: COLORS.lightGrey,
+                          color: COLORS.blue,
+                          fontWeight: 600,
+                          fontSize: 13,
+                          fontFamily: "Poppins, sans-serif",
+                          cursor: isParsing ? "not-allowed" : "pointer",
+                          transition: "all 200ms ease",
+                        }}
+                      >
+                        Browse
+                      </button>
+                    </>
+                  )}
+                </div>
 
                 {isParsing && parseStatus ? (
                   <div style={{ fontSize: 12, color: COLORS.black, fontWeight: 500, textAlign: "center", padding: "4px 0" }}>
@@ -2459,7 +3004,7 @@ export default function QuotifyHome({ isAdmin }) {
                 style={{
                   position: "relative",
                   zIndex: 1,
-                  background: isClearHovered ? "rgba(0,0,0,0.04)" : "transparent",
+                  background: isClearHovered ? "#f5f5f5" : "#fff",
                   color: COLORS.mutedText,
                   border: `1px solid ${COLORS.borderGrey}`,
                   borderRadius: 14,
@@ -2614,6 +3159,7 @@ export default function QuotifyHome({ isAdmin }) {
                 onAddProperty={addDwellingProperty}
                 onRemoveProperty={removeDwellingProperty}
                 onPaymentPlanChange={updateDwellingPaymentPlan}
+                onTogglePaidInFullDiscount={toggleDwellingPaidInFullDiscount}
                 FieldControl={FieldControl}
                 SectionCard={SectionCard}
                 SubCard={SubCard}

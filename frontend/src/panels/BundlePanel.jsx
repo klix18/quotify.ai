@@ -8,6 +8,7 @@ import {
   BUNDLE_AUTO_DRIVER_FIELDS,
   DRIVER_GENDER_OPTIONS,
   BUNDLE_AUTO_COVERAGE_FIELDS,
+  BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS,
   BUNDLE_PAYMENT_PLANS,
   bundleFieldsForPaymentPlan,
   BUNDLE_PAID_IN_FULL_DISCOUNT_FIELDS,
@@ -267,7 +268,7 @@ export default function BundlePanel({
               }
             >
               <div style={gridRow}>
-                <div style={cell3}>
+                <div style={cell4}>
                   <FieldControl
                     fieldKey="year_make_model_trim"
                     label="Year / Make / Model / Trim"
@@ -276,7 +277,7 @@ export default function BundlePanel({
                     {...fp(`vehicles.${vi}.year_make_model_trim`)}
                   />
                 </div>
-                <div style={cell3}>
+                <div style={cell4}>
                   <FieldControl
                     fieldKey="vin"
                     label="VIN"
@@ -285,7 +286,7 @@ export default function BundlePanel({
                     {...fp(`vehicles.${vi}.vin`)}
                   />
                 </div>
-                <div style={cell3}>
+                <div style={cell4}>
                   <FieldControl
                     fieldKey="vehicle_use"
                     label="Vehicle Use"
@@ -294,7 +295,7 @@ export default function BundlePanel({
                     {...fp(`vehicles.${vi}.vehicle_use`)}
                   />
                 </div>
-                <div style={cell3}>
+                <div style={cell4}>
                   <FieldControl
                     fieldKey="garaging_zip_county"
                     label="Garaging ZIP / County"
@@ -303,6 +304,19 @@ export default function BundlePanel({
                     {...fp(`vehicles.${vi}.garaging_zip_county`)}
                   />
                 </div>
+
+                {/* Per-vehicle deductibles (Comprehensive + Collision) */}
+                {BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS.map(([dkey, dlabel]) => (
+                  <div key={dkey} style={cell4}>
+                    <FieldControl
+                      fieldKey={dkey}
+                      label={dlabel}
+                      value={vehicle[dkey] || ""}
+                      onChange={(k, v) => onVehicleChange(vi, k, v)}
+                      {...fp(`vehicles.${vi}.${dkey}`)}
+                    />
+                  </div>
+                ))}
               </div>
             </SubCard>
           ))
@@ -317,8 +331,8 @@ export default function BundlePanel({
   const coveragesSection = (
     <SectionCard title="Auto Coverages">
       <div style={gridRow}>
-        {/* Policy Term + Row 1: BI, PD, MedPay */}
-        <div style={cell3}>
+        {/* Row 1: Policy Term, BI, PD (3 per row) */}
+        <div style={cell4}>
           <FieldControl
             fieldKey="auto_policy_term"
             label="Policy Term"
@@ -328,33 +342,9 @@ export default function BundlePanel({
             {...fp("auto_policy_term")}
           />
         </div>
-        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(0, 3).map(([key, label]) => (
-          <div key={key} style={cell3}>
-            <FieldControl
-              fieldKey={`coverages.${key}`}
-              label={label}
-              value={form.coverages?.[key] || ""}
-              onChange={onFieldChange}
-              {...fp(`coverages.${key}`)}
-            />
-          </div>
-        ))}
-
-        {/* Row 2: UM/UIM BI, UMPD Limit, UMPD Deductible, Comprehensive */}
-        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(3, 7).map(([key, label]) => (
-          <div key={key} style={cell3}>
-            <FieldControl
-              fieldKey={`coverages.${key}`}
-              label={label}
-              value={form.coverages?.[key] || ""}
-              onChange={onFieldChange}
-              {...fp(`coverages.${key}`)}
-            />
-          </div>
-        ))}
-
-        {/* Row 3: Collision, Rental, Towing */}
-        {BUNDLE_AUTO_COVERAGE_FIELDS.slice(7).map(([key, label]) => (
+        {/* Rows 1–3 continued: all 8 coverage fields span 4 → 3 per row
+            (Policy Term + 8 coverages = 9 items total = 3 rows of 3) */}
+        {BUNDLE_AUTO_COVERAGE_FIELDS.map(([key, label]) => (
           <div key={key} style={cell4}>
             <FieldControl
               fieldKey={`coverages.${key}`}
@@ -375,8 +365,11 @@ export default function BundlePanel({
   const paymentPlansBlock = BUNDLE_PAYMENT_PLANS.map(([planKey, planLabel]) => {
     const plan = form.payment_options?.[planKey] || {};
     const planFields = bundleFieldsForPaymentPlan(planKey);
-    // Full Pay → 2 fields side-by-side (span 6); installments → 4 fields (span 3)
-    const cellStyle = planKey === "full_pay" ? cell6 : cell3;
+    // Full Pay has 1 field → span 12 (full width).
+    // Installments have 3 fields → span 4 each so the row fills.
+    const cellStyle = planKey === "full_pay"
+      ? { gridColumn: "span 12", minWidth: 0 }
+      : cell4;
     return (
       <SubCard key={planKey} title={planLabel}>
         <div style={gridRow}>

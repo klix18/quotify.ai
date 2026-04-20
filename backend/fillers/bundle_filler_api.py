@@ -1,6 +1,5 @@
 from pathlib import Path
 from uuid import uuid4
-from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -8,6 +7,7 @@ from jinja2 import Environment, FileSystemLoader
 from browser_manager import get_browser
 from pdf_optimizer import optimize_pdf
 from pdf_storage_helpers import store_generated_pdf
+from fillers._filename import build_pdf_filename
 
 router = APIRouter()
 
@@ -64,8 +64,6 @@ async def render_bundle_pdf(output_path: Path, data: dict):
         "um_uim_bi_limit": coverages.get("um_uim_bi_limit", ""),
         "umpd_limit": coverages.get("umpd_limit", ""),
         "umpd_deductible": coverages.get("umpd_deductible", ""),
-        "comprehensive_deductible": coverages.get("comprehensive_deductible", ""),
-        "collision_deductible": coverages.get("collision_deductible", ""),
         "rental_limit": coverages.get("rental_limit", ""),
         "towing_limit": coverages.get("towing_limit", ""),
         # Drivers & Vehicles
@@ -107,9 +105,11 @@ async def generate_bundle_quote(payload: dict):
         await render_bundle_pdf(output_path=output_path, data=payload)
 
         client_name = str(payload.get("client_name", "")).strip()
-        date_str = datetime.now().strftime("%m-%d-%Y")
-        safe_client = "-".join(client_name.split()) if client_name else "Unknown"
-        download_name = f"bundle_quote_{date_str}_{safe_client}.pdf"
+        download_name = build_pdf_filename(
+            insurance_type="bundle",
+            client_name=client_name,
+            total_premium=payload.get("bundle_total_premium", "") or payload.get("total_premium", ""),
+        )
 
         # Store generated PDF in database
         try:

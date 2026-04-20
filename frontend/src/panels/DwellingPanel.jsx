@@ -2,14 +2,13 @@ import {
   DWELLING_POLICY_FIELDS,
   DWELLING_CLIENT_FIELDS,
   DWELLING_AGENT_FIELDS,
-  DWELLING_PROPERTY_INFO_FIELDS,
   DWELLING_COVERAGE_FIELDS,
   DWELLING_LOSS_SETTLEMENT_OPTIONS,
-  DWELLING_NA_FIELDS,
   DWELLING_DEDUCTIBLE_FIELDS_V1,
   DWELLING_DEDUCTIBLE_FIELDS_V2,
   DWELLING_PAYMENT_PLAN_TYPES,
   dwellingFieldsForPaymentPlan,
+  DWELLING_PAID_IN_FULL_DISCOUNT_FIELDS,
   POLICY_FORM_OPTIONS,
   CONSTRUCTION_TYPE_OPTIONS,
 } from "../configs/dwellingConfig";
@@ -25,6 +24,7 @@ export default function DwellingPanel({
   onAddProperty,
   onRemoveProperty,
   onPaymentPlanChange,
+  onTogglePaidInFullDiscount,
   FieldControl,
   SectionCard,
   SubCard,
@@ -53,7 +53,8 @@ export default function DwellingPanel({
     <SectionCard title="Dwelling Policy">
       <div style={gridRow}>
         {DWELLING_POLICY_FIELDS.map(([key, label]) => (
-          <div key={key} style={cell3}>
+          // 6 fields → 2 rows of 3, each span 4 so every row fills full width.
+          <div key={key} style={cell4}>
             <FieldControl
               fieldKey={key}
               label={label}
@@ -224,10 +225,16 @@ export default function DwellingPanel({
                     Coverages
                   </div>
                   <div style={gridRow}>
-                    {DWELLING_COVERAGE_FIELDS.map(([key, label]) => {
+                    {DWELLING_COVERAGE_FIELDS.map(([key, label], ci) => {
                       const isSettlement = key === "dwelling_loss_settlement" || key === "personal_property_loss_settlement";
+                      // Rows of 3 with span 4. If the last row has <3 fields,
+                      // expand so it still fills the full 12-col width.
+                      const total = DWELLING_COVERAGE_FIELDS.length;
+                      const remainder = total % 3;
+                      const isLastRow = remainder > 0 && ci >= total - remainder;
+                      const span = isLastRow ? 12 / remainder : 4;
                       return (
-                        <div key={key} style={cell4}>
+                        <div key={key} style={{ gridColumn: `span ${span}`, minWidth: 0 }}>
                           <FieldControl
                             fieldKey={pp(key)}
                             label={label}
@@ -248,14 +255,14 @@ export default function DwellingPanel({
                     Deductible
                   </div>
 
-                  {/* Type 1: AOP + Wind/Hail */}
+                  {/* Type 1: AOP + Wind/Hail (2 fields → span 6 each, fills row) */}
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.black, marginBottom: 6, opacity: 0.65 }}>
                       Type 1
                     </div>
                     <div style={gridRow}>
                       {DWELLING_DEDUCTIBLE_FIELDS_V1.map(([key, label]) => (
-                        <div key={key} style={cell3}>
+                        <div key={key} style={cell6}>
                           <FieldControl
                             fieldKey={pp(key)}
                             label={label}
@@ -268,14 +275,14 @@ export default function DwellingPanel({
                     </div>
                   </div>
 
-                  {/* Type 2: Deductible (w/h included) */}
+                  {/* Type 2: Deductible (w/h included) — 1 field → span 12 */}
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 500, color: COLORS.black, marginBottom: 6, opacity: 0.65 }}>
                       Type 2
                     </div>
                     <div style={gridRow}>
                       {DWELLING_DEDUCTIBLE_FIELDS_V2.map(([key, label]) => (
-                        <div key={key} style={cell3}>
+                        <div key={key} style={{ gridColumn: "span 12", minWidth: 0 }}>
                           <FieldControl
                             fieldKey={pp(key)}
                             label={label}
@@ -299,32 +306,77 @@ export default function DwellingPanel({
   /* ============================================================
      SECTION 5 — Payment Plans
      ============================================================ */
+  const paymentPlansBlock = DWELLING_PAYMENT_PLAN_TYPES.map(([planKey, planLabel]) => {
+    const plan = form.payment_plans?.[planKey] || {};
+    const planFields = dwellingFieldsForPaymentPlan(planKey);
+    // Full Pay has 1 field → span 12 (full width).
+    // Installments have 3 fields → span 4 each so the row fills.
+    const cellStyle = planKey === "full_pay"
+      ? { gridColumn: "span 12", minWidth: 0 }
+      : cell4;
+    return (
+      <SubCard key={planKey} title={planLabel}>
+        <div style={gridRow}>
+          {planFields.map(([field, label]) => (
+            <div key={field} style={cellStyle}>
+              <FieldControl
+                fieldKey={`payment_plans.${planKey}.${field}`}
+                label={label}
+                value={plan[field] || ""}
+                onChange={(k, v) => onPaymentPlanChange(planKey, field, v)}
+                {...fp(`payment_plans.${planKey}.${field}`)}
+              />
+            </div>
+          ))}
+        </div>
+      </SubCard>
+    );
+  });
+
+  const showPIF = form.payment_plans?.show_paid_in_full_discount;
+  const pifData = form.payment_plans?.paid_in_full_discount || {};
+
+  const paidInFullBlock = showPIF ? (
+    <SubCard
+      title="Paid-in-Full Discount"
+      action={
+        <SmallGhostButton onClick={onTogglePaidInFullDiscount}>
+          Remove
+        </SmallGhostButton>
+      }
+    >
+      <div style={gridRow}>
+        {DWELLING_PAID_IN_FULL_DISCOUNT_FIELDS.map(([fk, fl]) => (
+          <div key={fk} style={cell4}>
+            <FieldControl
+              fieldKey={`payment_plans.paid_in_full_discount.${fk}`}
+              label={fl}
+              value={pifData[fk] || ""}
+              onChange={(k, v) =>
+                onPaymentPlanChange("paid_in_full_discount", fk, v)
+              }
+              {...fp(`payment_plans.paid_in_full_discount.${fk}`)}
+            />
+          </div>
+        ))}
+      </div>
+    </SubCard>
+  ) : null;
+
   const paymentSection = (
-    <SectionCard title="Payment Plans">
+    <SectionCard
+      title="Payment Plans"
+      action={
+        !showPIF ? (
+          <SmallActionButton onClick={onTogglePaidInFullDiscount}>
+            + Add Paid-in-Full Discount
+          </SmallActionButton>
+        ) : null
+      }
+    >
       <div style={{ display: "grid", gap: 12 }}>
-        {DWELLING_PAYMENT_PLAN_TYPES.map(([planKey, planLabel]) => {
-          const plan = form.payment_plans?.[planKey] || {};
-          const planFields = dwellingFieldsForPaymentPlan(planKey);
-          // Full Pay → 2 fields side-by-side (span 6); installments → 4 fields (span 3)
-          const cellStyle = planKey === "full_pay" ? cell6 : cell3;
-          return (
-            <SubCard key={planKey} title={planLabel}>
-              <div style={gridRow}>
-                {planFields.map(([field, label]) => (
-                  <div key={field} style={cellStyle}>
-                    <FieldControl
-                      fieldKey={`payment_plans.${planKey}.${field}`}
-                      label={label}
-                      value={plan[field] || ""}
-                      onChange={(k, v) => onPaymentPlanChange(planKey, field, v)}
-                      {...fp(`payment_plans.${planKey}.${field}`)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </SubCard>
-          );
-        })}
+        {paymentPlansBlock}
+        {paidInFullBlock}
       </div>
     </SectionCard>
   );

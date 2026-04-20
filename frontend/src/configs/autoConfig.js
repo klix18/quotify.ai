@@ -70,6 +70,12 @@ export const VEHICLE_COVERAGE_PREMIUM_KEYS = [
   "towing_premium",
 ];
 
+// Per-vehicle deductibles (Comprehensive + Collision vary by vehicle).
+export const AUTO_VEHICLE_DEDUCTIBLE_FIELDS = [
+  ["comprehensive_deductible", "Comprehensive Deductible"],
+  ["collision_deductible", "Collision Deductible"],
+];
+
 export const emptyVehicle = () => ({
   year_make_model_trim: "",
   vin: "",
@@ -78,10 +84,14 @@ export const emptyVehicle = () => ({
   coverage_premiums: Object.fromEntries(
     VEHICLE_COVERAGE_PREMIUM_KEYS.map((k) => [k, ""])
   ),
+  comprehensive_deductible: "",
+  collision_deductible: "",
   subtotal: "",
 });
 
 // ─── Section 5: Coverages (Policy-Level Limits / Deductibles) ───
+// Comprehensive + Collision deductibles are captured per-vehicle (see
+// AUTO_VEHICLE_DEDUCTIBLE_FIELDS) since they can vary between vehicles.
 export const AUTO_COVERAGE_FIELDS = [
   ["bi_limit", "Bodily Injury (BI) Limit"],
   ["pd_limit", "Property Damage (PD) Limit"],
@@ -89,8 +99,6 @@ export const AUTO_COVERAGE_FIELDS = [
   ["um_uim_bi_limit", "UM/UIM Bodily Injury Limit"],
   ["umpd_limit", "Uninsured Motorist PD (UMPD) Limit"],
   ["umpd_deductible", "UMPD Deductible"],
-  ["comprehensive_deductible", "Comprehensive Deductible"],
-  ["collision_deductible", "Collision Deductible"],
   ["rental_limit", "Rental / Transportation Limit"],
   ["towing_limit", "Towing & Labor / Roadside Limit"],
 ];
@@ -103,27 +111,22 @@ export const AUTO_COVERAGE_PREMIUM_MAP = {
   medpay_limit: "medpay_premium",
   um_uim_bi_limit: "um_uim_bi_premium",
   umpd_limit: "umpd_premium",
-  comprehensive_deductible: "comprehensive_premium",
-  collision_deductible: "collision_premium",
   rental_limit: "rental_premium",
   towing_limit: "towing_premium",
 };
 
 // ─── Section 6: Payment Options ──────────────────────────────────
-// Full Pay has its own fields (a single full-pay amount + EFT discount flag).
-// Installment plans (Semi-Annual, Quarterly, Monthly, …) show the required
-// down payment, the per-installment amount, the number of installments, and
-// the EFT/Auto-Pay reduces-fee flag.
+// Full Pay has its own field (a single full-pay amount). Installment plans
+// (Semi-Annual, Quarterly, Monthly, …) show the required down payment, the
+// per-installment amount, and the number of installments.
 export const FULL_PAY_FIELDS = [
   ["full_pay_amount", "Full Pay Amount"],
-  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
 
 export const INSTALLMENT_PLAN_FIELDS = [
   ["down_payment", "Required Down Payment"],
   ["amount_per_installment", "Amount per Installment"],
   ["number_of_installments", "Number of Installments"],
-  ["eft_reduces_fee", "EFT/Auto-Pay Reduces Fee"],
 ];
 
 // Back-compat alias — defaults to installment fields. Anything that
@@ -150,14 +153,12 @@ export const PAID_IN_FULL_DISCOUNT_FIELDS = [
 
 const emptyFullPayPlan = () => ({
   full_pay_amount: "",
-  eft_reduces_fee: "",
 });
 
 const emptyInstallmentPlan = () => ({
   down_payment: "",
   amount_per_installment: "",
   number_of_installments: "",
-  eft_reduces_fee: "",
 });
 
 // ─── Complete Empty Form ─────────────────────────────────────────
@@ -189,7 +190,8 @@ export const EMPTY_AUTO_FORM = {
   // S4: Vehicles
   vehicles: [],
 
-  // S5: Coverages
+  // S5: Coverages (policy-level). Comprehensive + Collision deductibles
+  // live on each vehicle, not here.
   coverages: {
     bi_limit: "",
     pd_limit: "",
@@ -197,8 +199,6 @@ export const EMPTY_AUTO_FORM = {
     um_uim_bi_limit: "",
     umpd_limit: "",
     umpd_deductible: "",
-    comprehensive_deductible: "",
-    collision_deductible: "",
     rental_limit: "",
     towing_limit: "",
   },

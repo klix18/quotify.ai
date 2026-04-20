@@ -10,7 +10,7 @@ from typing import Optional
 import httpx
 import jwt as pyjwt
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import HTTPException, Request, status
 
 load_dotenv()
 

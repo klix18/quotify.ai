@@ -16,6 +16,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000
  * @param {string} params.manuallyChangedFields - comma-separated field names
  * @param {boolean} params.createdQuote - whether a quote was generated
  * @param {string} params.generatedPdf - generated PDF filename
+ * @param {string} params.clientName - client name from the form
+ * @param {string} params.skillVersion - skill version from parse result (e.g. "1.2")
  * @param {Function} params.getToken - Clerk getToken function
  */
 export async function trackEvent({
@@ -27,6 +29,7 @@ export async function trackEvent({
   createdQuote = false,
   generatedPdf = "",
   clientName = "",
+  skillVersion = "",
   getToken,
 }) {
   try {
@@ -48,6 +51,7 @@ export async function trackEvent({
         created_quote: createdQuote,
         generated_pdf: generatedPdf,
         client_name: clientName,
+        skill_version: skillVersion,
       }),
     });
   } catch (err) {

@@ -29,7 +29,6 @@ restarts the stream from scratch. Every parser in this package is already
 written this way, so callers can drop this helper in directly.
 """
 
-import logging
 import sys
 import time
 from typing import Any, Callable, Iterable, Iterator, List, Optional, Union

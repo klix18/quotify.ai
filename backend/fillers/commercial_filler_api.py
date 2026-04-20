@@ -1,6 +1,5 @@
 from pathlib import Path
 from uuid import uuid4
-from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -8,6 +7,7 @@ from jinja2 import Environment, FileSystemLoader
 from browser_manager import get_browser
 from pdf_optimizer import optimize_pdf
 from pdf_storage_helpers import store_generated_pdf
+from fillers._filename import build_pdf_filename
 
 router = APIRouter()
 
@@ -34,8 +34,14 @@ async def render_commercial_pdf(output_path: Path, data: dict):
         "additional_premiums_taxes_fees": data.get("additional_premiums_taxes_fees", ""),
         "why_selected": data.get("why_selected", ""),
         # Client / Agent
+        # NOTE: base.html renders {{ client_name }} / {{ client_address }} —
+        # commercial uses "named_insured" / "mailing_address" as canonical
+        # field names, so alias both so the template's Client Information
+        # block populates correctly.
         "named_insured": data.get("named_insured", ""),
+        "client_name": data.get("named_insured", "") or data.get("client_name", ""),
         "mailing_address": data.get("mailing_address", ""),
+        "client_address": data.get("mailing_address", "") or data.get("client_address", ""),
         "client_phone": data.get("client_phone", ""),
         "client_email": data.get("client_email", ""),
         "agent_name": data.get("agent_name", ""),
@@ -120,9 +126,11 @@ async def generate_commercial_quote(payload: dict):
         await render_commercial_pdf(output_path=output_path, data=payload)
 
         client_name = str(payload.get("named_insured", "")).strip()
-        date_str = datetime.now().strftime("%m-%d-%Y")
-        safe_client = "-".join(client_name.split()) if client_name else "Unknown"
-        download_name = f"commercial_quote_{date_str}_{safe_client}.pdf"
+        download_name = build_pdf_filename(
+            insurance_type="commercial",
+            client_name=client_name,
+            total_premium=payload.get("total_premium", ""),
+        )
 
         # Store generated PDF in database
         try:

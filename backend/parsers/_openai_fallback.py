@@ -168,6 +168,39 @@ def _build_system_with_schema(
     )
 
 
+def _build_user_content(
+    user_prompt: str,
+    file_ids: List[str],
+    pdf_labels: Optional[List[str]],
+) -> List[dict]:
+    """
+    Build the ``user.content`` list for the OpenAI Responses API, interleaving
+    labeled text markers between multiple PDFs so the model has unambiguous
+    document boundaries — mirrors the Gemini-side ``_build_contents`` pattern
+    in ``unified_parser_api.py``.
+
+    Single-PDF case: ``[text, file]`` (no markers, keeps Pass 1/single-file
+    behavior unchanged).
+
+    Multi-PDF case: ``[text, marker_1, file_1, marker_2, file_2, ...]``. If
+    explicit ``pdf_labels`` are supplied they're used verbatim; otherwise a
+    generic ``── PDF #N of M ──`` fallback is emitted.
+    """
+    content: List[dict] = [{"type": "input_text", "text": user_prompt}]
+    if len(file_ids) == 1:
+        content.append({"type": "input_file", "file_id": file_ids[0]})
+        return content
+
+    n = len(file_ids)
+    labels = pdf_labels if pdf_labels and len(pdf_labels) == n else [
+        f"── PDF #{i + 1} of {n} ──" for i in range(n)
+    ]
+    for fid, label in zip(file_ids, labels):
+        content.append({"type": "input_text", "text": f"\n{label}\n"})
+        content.append({"type": "input_file", "file_id": fid})
+    return content
+
+
 def stream_openai_extraction(
     pdf_path: Path,
     system_instruction: str,
@@ -175,6 +208,8 @@ def stream_openai_extraction(
     *,
     models: Optional[List[str]] = None,
     json_schema: Optional[dict] = None,
+    extra_pdf_paths: Optional[List[Path]] = None,
+    pdf_labels: Optional[List[str]] = None,
 ) -> Iterator[Any]:
     """
     Stream a PDF extraction pass using OpenAI's Responses API.
@@ -194,6 +229,16 @@ def stream_openai_extraction(
     is what Pass 2 callers should use to match Gemini's schema-enforced
     behavior.
 
+    Multi-PDF support (parity with the Gemini path): pass the primary
+    PDF as ``pdf_path`` and any additional PDFs (wind/hail supplement,
+    bundle secondary) as ``extra_pdf_paths``. Each file is uploaded
+    once, and labeled text markers are interleaved between them in the
+    user content so the model sees where each document starts — this is
+    the same boundary-marker pattern the Gemini path uses. If
+    ``pdf_labels`` is provided, those strings are used verbatim
+    (``[primary_label, extra_1_label, ...]``); otherwise a generic
+    ``── PDF #N of M ──`` label is used.
+
     ``temperature`` is hard-set to 0 to match Gemini's determinism (our
     Gemini ``GenerateContentConfig`` also uses ``temperature=0``). Any
     drift here directly shows up as extraction quality regression.
@@ -208,16 +253,26 @@ def stream_openai_extraction(
 
     client = _get_client()
 
-    # Upload once and reuse across model attempts in the chain.
+    # Upload all PDFs (primary + any supplements) once and reuse
+    # across model attempts in the chain. Order must match the label
+    # order so Pass 2 / Pass 3 see the same "PDF #1 is home / #2 is
+    # auto" layout the Gemini path uses.
+    all_pdf_paths: List[Path] = [pdf_path] + list(extra_pdf_paths or [])
+    file_ids: List[str] = []
     try:
-        file_id = _upload_pdf(client, pdf_path)
+        for p in all_pdf_paths:
+            file_ids.append(_upload_pdf(client, p))
     except Exception as exc:
         _log(f"PDF upload FAIL: err={str(exc)[:200]}")
         raise
 
+    user_content = _build_user_content(user_prompt, file_ids, pdf_labels)
     effective_system = _build_system_with_schema(system_instruction, json_schema)
     has_schema = json_schema is not None
-    _log(f"stream chain = {models}  json_schema={has_schema}")
+    _log(
+        f"stream chain = {models}  json_schema={has_schema}  "
+        f"pdfs={len(file_ids)}"
+    )
     last_exc: Optional[Exception] = None
 
     for idx, model in enumerate(models):
@@ -233,10 +288,7 @@ def stream_openai_extraction(
                     },
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "input_text", "text": user_prompt},
-                            {"type": "input_file", "file_id": file_id},
-                        ],
+                        "content": user_content,
                     },
                 ],
                 "temperature": 0,
@@ -290,17 +342,26 @@ def generate_openai_extraction(
     *,
     models: Optional[List[str]] = None,
     json_schema: Optional[dict] = None,
+    extra_pdf_paths: Optional[List[Path]] = None,
+    pdf_labels: Optional[List[str]] = None,
 ) -> str:
     """
     Non-streaming counterpart — returns the full output_text as a single string.
 
     If ``pdf_path`` is None, the call is text-only (no file attachment),
     which is how non-parser consumers (why-selected generator, report
-    generator) can use this helper.
+    generator) can use this helper. When ``pdf_path`` is None,
+    ``extra_pdf_paths`` is ignored (text-only calls have no file parts to
+    interleave).
 
     If ``json_schema`` is provided, the schema is inlined into the system
     instruction and the Responses API is asked for ``json_object`` format
     (same parity reasoning as ``stream_openai_extraction``).
+
+    Multi-PDF support mirrors ``stream_openai_extraction`` — see that
+    function's docstring for the ``extra_pdf_paths`` / ``pdf_labels``
+    contract. Labels are emitted as ``input_text`` parts between files so
+    the model sees an unambiguous document boundary.
 
     Walks the same model chain with the same retry semantics.
     """
@@ -309,17 +370,23 @@ def generate_openai_extraction(
 
     client = _get_client()
 
-    file_id: Optional[str] = None
+    file_ids: List[str] = []
     if pdf_path is not None:
-        file_id = _upload_pdf(client, pdf_path)
+        file_ids.append(_upload_pdf(client, pdf_path))
+        for p in list(extra_pdf_paths or []):
+            file_ids.append(_upload_pdf(client, p))
 
-    user_content: List[dict] = [{"type": "input_text", "text": user_prompt}]
-    if file_id is not None:
-        user_content.append({"type": "input_file", "file_id": file_id})
+    if file_ids:
+        user_content = _build_user_content(user_prompt, file_ids, pdf_labels)
+    else:
+        user_content = [{"type": "input_text", "text": user_prompt}]
 
     effective_system = _build_system_with_schema(system_instruction, json_schema)
     has_schema = json_schema is not None
-    _log(f"gen chain = {models}  json_schema={has_schema}")
+    _log(
+        f"gen chain = {models}  json_schema={has_schema}  "
+        f"pdfs={len(file_ids)}"
+    )
     last_exc: Optional[Exception] = None
 
     for idx, model in enumerate(models):

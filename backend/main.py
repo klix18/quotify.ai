@@ -6,12 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from advisor_info_api import router as advisor_router
 
-from parsers.homeowners_parser_api import router as homeowners_parser_router
-from parsers.auto_parser_api import router as auto_parser_router
-from parsers.dwelling_parser_api import router as dwelling_parser_router
-from parsers.commercial_parser_api import router as commercial_parser_router
-from parsers.bundle_parser_api import router as bundle_parser_router
-from parsers.wind_parser_api import router as wind_parser_router
+# Unified parser — single endpoint for all insurance types via skills system
+from parsers.unified_parser_api import router as unified_parser_router
 
 from fillers.homeowners_filler_api import router as homeowners_filler_router
 from fillers.auto_filler_api import router as auto_filler_router
@@ -63,19 +59,16 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
-# Existing routers
-app.include_router(homeowners_parser_router)
+# Unified parser (single endpoint for all insurance types via skills system)
+app.include_router(unified_parser_router)
+
+# Filler routers (form-filling endpoints — still active)
 app.include_router(homeowners_filler_router)
 app.include_router(auto_filler_router)
 app.include_router(bundle_filler_router)
 app.include_router(dwelling_filler_router)
 app.include_router(commercial_filler_router)
 app.include_router(advisor_router)
-app.include_router(auto_parser_router)
-app.include_router(dwelling_parser_router)
-app.include_router(commercial_parser_router)
-app.include_router(bundle_parser_router)
-app.include_router(wind_parser_router)
 
 # Analytics & tracking routers
 app.include_router(analytics_router)

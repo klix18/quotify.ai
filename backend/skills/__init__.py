@@ -4,7 +4,6 @@ Reads markdown skill files from this directory and builds
 prompt context for the LLM.
 """
 
-import os
 from pathlib import Path
 
 SKILLS_DIR = Path(__file__).resolve().parent

@@ -77,10 +77,10 @@ INSURANCE_TYPE_KNOWLEDGE = """
 ACTIVE (fully built, in production):
   • Homeowners — Full quote extraction & generation. Production-ready.
   • Auto — Full quote extraction & generation. Production-ready.
+  • Dwelling (DP1/DP2/DP3 forms) — Full quote extraction & generation. Production-ready.
 
 BETA (built but still being refined):
   • Bundle (Homeowners + Auto combined) — Functional but in beta testing.
-  • Dwelling (DP1/DP2/DP3 forms) — Functional but in beta testing.
   • Commercial (property, GL, workers comp, cyber, wind, excess) — Functional but in beta testing.
 
 NOT YET BUILT (planned, coming soon):

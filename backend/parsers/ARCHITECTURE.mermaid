@@ -1,0 +1,77 @@
+flowchart TD
+    classDef frontend fill:#e8f4fd,stroke:#1761d4,color:#1761d4
+    classDef core fill:#1761d4,stroke:#0d4aaa,color:#fff
+    classDef skill fill:#f0fdf4,stroke:#16a34a,color:#16a34a
+    classDef schema fill:#fefce8,stroke:#ca8a04,color:#92400e
+    classDef model fill:#fdf4ff,stroke:#9333ea,color:#6b21a8
+    classDef fallback fill:#fff7ed,stroke:#ea580c,color:#c2410c
+    classDef output fill:#f0f9ff,stroke:#0891b2,color:#0e7490
+
+    FE["🖥️ Frontend\nPOST /api/parse-quote\n{ insurance_type, file }"]:::frontend
+
+    subgraph UNIFIED["unified_parser_api.py — Single Entry Point"]
+        direction TB
+        EP["📡 /api/parse-quote\naccepts any insurance_type"]:::core
+        SL["📚 skill_loader.py\nload + cache skills/{type}.md"]:::skill
+        SR["🗂️ schema_registry.py\nschema + normalizer for type"]:::schema
+        EP --> SL
+        EP --> SR
+    end
+
+    subgraph SKILLS["Skills System  ·  skills/*.md"]
+        direction LR
+        S1["🏠 homeowners.md\nv1.0"]:::skill
+        S2["🚗 auto.md\nv1.0"]:::skill
+        S3["🏢 dwelling.md\nv1.0"]:::skill
+        S4["🏗️ commercial.md\nv1.0"]:::skill
+        S5["📦 bundle.md\nv1.0\n@include homeowners\n@include auto"]:::skill
+    end
+
+    subgraph PASS1["Pass 1 — Quick Draft  ·  gemini-2.5-flash-lite"]
+        direction LR
+        P1SYS["System:\nCORE_PROMPT\n(universal extraction rules)"]:::model
+        P1USR["User:\n'Quick extract {type} fields'\n+ skill quick-pass field list"]:::model
+        P1OUT["→ key:value stream\n→ draft_patch events\n→ frontend updates live"]:::output
+        P1SYS --- P1USR --> P1OUT
+    end
+
+    subgraph PASS2["Pass 2 — Strict JSON  ·  gemini-2.5-flash"]
+        direction LR
+        P2SYS["System:\nCORE_PROMPT\n+ full skill content injected"]:::model
+        P2USR["User:\n'Extract all {type} fields'\nresponse_schema = type schema"]:::model
+        P2OUT["→ full JSON\n→ final_patch events\n→ normalized result"]:::output
+        P2SYS --- P2USR --> P2OUT
+    end
+
+    subgraph FALLBACK["Fallback Chain  ·  _model_fallback.py + _openai_fallback.py"]
+        direction LR
+        FB1["⚡ Gemini 503 / overload\ndetected on first chunk"]:::fallback
+        FB2["→ OpenAI Responses API\ngpt-4o-mini → gpt-4o\nwith same system + skill"]:::fallback
+        FB1 --> FB2
+    end
+
+    NRM["🔧 normalizer\n(per type in schema_registry)\nensure all keys, extract confidence\nstrict=False JSON parse"]:::schema
+    WSG["✍️ why_selected_generator\nPass 1 draft → Pass 2 refine\nskill type passed through"]:::core
+    OUT["📤 Streaming ndjson\nstatus · draft_patch\nfinal_patch · result"]:::output
+
+    FE --> EP
+    SL -.->|reads| SKILLS
+    SR -.->|provides schema| PASS2
+    EP --> PASS1
+    PASS1 --> WSG
+    PASS1 --> PASS2
+    PASS1 -.->|on error| FALLBACK
+    PASS2 -.->|on error| FALLBACK
+    PASS2 --> NRM
+    NRM --> OUT
+    WSG -.->|why_selected bullets| OUT
+    OUT --> FE
+
+    subgraph FUTURE["🔮 Future Agent Capabilities"]
+        direction TB
+        CAP1["🔍 Carrier Detection Pre-Pass\nzero-shot carrier ID → load\ncarrier-specific sub-skill"]:::skill
+        CAP2["🔁 Self-Healing Retry\nif avg confidence < threshold\nre-query low-confidence fields only"]:::core
+        CAP3["📊 Skill Versioning\nVERSION header per skill\nlogged with every parse event"]:::skill
+        CAP4["🧩 Skill Composition\nbundle @includes home + auto\nskills are composable units"]:::skill
+        CAP5["🧠 Carrier Memory\nremember carrier quirks per org\nauto-inject learned hints"]:::core
+    end
