@@ -81,4 +81,4 @@ def build_pdf_filename(insurance_type: str, client_name, total_premium) -> str:
     date_str = datetime.now().strftime("%m-%d-%Y")
     client = _safe_client_name(client_name)
     premium = _format_premium(total_premium)
-    return f"{label} | {date_str} | {client} | {premium}.pdf"
+    return f"{label} · {date_str} · {client} · {premium}.pdf"
