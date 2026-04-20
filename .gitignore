@@ -174,3 +174,6 @@ config.json
 uploads/
 temp/
 tmp/
+
+# Generated quote PDFs (contain client PII — never commit)
+backend/generated_quotes/

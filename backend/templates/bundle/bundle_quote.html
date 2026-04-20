@@ -1,7 +1,14 @@
 {% extends "base.html" %}
 
-{% block hero_height %}310px{% endblock %}
-{% block hero_margin %}32px{% endblock %}
+{% block hero_height %}280px{% endblock %}
+{% block hero_margin %}14px{% endblock %}
+
+{% block extra_styles %}
+    /* Bundle-only: make the bottom-gap of "Why This Plan Was Selected"
+       (info-row margin-top) match the top-gap (hero_margin) so the
+       section feels balanced top/bottom. */
+    .info-row { margin-top: 14px; }
+{% endblock %}
 
 {% block cover_title %}Bundle Insurance{% endblock %}
 
@@ -227,32 +234,30 @@
     </div>
     {% endif %}
 
-    <div class="section-heading sentient" style="font-size: 22px; margin-top: 14px; margin-bottom: 14px;">Deductibles</div>
-
-    <div class="other-container r8">
-      <div class="other-entry">
-        <div class="other-header">
-          <span class="other-name">Comprehensive Deductible</span>
-          <span class="other-val">{{ comprehensive_deductible }}</span>
-        </div>
-        <div class="other-desc">Your out-of-pocket cost before coverage applies for non-collision events like theft, vandalism, or weather damage.</div>
-      </div>
-
-      <div class="other-entry">
-        <div class="other-header">
-          <span class="other-name">Collision Deductible</span>
-          <span class="other-val">{{ collision_deductible }}</span>
-        </div>
-        <div class="other-desc">The amount you pay before coverage kicks in when your vehicle collides with another object or vehicle.</div>
-      </div>
-    </div>
-
   </div>
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
 </div>
 
 
-<!-- ════════════════════  PAGE 4 — DRIVERS, VEHICLES & PAYMENTS  ══════ -->
+<!-- ════════════════════  PAGE 4 — DRIVERS & VEHICLES  ══════════════════ -->
+{# Deductibles placement rule (mirrors auto template): weight =
+   (#vehicles * 2) + (#drivers * 1). Weight ≤ 11 → Deductibles inline on
+   this page, right after the Vehicles block. Weight > 11 → Deductibles
+   gets its own Page 5. Suppressed entirely when no vehicle has any
+   deductible data. #}
+{% set _ded_any = namespace(flag=false) %}
+{% if vehicles and vehicles|length > 0 %}
+{% for _v in vehicles %}
+  {% if _v.comprehensive_deductible or _v.collision_deductible %}
+    {% set _ded_any.flag = true %}
+  {% endif %}
+{% endfor %}
+{% endif %}
+{% set _vehicle_count = (vehicles|length) if vehicles else 0 %}
+{% set _driver_count = (drivers|length) if drivers else 0 %}
+{% set _ded_weight = _vehicle_count * 2 + _driver_count * 1 %}
+{% set _ded_on_separate_page = _ded_weight > 11 %}
+
 <div class="page">
   <div class="page-inner">
 
@@ -260,85 +265,249 @@
       <img src="assets/logo.png" alt="Sizemore Insurance">
     </div>
 
+    <!-- Drivers -->
     {% if drivers and drivers|length > 0 %}
     <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Listed Drivers</div>
     <div class="section-sub">All drivers listed on the policy and their basic information.</div>
 
     <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 35%;">
+        <col style="width: 18%;">
+        <col style="width: 25%;">
+        <col style="width: 22%;">
+      </colgroup>
       <thead>
-        <tr><th>Driver Name</th><th>Gender</th><th>Marital Status</th><th>License State</th></tr>
+        <tr>
+          <th>Driver Name</th>
+          <th>Gender</th>
+          <th>Marital Status</th>
+          <th>License State</th>
+        </tr>
       </thead>
       <tbody>
         {% for driver in drivers %}
-        <tr><td>{{ driver.driver_name }}</td><td>{{ driver.gender }}</td><td>{{ driver.marital_status }}</td><td>{{ driver.license_state }}</td></tr>
+        <tr>
+          <td>{{ driver.driver_name }}</td>
+          <td>{{ driver.gender }}</td>
+          <td>{{ driver.marital_status }}</td>
+          <td>{{ driver.license_state }}</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
     {% endif %}
 
+    <!-- Vehicles -->
     {% if vehicles and vehicles|length > 0 %}
     <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Insured Vehicles</div>
-    <div class="section-sub">Vehicles covered under this policy along with their premium breakdowns.</div>
+    <div class="section-sub">Vehicles covered under this policy.</div>
 
     <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 38%;">
+        <col style="width: 28%;">
+        <col style="width: 14%;">
+        <col style="width: 20%;">
+      </colgroup>
       <thead>
-        <tr><th>Year / Make / Model / Trim</th><th>VIN</th><th>Use</th><th>Garaging ZIP</th></tr>
+        <tr>
+          <th>Year / Make / Model / Trim</th>
+          <th>VIN</th>
+          <th>Use</th>
+          <th>Garaging ZIP</th>
+        </tr>
       </thead>
       <tbody>
         {% for vehicle in vehicles %}
-        <tr><td>{{ vehicle.year_make_model_trim }}</td><td>{{ vehicle.vin }}</td><td>{{ vehicle.vehicle_use }}</td><td>{{ vehicle.garaging_zip_county }}</td></tr>
+        <tr>
+          <td>{{ vehicle.year_make_model_trim }}</td>
+          <td>{{ vehicle.vin }}</td>
+          <td>{{ vehicle.vehicle_use }}</td>
+          <td>{{ vehicle.garaging_zip_county }}</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
 
-    {% for vehicle in vehicles %}
-    {% if vehicle.coverage_premiums %}
-    <div class="vehicle-premium-card r8">
-      <div class="vehicle-premium-title">{{ vehicle.year_make_model_trim }} — Premium Breakdown</div>
-      {% if vehicle.coverage_premiums.bi_premium %}<div class="premium-row"><span class="premium-row-label">Bodily Injury</span><span class="premium-row-value">{{ vehicle.coverage_premiums.bi_premium }}</span></div>{% endif %}
-      {% if vehicle.coverage_premiums.pd_premium %}<div class="premium-row"><span class="premium-row-label">Property Damage</span><span class="premium-row-value">{{ vehicle.coverage_premiums.pd_premium }}</span></div>{% endif %}
-      {% if vehicle.coverage_premiums.medpay_premium %}<div class="premium-row"><span class="premium-row-label">Medical Payments</span><span class="premium-row-value">{{ vehicle.coverage_premiums.medpay_premium }}</span></div>{% endif %}
-      {% if vehicle.coverage_premiums.um_uim_bi_premium %}<div class="premium-row"><span class="premium-row-label">UM/UIM Bodily Injury</span><span class="premium-row-value">{{ vehicle.coverage_premiums.um_uim_bi_premium }}</span></div>{% endif %}
-      {% if vehicle.coverage_premiums.comprehensive_premium %}<div class="premium-row"><span class="premium-row-label">Comprehensive</span><span class="premium-row-value">{{ vehicle.coverage_premiums.comprehensive_premium }}</span></div>{% endif %}
-      {% if vehicle.coverage_premiums.collision_premium %}<div class="premium-row"><span class="premium-row-label">Collision</span><span class="premium-row-value">{{ vehicle.coverage_premiums.collision_premium }}</span></div>{% endif %}
-      {% if vehicle.coverage_premiums.rental_premium %}<div class="premium-row"><span class="premium-row-label">Rental Reimbursement</span><span class="premium-row-value">{{ vehicle.coverage_premiums.rental_premium }}</span></div>{% endif %}
-      {% if vehicle.coverage_premiums.towing_premium %}<div class="premium-row"><span class="premium-row-label">Towing &amp; Roadside</span><span class="premium-row-value">{{ vehicle.coverage_premiums.towing_premium }}</span></div>{% endif %}
-      {% if vehicle.subtotal %}<div class="premium-row premium-row-total"><span class="premium-row-label">Vehicle Subtotal</span><span class="premium-row-value">{{ vehicle.subtotal }}</span></div>{% endif %}
-    </div>
-    {% endif %}
-    {% endfor %}
     {% endif %}
 
-    {% if payment_options %}
-    <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Payment Options</div>
+    <!-- Deductibles (inline — rendered here when the driver/vehicle roster
+         is small enough to fit on this page, matching auto template behavior). -->
+    {% if _ded_any.flag and not _ded_on_separate_page %}
+    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Deductibles</div>
+    <div class="section-sub">Your out-of-pocket amounts before coverage applies, shown per vehicle.</div>
+
+    <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 50%;">
+        <col style="width: 25%;">
+        <col style="width: 25%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Vehicle</th>
+          <th>Comprehensive</th>
+          <th>Collision</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vehicle in vehicles %}
+        {% if vehicle.comprehensive_deductible or vehicle.collision_deductible %}
+        <tr>
+          <td>{{ vehicle.year_make_model_trim or ('Vehicle ' ~ loop.index) }}</td>
+          <td>{{ vehicle.comprehensive_deductible or '—' }}</td>
+          <td>{{ vehicle.collision_deductible or '—' }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+
+
+<!-- ════════════════════  PAGE 5 — DEDUCTIBLES (large rosters)  ═══════ -->
+{# Only renders when the deductibles table didn't fit on Page 4 — i.e.
+   (vehicles * 2) + (drivers * 1) > 11. Mirrors auto template behavior. #}
+{% if _ded_any.flag and _ded_on_separate_page %}
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Deductibles</div>
+    <div class="section-sub">Your out-of-pocket amounts before coverage applies, shown per vehicle.</div>
+
+    <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 50%;">
+        <col style="width: 25%;">
+        <col style="width: 25%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Vehicle</th>
+          <th>Comprehensive</th>
+          <th>Collision</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vehicle in vehicles %}
+        {% if vehicle.comprehensive_deductible or vehicle.collision_deductible %}
+        <tr>
+          <td>{{ vehicle.year_make_model_trim or ('Vehicle ' ~ loop.index) }}</td>
+          <td>{{ vehicle.comprehensive_deductible or '—' }}</td>
+          <td>{{ vehicle.collision_deductible or '—' }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+{% endif %}
+
+
+<!-- ═══════════════════════ PAGE 6 — PAYMENT OPTIONS ═══════════════════ -->
+{# Last page of the bundle. Shows Payment Options + Paid-in-Full Discount
+   (mirrors auto quote's Page 5). Page renders if EITHER real payment
+   plans OR a Paid-in-Full Discount has data; each section individually
+   gates on its own data. #}
+{% set _has_payment_plans = payment_options and (
+     (payment_options.full_pay     and (payment_options.full_pay.full_pay_amount or payment_options.full_pay.down_payment))
+  or (payment_options.semi_annual  and (payment_options.semi_annual.down_payment or payment_options.semi_annual.amount_per_installment or payment_options.semi_annual.number_of_installments))
+  or (payment_options.quarterly    and (payment_options.quarterly.down_payment   or payment_options.quarterly.amount_per_installment   or payment_options.quarterly.number_of_installments))
+  or (payment_options.monthly      and (payment_options.monthly.down_payment     or payment_options.monthly.amount_per_installment     or payment_options.monthly.number_of_installments))
+) %}
+{% set _has_pif = payment_options and payment_options.show_paid_in_full_discount and payment_options.paid_in_full_discount and (
+     payment_options.paid_in_full_discount.gross_premium
+  or payment_options.paid_in_full_discount.discount_amount
+  or payment_options.paid_in_full_discount.net_pay_in_full
+) %}
+{% if _has_payment_plans or _has_pif %}
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    {% if _has_payment_plans %}
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Payment Options</div>
     <div class="section-sub">Available payment plans for the auto portion of this bundle.</div>
 
     <div class="payment-grid">
-      {% if payment_options.full_pay and payment_options.full_pay.down_payment %}
+      {% if payment_options.full_pay and (payment_options.full_pay.full_pay_amount or payment_options.full_pay.down_payment) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Full Pay</div>
-        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.full_pay.down_payment }}</span></div>
+        <div class="payment-row"><span class="payment-row-label">Full Payment</span><span class="payment-row-value">{{ payment_options.full_pay.full_pay_amount or payment_options.full_pay.down_payment }}</span></div>
       </div>
       {% endif %}
-      {% if payment_options.semi_annual and payment_options.semi_annual.down_payment %}
+      {% if payment_options.semi_annual and (payment_options.semi_annual.down_payment or payment_options.semi_annual.amount_per_installment or payment_options.semi_annual.number_of_installments) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Semi-Annual</div>
-        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.semi_annual.down_payment }}</span></div>
+        {% if payment_options.semi_annual.down_payment %}<div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.semi_annual.down_payment }}</span></div>{% endif %}
         {% if payment_options.semi_annual.amount_per_installment %}<div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.semi_annual.amount_per_installment }}</span></div>{% endif %}
+        {% if payment_options.semi_annual.number_of_installments %}<div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.semi_annual.number_of_installments }}</span></div>{% endif %}
       </div>
       {% endif %}
-      {% if payment_options.quarterly and payment_options.quarterly.down_payment %}
+      {% if payment_options.quarterly and (payment_options.quarterly.down_payment or payment_options.quarterly.amount_per_installment or payment_options.quarterly.number_of_installments) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Quarterly</div>
-        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.quarterly.down_payment }}</span></div>
+        {% if payment_options.quarterly.down_payment %}<div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.quarterly.down_payment }}</span></div>{% endif %}
         {% if payment_options.quarterly.amount_per_installment %}<div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.quarterly.amount_per_installment }}</span></div>{% endif %}
+        {% if payment_options.quarterly.number_of_installments %}<div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.quarterly.number_of_installments }}</span></div>{% endif %}
       </div>
       {% endif %}
-      {% if payment_options.monthly and payment_options.monthly.down_payment %}
+      {% if payment_options.monthly and (payment_options.monthly.down_payment or payment_options.monthly.amount_per_installment or payment_options.monthly.number_of_installments) %}
       <div class="payment-card r8">
         <div class="payment-card-title">Monthly</div>
-        <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.monthly.down_payment }}</span></div>
+        {% if payment_options.monthly.down_payment %}<div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">{{ payment_options.monthly.down_payment }}</span></div>{% endif %}
         {% if payment_options.monthly.amount_per_installment %}<div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">{{ payment_options.monthly.amount_per_installment }}</span></div>{% endif %}
+        {% if payment_options.monthly.number_of_installments %}<div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.monthly.number_of_installments }}</span></div>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if _has_pif %}
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Paid-in-Full Discount</div>
+    <div class="section-sub">Savings available when paying the full premium up front.</div>
+
+    <div class="other-container r8">
+      {% if payment_options.paid_in_full_discount.gross_premium %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Gross Premium</span>
+          <span class="other-val">{{ payment_options.paid_in_full_discount.gross_premium }}</span>
+        </div>
+        <div class="other-desc">Total premium before any pay-in-full discount is applied.</div>
+      </div>
+      {% endif %}
+      {% if payment_options.paid_in_full_discount.discount_amount %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Discount Amount</span>
+          <span class="other-val">{{ payment_options.paid_in_full_discount.discount_amount }}</span>
+        </div>
+        <div class="other-desc">Amount saved by choosing to pay in full.</div>
+      </div>
+      {% endif %}
+      {% if payment_options.paid_in_full_discount.net_pay_in_full %}
+      <div class="other-entry">
+        <div class="other-header">
+          <span class="other-name">Net Pay-in-Full</span>
+          <span class="other-val">{{ payment_options.paid_in_full_discount.net_pay_in_full }}</span>
+        </div>
+        <div class="other-desc">Your final amount due when paying the full premium upfront.</div>
       </div>
       {% endif %}
     </div>
@@ -347,4 +516,5 @@
   </div>
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
 </div>
+{% endif %}
 {% endblock %}

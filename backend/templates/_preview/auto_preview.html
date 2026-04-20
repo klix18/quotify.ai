@@ -297,7 +297,7 @@
       display: flex;
       align-items: baseline;
       gap: 8px;
-      margin-bottom: 5px;
+      margin-bottom: 2px;
     }
     /* 7a. POLICY NAME */
     .cov-name {
@@ -701,33 +701,12 @@
     </div>
     
 
-    <!-- Deductibles -->
-    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 12px;">Deductibles</div>
-
-    <div class="other-container r8">
-      <div class="other-entry">
-        <div class="other-header">
-          <span class="other-name">Comprehensive Deductible</span>
-          <span class="other-val">$500</span>
-        </div>
-        <div class="other-desc">Your out-of-pocket cost before coverage applies for non-collision events like theft, vandalism, or weather damage.</div>
-      </div>
-
-      <div class="other-entry">
-        <div class="other-header">
-          <span class="other-name">Collision Deductible</span>
-          <span class="other-val">$500</span>
-        </div>
-        <div class="other-desc">The amount you pay before coverage kicks in when your vehicle collides with another object or vehicle.</div>
-      </div>
-    </div>
-
   </div>
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
 </div>
 
 
-<!-- ════════════════════  PAGE 3 — DRIVERS, VEHICLES & PAYMENTS  ══════ -->
+<!-- ════════════════════  PAGE 3 — DRIVERS & VEHICLES  ══════════════════ -->
 <div class="page">
   <div class="page-inner">
 
@@ -807,8 +786,34 @@
       </tbody>
     </table>
 
+    <!-- Deductibles (inline — preview weight = (1 vehicle × 2) + (2 drivers × 1) = 4 ≤ 11) -->
+    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Deductibles</div>
+    <div class="section-sub">Your out-of-pocket amounts before coverage applies, shown per vehicle.</div>
+
+    <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 50%;">
+        <col style="width: 25%;">
+        <col style="width: 25%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Vehicle</th>
+          <th>Comprehensive</th>
+          <th>Collision</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2023 Toyota Camry XSE</td>
+          <td>$500</td>
+          <td>$500</td>
+        </tr>
+      </tbody>
+    </table>
+
     <!-- Payment Options -->
-    
+
     <div class="section-heading sentient" style="margin-top: 14px; margin-bottom: 4px;">Payment Options</div>
     <div class="section-sub">Available payment plans for this policy.</div>
 
@@ -846,10 +851,7 @@
         <div class="payment-row"><span class="payment-row-label">Down Payment</span><span class="payment-row-value">$206</span></div>
         
         <div class="payment-row"><span class="payment-row-label">Per Installment</span><span class="payment-row-value">$125</span></div>
-        
-        
-        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay</span><span class="payment-row-value">Yes</span></div>
-        
+
       </div>
       
     </div>

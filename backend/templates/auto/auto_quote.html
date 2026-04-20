@@ -120,33 +120,29 @@
 </div>
 
 
-<!-- ════════════════════  PAGE 3 — DEDUCTIBLES, DRIVERS & VEHICLES  ══════ -->
+<!-- ════════════════════  PAGE 3 — DRIVERS & VEHICLES  ══════════════════ -->
+{# Deductibles placement rule: weight = (#vehicles * 2) + (#drivers * 1).
+   When weight > 11, Deductibles gets its own page (Page 4); otherwise it
+   renders inline at the bottom of this page. Keeps small policies compact
+   while giving large rosters room to breathe. #}
+{% set _ded_any = namespace(flag=false) %}
+{% if vehicles and vehicles|length > 0 %}
+{% for _v in vehicles %}
+  {% if _v.comprehensive_deductible or _v.collision_deductible %}
+    {% set _ded_any.flag = true %}
+  {% endif %}
+{% endfor %}
+{% endif %}
+{% set _vehicle_count = (vehicles|length) if vehicles else 0 %}
+{% set _driver_count = (drivers|length) if drivers else 0 %}
+{% set _ded_weight = _vehicle_count * 2 + _driver_count * 1 %}
+{% set _ded_on_separate_page = _ded_weight > 11 %}
+
 <div class="page">
   <div class="page-inner">
 
     <div class="logo-wrap">
       <img src="assets/logo.png" alt="Sizemore Insurance">
-    </div>
-
-    <!-- Deductibles -->
-    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 12px;">Deductibles</div>
-
-    <div class="other-container r8">
-      <div class="other-entry">
-        <div class="other-header">
-          <span class="other-name">Comprehensive Deductible</span>
-          <span class="other-val">{{ comprehensive_deductible }}</span>
-        </div>
-        <div class="other-desc">Your out-of-pocket cost before coverage applies for non-collision events like theft, vandalism, or weather damage.</div>
-      </div>
-
-      <div class="other-entry">
-        <div class="other-header">
-          <span class="other-name">Collision Deductible</span>
-          <span class="other-val">{{ collision_deductible }}</span>
-        </div>
-        <div class="other-desc">The amount you pay before coverage kicks in when your vehicle collides with another object or vehicle.</div>
-      </div>
     </div>
 
     <!-- Drivers -->
@@ -216,13 +212,48 @@
 
     {% endif %}
 
+    <!-- Deductibles (inline — rendered here when the driver/vehicle roster
+         is small enough that it fits on this page). -->
+    {% if _ded_any.flag and not _ded_on_separate_page %}
+    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Deductibles</div>
+    <div class="section-sub">Your out-of-pocket amounts before coverage applies, shown per vehicle.</div>
+
+    <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 50%;">
+        <col style="width: 25%;">
+        <col style="width: 25%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Vehicle</th>
+          <th>Comprehensive</th>
+          <th>Collision</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vehicle in vehicles %}
+        {% if vehicle.comprehensive_deductible or vehicle.collision_deductible %}
+        <tr>
+          <td>{{ vehicle.year_make_model_trim or ('Vehicle ' ~ loop.index) }}</td>
+          <td>{{ vehicle.comprehensive_deductible or '—' }}</td>
+          <td>{{ vehicle.collision_deductible or '—' }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
   </div>
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
 </div>
 
 
-<!-- ════════════════════  PAGE 4 — PAYMENT OPTIONS  ══════════════════ -->
-{% if payment_options %}
+<!-- ════════════════════  PAGE 4 — DEDUCTIBLES (large rosters)  ═══════ -->
+{# Only renders when the deductibles table didn't fit on Page 3 — i.e.
+   (vehicles * 2) + (drivers * 1) > 11. #}
+{% if _ded_any.flag and _ded_on_separate_page %}
 <div class="page">
   <div class="page-inner">
 
@@ -230,6 +261,70 @@
       <img src="assets/logo.png" alt="Sizemore Insurance">
     </div>
 
+    <!-- Deductibles (per-vehicle) — styled to match the other detail tables
+         on the drivers/vehicles page: same header treatment, same fonts,
+         same row heights. -->
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Deductibles</div>
+    <div class="section-sub">Your out-of-pocket amounts before coverage applies, shown per vehicle.</div>
+
+    <table class="detail-table r8">
+      <colgroup>
+        <col style="width: 50%;">
+        <col style="width: 25%;">
+        <col style="width: 25%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Vehicle</th>
+          <th>Comprehensive</th>
+          <th>Collision</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vehicle in vehicles %}
+        {% if vehicle.comprehensive_deductible or vehicle.collision_deductible %}
+        <tr>
+          <td>{{ vehicle.year_make_model_trim or ('Vehicle ' ~ loop.index) }}</td>
+          <td>{{ vehicle.comprehensive_deductible or '—' }}</td>
+          <td>{{ vehicle.collision_deductible or '—' }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+  <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
+</div>
+{% endif %}
+
+
+<!-- ════════════════════  PAGE 5 — PAYMENT OPTIONS  ══════════════════ -->
+{# Page renders if EITHER real payment plans OR a Paid-in-Full Discount has
+   data. "Payment Options" heading + "Available payment plans…" subtitle
+   + grid only render when actual plans have data. PIF-only mode renders a
+   standalone "Paid-in-Full Discount" section without the misleading
+   payment-plans copy. #}
+{% set _has_plans = payment_options and (
+     (payment_options.full_pay     and (payment_options.full_pay.full_pay_amount or payment_options.full_pay.down_payment))
+  or (payment_options.semi_annual  and (payment_options.semi_annual.down_payment or payment_options.semi_annual.amount_per_installment or payment_options.semi_annual.number_of_installments))
+  or (payment_options.quarterly    and (payment_options.quarterly.down_payment   or payment_options.quarterly.amount_per_installment   or payment_options.quarterly.number_of_installments))
+  or (payment_options.monthly      and (payment_options.monthly.down_payment     or payment_options.monthly.amount_per_installment     or payment_options.monthly.number_of_installments))
+) %}
+{% set _has_pif = payment_options and payment_options.show_paid_in_full_discount and payment_options.paid_in_full_discount and (
+     payment_options.paid_in_full_discount.gross_premium
+  or payment_options.paid_in_full_discount.discount_amount
+  or payment_options.paid_in_full_discount.net_pay_in_full
+) %}
+{% if _has_plans or _has_pif %}
+<div class="page">
+  <div class="page-inner">
+
+    <div class="logo-wrap">
+      <img src="assets/logo.png" alt="Sizemore Insurance">
+    </div>
+
+    {% if _has_plans %}
     <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Payment Options</div>
     <div class="section-sub">Available payment plans for this policy.</div>
 
@@ -238,9 +333,6 @@
       <div class="payment-card r8">
         <div class="payment-card-title">Full Pay</div>
         <div class="payment-row"><span class="payment-row-label">Full Payment</span><span class="payment-row-value">{{ payment_options.full_pay.full_pay_amount or payment_options.full_pay.down_payment }}</span></div>
-        {% if payment_options.full_pay.eft_reduces_fee %}
-        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.full_pay.eft_reduces_fee }}</span></div>
-        {% endif %}
       </div>
       {% endif %}
 
@@ -250,9 +342,6 @@
         <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.semi_annual.down_payment }}</span></div>
         <div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_options.semi_annual.amount_per_installment }}</span></div>
         <div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.semi_annual.number_of_installments }}</span></div>
-        {% if payment_options.semi_annual.eft_reduces_fee %}
-        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.semi_annual.eft_reduces_fee }}</span></div>
-        {% endif %}
       </div>
       {% endif %}
 
@@ -262,9 +351,6 @@
         <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.quarterly.down_payment }}</span></div>
         <div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_options.quarterly.amount_per_installment }}</span></div>
         <div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.quarterly.number_of_installments }}</span></div>
-        {% if payment_options.quarterly.eft_reduces_fee %}
-        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.quarterly.eft_reduces_fee }}</span></div>
-        {% endif %}
       </div>
       {% endif %}
 
@@ -274,15 +360,14 @@
         <div class="payment-row"><span class="payment-row-label">Required Down Payment</span><span class="payment-row-value">{{ payment_options.monthly.down_payment }}</span></div>
         <div class="payment-row"><span class="payment-row-label">Amount per Installment</span><span class="payment-row-value">{{ payment_options.monthly.amount_per_installment }}</span></div>
         <div class="payment-row"><span class="payment-row-label">Number of Installments</span><span class="payment-row-value">{{ payment_options.monthly.number_of_installments }}</span></div>
-        {% if payment_options.monthly.eft_reduces_fee %}
-        <div class="payment-row"><span class="payment-row-label">EFT/Auto-Pay Reduces Fee</span><span class="payment-row-value">{{ payment_options.monthly.eft_reduces_fee }}</span></div>
-        {% endif %}
       </div>
       {% endif %}
     </div>
+    {% endif %}
 
-    {% if payment_options.show_paid_in_full_discount and payment_options.paid_in_full_discount %}
-    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 12px;">Paid-in-Full Discount</div>
+    {% if _has_pif %}
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Paid-in-Full Discount</div>
+    <div class="section-sub">Savings available when paying the full premium up front.</div>
 
     <div class="other-container r8">
       {% if payment_options.paid_in_full_discount.gross_premium %}
