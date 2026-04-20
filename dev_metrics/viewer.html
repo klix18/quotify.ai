@@ -23,7 +23,8 @@
     padding: 24px;
   }
   h1 { margin: 0 0 4px; color: var(--blue); font-size: 22px; }
-  h2 { margin: 24px 0 12px; font-size: 16px; color: var(--ink); }
+  h2 { margin: 0 0 6px; font-size: 18px; color: var(--blue); }
+  h3 { margin: 18px 0 8px; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.4px; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
   .card {
     background: var(--card);
@@ -74,8 +75,8 @@
   .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .stat-value { font-size: 22px; font-weight: 600; color: var(--blue); margin-top: 2px; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-  th { background: var(--accent-bg); color: var(--blue); font-weight: 600; position: sticky; top: 0; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--accent-bg); color: var(--blue); font-weight: 600; }
   tr:hover { background: #fafbfc; }
   .chip { display: inline-block; padding: 2px 8px; background: var(--accent-bg); color: var(--blue); border-radius: 10px; font-size: 11px; font-weight: 600; }
   .error {
@@ -89,30 +90,41 @@
   .ok { color: #059669; font-size: 12px; }
   details { margin-top: 4px; }
   summary { cursor: pointer; color: var(--blue); font-size: 11px; }
-  .manual-list { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .manual-list { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); margin-top: 4px; padding-left: 20px; }
   .manual-list li { margin: 2px 0; }
-  .chart-wrap { height: 280px; }
-  canvas { max-width: 100%; }
-  .design-badge { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); }
-  .filters { display: flex; gap: 10px; align-items: end; margin-bottom: 12px; flex-wrap: wrap; }
-  select {
-    padding: 7px 9px;
+  .design-tag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .design-desc {
+    width: 100%;
+    min-height: 140px;
+    padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: white;
-    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    resize: vertical;
+    color: var(--ink);
+    background: #fafbfc;
   }
-  .scroll { max-height: 540px; overflow: auto; border-radius: 6px; }
+  .design-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 4px;
+  }
+  .design-meta { font-size: 12px; color: var(--muted); }
+  .scroll { max-height: 540px; overflow: auto; border-radius: 6px; border: 1px solid var(--border); }
+  .section-sep { height: 8px; }
+  .badge-pill { display:inline-block; padding:2px 10px; border-radius:999px; background:var(--blue); color:white; font-size:11px; font-weight:700; letter-spacing:0.3px; }
+  .empty { text-align: center; padding: 40px; color: var(--muted); }
 </style>
 </head>
 <body>
 
 <h1>Quotify — Parse Metrics Viewer</h1>
 <div class="sub">
-  Dev-only. Not accessible from the main app. Compare parser latency +
-  accuracy across LLM / system designs. See
-  <a href="./SYSTEM_DESIGN.md">SYSTEM_DESIGN.md</a> for the current
-  orchestration description.
+  Dev-only. Each <b>Design</b> below is a distinct <code>system_design</code> tag
+  set in <code>frontend/src/devMetrics.js</code>. Change the tag to create a new design
+  — new parses are tagged to the new design and stop polluting the old one, so you
+  can compare orchestrations side-by-side.
 </div>
 
 <div class="card">
@@ -132,82 +144,64 @@
 </div>
 
 <div id="results" style="display:none;">
-  <div class="stats" id="stats"></div>
-
-  <div class="card">
-    <div class="filters">
-      <div>
-        <label>Insurance Type</label>
-        <select id="filterType" onchange="render()">
-          <option value="">All</option>
-          <option>homeowners</option>
-          <option>auto</option>
-          <option>dwelling</option>
-          <option>commercial</option>
-          <option>bundle</option>
-        </select>
-      </div>
-      <div>
-        <label>System Design</label>
-        <select id="filterDesign" onchange="render()">
-          <option value="">All</option>
-        </select>
-      </div>
-    </div>
-
-    <h2>Latency over time</h2>
-    <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
-  </div>
-
-  <div class="card">
-    <h2>Parse sessions</h2>
-    <div class="scroll">
-      <table id="sessionsTable">
-        <thead>
-          <tr>
-            <th>Parsed at</th>
-            <th>Type</th>
-            <th>PDFs</th>
-            <th>Latency (ms)</th>
-            <th># Manual (all)</th>
-            <th># Manual (non-client)</th>
-            <th>System Design</th>
-            <th>Manual Changes</th>
-          </tr>
-        </thead>
-        <tbody id="sessionsBody"></tbody>
-      </table>
-    </div>
-  </div>
+  <div class="stats" id="globalStats"></div>
+  <div id="designSections"></div>
 </div>
 
 <script>
 /* =========================================================================
- * Config + tiny Chart.js-free line chart (pure canvas, no external deps)
- * =========================================================================*/
+ * Quotify Parse Metrics Viewer — Design-partitioned layout.
+ *
+ * Layout:
+ *   Design N — <tag>
+ *     • description of the orchestration (editable, persisted to localStorage)
+ *     • per-insurance-type summary table (sessions + avg latency + avg manual edits)
+ *     • raw sessions table filtered to this design
+ *
+ * Sections are generated from DISTINCT system_design tags in the fetched
+ * rows. "Design N" is assigned by first-seen chronological order — the
+ * earliest tag is Design 1, the next new tag to appear is Design 2, etc.
+ * Displayed newest-first so the current run is on top.
+ * ========================================================================= */
 const STATE = {
   rows: [],       // raw rows from API
   sessions: [],   // joined by parse_id
 };
 
+/* Default descriptions for known design tags. When a new tag shows up for
+ * the first time the textarea is blank; you can type whatever you want and
+ * it persists to localStorage keyed by the tag. */
+const DEFAULT_DESCRIPTIONS = {
+  "baseline-2026-04-20": [
+    "3-pass Gemini pipeline with OpenAI fallback.",
+    "",
+    "Pass 0 (vision, gemini-2.5-flash-lite): detect carrier from page-1 logo,",
+    "  load matching carrier patch from skills/<type>/<carrier>.md.",
+    "Pass 1 (gemini-2.5-flash-lite): quick key:value streaming draft. Streams",
+    "  draft_patch events so the UI populates within ~1-2s.",
+    "Pass 2 (gemini-2.5-flash): strict JSON via response_schema — forces the",
+    "  model to emit the full per-type schema with a 0-1 confidence per leaf.",
+    "Pass 3 (gemini-2.5-flash): self-healing retry for fields with",
+    "  confidence < 0.45 (max 8 fields). Non-fatal.",
+    "",
+    "Fallback chain per pass: flash-lite → flash → flash-2.0 → flash-1.5,",
+    "then OpenAI GPT-4o-mini → GPT-4o if every Gemini fails.",
+    "",
+    "Skill layer: base skill + optional carrier patch + optional wind/hail",
+    "or bundle_separate supplement.",
+  ].join("\n"),
+};
+
 function getBackend() {
   let url = document.getElementById("backendUrl").value.trim();
-  // Normalise: drop trailing slash.
   url = url.replace(/\/+$/, "");
-  // If the user typed just a hostname (e.g. "api.example.com"), prepend
-  // https://. Without this, fetch() interprets the value as a relative
-  // path from the viewer's file:// origin and fails with "Failed to
-  // fetch" before a request ever leaves the browser.
   if (url && !/^https?:\/\//i.test(url)) {
     url = "https://" + url;
   }
   return url;
 }
-function getKey() {
-  return document.getElementById("apiKey").value.trim();
-}
+function getKey() { return document.getElementById("apiKey").value.trim(); }
 
-// Persist inputs to localStorage so you don't re-enter them every refresh.
 function loadInputs() {
   const u = localStorage.getItem("qm.backendUrl") || "";
   const k = localStorage.getItem("qm.apiKey") || "";
@@ -224,14 +218,8 @@ async function loadData() {
   const key = getKey();
   const status = document.getElementById("status");
   status.innerHTML = "";
-  if (!backend) {
-    status.innerHTML = '<div class="error">Please enter your Railway backend URL.</div>';
-    return;
-  }
-  if (!key) {
-    status.innerHTML = '<div class="error">Please enter the DEV_METRICS_API_KEY.</div>';
-    return;
-  }
+  if (!backend) { status.innerHTML = '<div class="error">Please enter your Railway backend URL.</div>'; return; }
+  if (!key)     { status.innerHTML = '<div class="error">Please enter the DEV_METRICS_API_KEY.</div>'; return; }
   saveInputs();
   status.innerHTML = '<span class="ok">Loading…</span>';
   try {
@@ -246,14 +234,10 @@ async function loadData() {
     const data = await resp.json();
     STATE.rows = data.rows || [];
     joinSessions();
-    populateDesignFilter();
     status.innerHTML = `<span class="ok">Loaded ${STATE.rows.length} row(s) / ${STATE.sessions.length} session(s).</span>`;
     document.getElementById("results").style.display = "block";
     render();
   } catch (err) {
-    // "Failed to fetch" from the browser is a black box — it covers CORS,
-    // DNS, TLS, offline, Cloudflare-challenged, and blocked-by-extension.
-    // Surface a hint so the developer knows where to look.
     const msg = String(err?.message || err);
     let hint = "";
     if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
@@ -268,7 +252,7 @@ async function loadData() {
       ].join("\n");
     }
     status.innerHTML =
-      `<div class="error">${msg}${hint ? "<pre>" + hint + "</pre>" : ""}</div>`;
+      `<div class="error">${escapeHtml(msg)}${hint ? "<pre>" + escapeHtml(hint) + "</pre>" : ""}</div>`;
   }
 }
 
@@ -295,61 +279,223 @@ function joinSessions() {
     }
   }
   STATE.sessions = Array.from(bucket.values())
-    .sort((a, b) => (b.parse_timestamp || b.quote_timestamp || "").localeCompare(a.parse_timestamp || a.quote_timestamp || ""));
+    .sort((a, b) => (b.parse_timestamp || b.quote_timestamp || "")
+      .localeCompare(a.parse_timestamp || a.quote_timestamp || ""));
 }
 
-function populateDesignFilter() {
-  const sel = document.getElementById("filterDesign");
-  const uniq = new Set();
-  STATE.sessions.forEach(s => { if (s.system_design) uniq.add(s.system_design); });
-  // Preserve "All" option and remove the rest
-  while (sel.options.length > 1) sel.remove(1);
-  Array.from(uniq).sort().forEach(v => {
-    const opt = document.createElement("option");
-    opt.value = v; opt.textContent = v;
-    sel.appendChild(opt);
-  });
-}
-
-function filtered() {
-  const t = document.getElementById("filterType").value;
-  const d = document.getElementById("filterDesign").value;
-  return STATE.sessions.filter(s => (!t || s.insurance_type === t) && (!d || s.system_design === d));
-}
+/* -------------------------------------------------------------------------
+ * Rendering
+ * ------------------------------------------------------------------------- */
 
 function render() {
-  const rows = filtered();
-  renderStats(rows);
-  renderTable(rows);
-  renderChart(rows);
+  renderGlobalStats();
+  renderDesignSections();
 }
 
-function renderStats(rows) {
-  const el = document.getElementById("stats");
+function renderGlobalStats() {
+  const rows = STATE.sessions;
+  const el = document.getElementById("globalStats");
+  const designs = new Set(rows.map(r => r.system_design).filter(Boolean));
   const withLatency = rows.filter(r => typeof r.latency_ms === "number");
   const avgLatency = withLatency.length
     ? Math.round(withLatency.reduce((a, b) => a + b.latency_ms, 0) / withLatency.length)
     : 0;
-  const p50 = percentile(withLatency.map(r => r.latency_ms), 50);
-  const p95 = percentile(withLatency.map(r => r.latency_ms), 95);
   const withQuote = rows.filter(r => typeof r.manual_changes_all_count === "number");
-  const avgAll = withQuote.length
-    ? (withQuote.reduce((a, b) => a + b.manual_changes_all_count, 0) / withQuote.length).toFixed(1)
-    : "—";
-  const avgNonClient = withQuote.length
-    ? (withQuote.reduce((a, b) => a + b.manual_changes_non_client_count, 0) / withQuote.length).toFixed(1)
-    : "—";
   el.innerHTML = `
-    <div class="stat"><div class="stat-label">Sessions</div><div class="stat-value">${rows.length}</div></div>
+    <div class="stat"><div class="stat-label">Designs</div><div class="stat-value">${designs.size}</div></div>
+    <div class="stat"><div class="stat-label">Sessions (all)</div><div class="stat-value">${rows.length}</div></div>
     <div class="stat"><div class="stat-label">With quote</div><div class="stat-value">${withQuote.length}</div></div>
-    <div class="stat"><div class="stat-label">Avg latency</div><div class="stat-value">${avgLatency || "—"} ms</div></div>
-    <div class="stat"><div class="stat-label">p50 latency</div><div class="stat-value">${p50 || "—"} ms</div></div>
-    <div class="stat"><div class="stat-label">p95 latency</div><div class="stat-value">${p95 || "—"} ms</div></div>
-    <div class="stat"><div class="stat-label">Avg manual (all)</div><div class="stat-value">${avgAll}</div></div>
-    <div class="stat"><div class="stat-label">Avg manual (non-client)</div><div class="stat-value">${avgNonClient}</div></div>
+    <div class="stat"><div class="stat-label">Avg latency (all)</div><div class="stat-value">${avgLatency || "—"} ms</div></div>
   `;
 }
 
+/* Build design sections. Ordinal "Design N" is assigned by first-seen
+ * chronology (earliest timestamp first = Design 1). Display order is
+ * reverse-chronological so the most recent design is on top. */
+function renderDesignSections() {
+  const container = document.getElementById("designSections");
+
+  if (!STATE.sessions.length) {
+    container.innerHTML = `<div class="card empty">No sessions yet. Do a parse in the app and reload.</div>`;
+    return;
+  }
+
+  // Bucket sessions by system_design (empty tag becomes "(untagged)")
+  const buckets = new Map();
+  for (const s of STATE.sessions) {
+    const tag = s.system_design || "(untagged)";
+    if (!buckets.has(tag)) buckets.set(tag, []);
+    buckets.get(tag).push(s);
+  }
+
+  // Compute first-seen timestamp per tag (for Design N ordinal)
+  const firstSeen = new Map();
+  for (const [tag, arr] of buckets) {
+    const min = arr.reduce((acc, s) => {
+      const t = s.parse_timestamp || s.quote_timestamp || "";
+      if (!acc || (t && t < acc)) return t || acc;
+      return acc;
+    }, null);
+    firstSeen.set(tag, min || "");
+  }
+
+  // Ordinal by chronology: oldest first
+  const chronoTags = Array.from(buckets.keys())
+    .sort((a, b) => (firstSeen.get(a) || "").localeCompare(firstSeen.get(b) || ""));
+  const ordinal = new Map();
+  chronoTags.forEach((tag, i) => ordinal.set(tag, i + 1));
+
+  // Display newest first
+  const displayTags = [...chronoTags].reverse();
+
+  container.innerHTML = displayTags.map(tag => {
+    const ordN = ordinal.get(tag);
+    const sessions = buckets.get(tag);
+    const first = firstSeen.get(tag);
+    const last = sessions.reduce((acc, s) => {
+      const t = s.parse_timestamp || s.quote_timestamp || "";
+      return (!acc || t > acc) ? t : acc;
+    }, "");
+    return `
+      <div class="card">
+        <div class="design-header">
+          <div>
+            <h2><span class="badge-pill">DESIGN ${ordN}</span> &nbsp; ${escapeHtml(tag)}</h2>
+            <div class="design-meta">
+              ${sessions.length} session${sessions.length === 1 ? "" : "s"}
+              · first seen ${escapeHtml(fmtDate(first))}
+              · latest ${escapeHtml(fmtDate(last))}
+            </div>
+          </div>
+        </div>
+
+        <h3>Orchestration flow</h3>
+        <textarea
+          class="design-desc"
+          data-tag="${escapeHtml(tag)}"
+          oninput="saveDesc(this)"
+          placeholder="Describe the LLM orchestration used for this design (models, passes, fallbacks, skills)…"
+        >${escapeHtml(getDesc(tag))}</textarea>
+
+        <h3>Average latency by insurance type</h3>
+        ${renderTypeSummary(sessions)}
+
+        <h3>Captured data</h3>
+        <div class="scroll">
+          ${renderSessionsTable(sessions)}
+        </div>
+      </div>
+      <div class="section-sep"></div>
+    `;
+  }).join("");
+}
+
+function renderTypeSummary(sessions) {
+  const byType = new Map();
+  for (const s of sessions) {
+    const t = s.insurance_type || "(unknown)";
+    if (!byType.has(t)) byType.set(t, []);
+    byType.get(t).push(s);
+  }
+  const rows = [...byType.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  if (!rows.length) return `<div class="empty">No sessions.</div>`;
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Insurance type</th>
+          <th>Sessions</th>
+          <th>Avg latency (ms)</th>
+          <th>p50 latency</th>
+          <th>p95 latency</th>
+          <th>Avg manual (all)</th>
+          <th>Avg manual (non-client)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(([type, arr]) => {
+          const lats = arr.map(s => s.latency_ms).filter(v => typeof v === "number");
+          const avgLat = lats.length ? Math.round(lats.reduce((a,b)=>a+b,0)/lats.length) : null;
+          const p50 = percentile(lats, 50);
+          const p95 = percentile(lats, 95);
+          const quotes = arr.filter(s => typeof s.manual_changes_all_count === "number");
+          const avgAll = quotes.length
+            ? (quotes.reduce((a,b)=>a+b.manual_changes_all_count,0)/quotes.length).toFixed(1)
+            : "—";
+          const avgNon = quotes.length
+            ? (quotes.reduce((a,b)=>a+b.manual_changes_non_client_count,0)/quotes.length).toFixed(1)
+            : "—";
+          return `<tr>
+            <td><span class="chip">${escapeHtml(type)}</span></td>
+            <td>${arr.length}</td>
+            <td>${avgLat != null ? avgLat.toLocaleString() : "—"}</td>
+            <td>${p50 ? p50.toLocaleString() : "—"}</td>
+            <td>${p95 ? p95.toLocaleString() : "—"}</td>
+            <td>${avgAll}</td>
+            <td>${avgNon}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderSessionsTable(sessions) {
+  if (!sessions.length) return `<div class="empty">No sessions.</div>`;
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Parsed at</th>
+          <th>Type</th>
+          <th>PDFs</th>
+          <th>Latency (ms)</th>
+          <th># Manual (all)</th>
+          <th># Manual (non-client)</th>
+          <th>Manual changes</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sessions.map(r => {
+          const ts = r.parse_timestamp || r.quote_timestamp || "";
+          const manual = Array.isArray(r.manual_changes) && r.manual_changes.length
+            ? `<details><summary>${r.manual_changes.length} change(s)</summary>
+               <ul class="manual-list">${r.manual_changes.map(m =>
+                 `<li><b>${escapeHtml(m.field || "")}</b> → ${escapeHtml(String(m.value ?? ""))}</li>`).join("")}</ul></details>`
+            : "—";
+          return `<tr>
+            <td>${escapeHtml(fmtDate(ts))}</td>
+            <td><span class="chip">${escapeHtml(r.insurance_type || "?")}</span></td>
+            <td>${r.pdf_count ?? "—"}</td>
+            <td>${r.latency_ms != null ? r.latency_ms.toLocaleString() : "—"}</td>
+            <td>${r.manual_changes_all_count ?? "—"}</td>
+            <td>${r.manual_changes_non_client_count ?? "—"}</td>
+            <td>${manual}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+/* -------------------------------------------------------------------------
+ * Description storage (per design tag, persisted in localStorage)
+ * ------------------------------------------------------------------------- */
+function descKey(tag) { return "qm.desc." + tag; }
+function getDesc(tag) {
+  const stored = localStorage.getItem(descKey(tag));
+  if (stored !== null) return stored;
+  return DEFAULT_DESCRIPTIONS[tag] || "";
+}
+function saveDesc(el) {
+  const tag = el.getAttribute("data-tag");
+  if (!tag) return;
+  localStorage.setItem(descKey(tag), el.value);
+}
+
+/* -------------------------------------------------------------------------
+ * Utilities
+ * ------------------------------------------------------------------------- */
 function percentile(arr, p) {
   if (!arr || !arr.length) return 0;
   const sorted = [...arr].sort((a, b) => a - b);
@@ -357,136 +503,14 @@ function percentile(arr, p) {
   return Math.round(sorted[idx]);
 }
 
-function renderTable(rows) {
-  const body = document.getElementById("sessionsBody");
-  body.innerHTML = rows.map(r => {
-    const ts = r.parse_timestamp || r.quote_timestamp || "";
-    const manual = Array.isArray(r.manual_changes) && r.manual_changes.length
-      ? `<details><summary>${r.manual_changes.length} change(s)</summary>
-         <ul class="manual-list">${r.manual_changes.map(m =>
-           `<li><b>${escapeHtml(m.field || "")}</b> → ${escapeHtml(String(m.value ?? ""))}</li>`).join("")}</ul></details>`
-      : "—";
-    return `<tr>
-      <td>${escapeHtml(ts)}</td>
-      <td><span class="chip">${escapeHtml(r.insurance_type || "?")}</span></td>
-      <td>${r.pdf_count ?? "—"}</td>
-      <td>${r.latency_ms != null ? r.latency_ms.toLocaleString() : "—"}</td>
-      <td>${r.manual_changes_all_count ?? "—"}</td>
-      <td>${r.manual_changes_non_client_count ?? "—"}</td>
-      <td><span class="design-badge">${escapeHtml(r.system_design || "—")}</span></td>
-      <td>${manual}</td>
-    </tr>`;
-  }).join("") || `<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:24px;">No sessions match the filters.</td></tr>`;
-}
-
-/* ----- Tiny no-dep line chart (latency by time) ---------------------------- */
-function renderChart(rows) {
-  const canvas = document.getElementById("latencyChart");
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth;
-  const h = 280;
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width = w + "px";
-  canvas.style.height = h + "px";
-  const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
-
-  const points = rows
-    .filter(r => typeof r.latency_ms === "number" && r.parse_timestamp)
-    .map(r => ({ t: new Date(r.parse_timestamp).getTime(), y: r.latency_ms, type: r.insurance_type }))
-    .sort((a, b) => a.t - b.t);
-
-  const pad = { l: 50, r: 16, t: 16, b: 32 };
-  const plotW = w - pad.l - pad.r;
-  const plotH = h - pad.t - pad.b;
-
-  // Axes
-  ctx.strokeStyle = "#d1d5db";
-  ctx.beginPath();
-  ctx.moveTo(pad.l, pad.t);
-  ctx.lineTo(pad.l, pad.t + plotH);
-  ctx.lineTo(pad.l + plotW, pad.t + plotH);
-  ctx.stroke();
-
-  if (points.length === 0) {
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "13px -apple-system, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("No data points", w / 2, h / 2);
-    return;
-  }
-
-  const minT = points[0].t;
-  const maxT = points[points.length - 1].t || (minT + 1);
-  const maxY = Math.max(...points.map(p => p.y), 1);
-
-  // Grid + y labels
-  ctx.fillStyle = "#6b7280";
-  ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
-  ctx.textAlign = "right";
-  const steps = 4;
-  for (let i = 0; i <= steps; i++) {
-    const y = pad.t + plotH - (plotH * i / steps);
-    const val = Math.round(maxY * i / steps);
-    ctx.strokeStyle = "#f3f4f6";
-    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + plotW, y); ctx.stroke();
-    ctx.fillText(val + " ms", pad.l - 6, y + 4);
-  }
-
-  // Colour per insurance type
-  const palette = {
-    homeowners: "#0451BD",
-    auto: "#16a34a",
-    dwelling: "#f59e0b",
-    commercial: "#a855f7",
-    bundle: "#e11d48",
-  };
-
-  // Group by type, draw each as line
-  const byType = new Map();
-  for (const p of points) {
-    if (!byType.has(p.type)) byType.set(p.type, []);
-    byType.get(p.type).push(p);
-  }
-  for (const [type, pts] of byType) {
-    ctx.strokeStyle = palette[type] || "#6b7280";
-    ctx.fillStyle = palette[type] || "#6b7280";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    pts.forEach((p, i) => {
-      const x = pad.l + (maxT === minT ? plotW / 2 : plotW * (p.t - minT) / (maxT - minT));
-      const y = pad.t + plotH - (plotH * p.y / maxY);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    // Dots
-    for (const p of pts) {
-      const x = pad.l + (maxT === minT ? plotW / 2 : plotW * (p.t - minT) / (maxT - minT));
-      const y = pad.t + plotH - (plotH * p.y / maxY);
-      ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  // X-axis labels
-  ctx.fillStyle = "#6b7280";
-  ctx.textAlign = "center";
-  ctx.fillText(new Date(minT).toLocaleString(), pad.l + 40, pad.t + plotH + 18);
-  ctx.fillText(new Date(maxT).toLocaleString(), pad.l + plotW - 40, pad.t + plotH + 18);
-
-  // Legend
-  ctx.textAlign = "left";
-  let lx = pad.l + 10;
-  const ly = pad.t + 14;
-  for (const type of byType.keys()) {
-    ctx.fillStyle = palette[type] || "#6b7280";
-    ctx.fillRect(lx, ly - 8, 10, 10);
-    ctx.fillStyle = "#20272D";
-    ctx.fillText(type, lx + 14, ly + 1);
-    lx += ctx.measureText(type).width + 34;
+function fmtDate(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleString();
+  } catch (_) {
+    return iso;
   }
 }
 
@@ -505,7 +529,7 @@ function downloadJsonl() {
 }
 
 function escapeHtml(s) {
-  return String(s)
+  return String(s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
