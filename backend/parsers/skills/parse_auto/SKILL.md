@@ -1,5 +1,10 @@
+---
+name: parse_auto
+description: Use this skill when parsing an auto insurance quote PDF
+---
+
 # Auto Insurance Extraction Skill
-> VERSION: 1.0
+> VERSION: 2.0
 > TYPE: auto
 
 ## Overview
@@ -111,3 +116,23 @@ totals.
 - Format all dates as MM/DD/YYYY.
 - Do NOT invent data. If not in the document, use "".
 - Use "" for strings, [] for arrays when a field cannot be found.
+
+## Carrier-Specific Overrides
+Detect the carrier from the PDF logo / letterhead. When the carrier matches one
+of the sections below, apply its overrides ON TOP of the base rules above. The
+base rules still apply for any field not mentioned in the override section.
+
+### Progressive
+Layout Overrides:
+- Quote format: **"Quote Summary"** on page 1, driver/vehicle detail pages following.
+- Premium may be **"6-Month Premium"** — look for annual equivalent too.
+  Do NOT use "Total Due Today" (includes down payment).
+- Per-vehicle premium breakdown on later pages.
+- **"Excluded"** drivers listed separately — still capture with a note.
+
+Label Overrides:
+- "Garaging Address" → per-vehicle field if different from insured address.
+- "PIP" in no-fault states → `medical_payments`.
+
+Extra Fields:
+- **"Discount Summary"** section → capture as comma-separated string in `discounts` field.

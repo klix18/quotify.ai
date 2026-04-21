@@ -12,19 +12,19 @@ flowchart TD
     subgraph UNIFIED["unified_parser_api.py — Single Entry Point"]
         direction TB
         EP["📡 /api/parse-quote\naccepts any insurance_type"]:::core
-        SL["📚 skill_loader.py\nload + cache skills/{type}.md"]:::skill
+        SL["📚 skill_loader.py\nload + cache skills/parse_{type}/SKILL.md"]:::skill
         SR["🗂️ schema_registry.py\nschema + normalizer for type"]:::schema
         EP --> SL
         EP --> SR
     end
 
-    subgraph SKILLS["Skills System  ·  skills/*.md"]
+    subgraph SKILLS["Skills System  ·  skills/parse_*/SKILL.md (v2)"]
         direction LR
-        S1["🏠 homeowners.md\nv1.0"]:::skill
-        S2["🚗 auto.md\nv1.0"]:::skill
-        S3["🏢 dwelling.md\nv1.0"]:::skill
-        S4["🏗️ commercial.md\nv1.0"]:::skill
-        S5["📦 bundle.md\nv1.0\n@include homeowners\n@include auto"]:::skill
+        S1["🏠 parse_homeowners/SKILL.md\nv2.0 · carriers baked in"]:::skill
+        S2["🚗 parse_auto/SKILL.md\nv2.0 · carriers baked in"]:::skill
+        S3["🏢 parse_dwelling/SKILL.md\nv2.0 · carriers baked in"]:::skill
+        S4["🏗️ parse_commercial/SKILL.md\nv2.0 · base only"]:::skill
+        S5["📦 parse_bundle/SKILL.md\nv2.0\n@include homeowners\n@include auto"]:::skill
     end
 
     subgraph PASS1["Pass 1 — Quick Draft  ·  gemini-2.5-flash-lite"]
@@ -37,7 +37,7 @@ flowchart TD
 
     subgraph PASS2["Pass 2 — Strict JSON  ·  gemini-2.5-flash"]
         direction LR
-        P2SYS["System:\nCORE_PROMPT\n+ full skill content injected"]:::model
+        P2SYS["System:\nCORE_PROMPT\n+ full SKILL.md (carrier overrides baked in)"]:::model
         P2USR["User:\n'Extract all {type} fields'\nresponse_schema = type schema"]:::model
         P2OUT["→ full JSON\n→ final_patch events\n→ normalized result"]:::output
         P2SYS --- P2USR --> P2OUT

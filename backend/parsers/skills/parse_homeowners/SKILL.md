@@ -1,5 +1,10 @@
+---
+name: parse_homeowners
+description: Use this skill when parsing a homeowners insurance quote PDF
+---
+
 # Homeowners Insurance Extraction Skill
-> VERSION: 1.0
+> VERSION: 2.0
 > TYPE: homeowners
 
 ## Overview
@@ -66,3 +71,45 @@ Extract these fields as quickly as possible (key: value, one per line):
 - Preserve money formatting with a leading $: "$1,015.00", "$153,814", "$2,500".
 - Format all dates as MM/DD/YYYY. Return partial dates as-is if only partial info is shown.
 - For deductible fields combining percent and dollars, preserve both: "2% - $3,076".
+
+## Carrier-Specific Overrides
+Detect the carrier from the PDF logo / letterhead. When the carrier matches one
+of the sections below, apply its overrides ON TOP of the base rules above. The
+base rules still apply for any field not mentioned in the override section.
+
+### SageSure
+Layout Overrides:
+- SageSure places through multiple admitted carriers. Ignore any underlying carrier
+  name in small print — treat the document as SageSure.
+- Premium is in **"Quote Summary"** on the last page. Use **"Annual Premium"**, NOT
+  "Total Policy Cost" (which includes optional fees and installment charges).
+- **"Property Information"** section always shows: construction_type, year_built,
+  protection_class, roof_shape, roof_material.
+
+Label Overrides:
+- "Sinkhole" deductible may appear in FL policies.
+- "Replacement Cost Value" annotation next to Coverage C → contents are on RC basis.
+
+Common Endorsements:
+- "Screened Enclosure" → sublimit for screened lanais/pools.
+- "Law & Ordinance" → percentage (10% / 25%).
+- "Equipment Breakdown Protection".
+- "Water Backup and Sump Overflow" → sublimit.
+
+### Tower Hill
+Layout Overrides:
+- Rating characteristics (year_built, construction_type, roof_year, protection_class, BCEG)
+  are in a **"Rating Worksheet"** on a later page. These override front-page values.
+- **"Program:"** field → policy form (HO-3 is most common).
+- Premium: **"Estimated Annual Premium"** on declarations page. A **"Premium Breakdown"**
+  table on page 2 may show surcharges/credits.
+
+Label Overrides:
+- Hurricane deductible is a **percentage of Coverage A** (common: 2%, 5%).
+- Wind/Hail may be listed separately from Hurricane — capture both.
+
+Common Endorsements:
+- "Replacement Cost on Personal Property" → RC vs ACV toggle.
+- "Water Backup" → capture sublimit.
+- "Screen Enclosure" → coverage amount.
+- "Ordinance or Law" → percentage (10% / 25% / 50%).

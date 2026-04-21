@@ -175,8 +175,10 @@ const DEFAULT_DESCRIPTIONS = {
   "baseline-2026-04-20": [
     "3-pass Gemini pipeline with OpenAI fallback.",
     "",
-    "Pass 0 (vision, gemini-2.5-flash-lite): detect carrier from page-1 logo,",
-    "  load matching carrier patch from skills/<type>/<carrier>.md.",
+    "Pass 0 (vision, gemini-2.5-flash-lite): detect carrier from page-1 logo.",
+    "  In v2 skills library, carrier-specific overrides are baked into each",
+    "  base parse_<type>/SKILL.md, so the detected carrier_key is recorded",
+    "  for observability and no longer swaps prompt content.",
     "Pass 1 (gemini-2.5-flash-lite): quick key:value streaming draft. Streams",
     "  draft_patch events so the UI populates within ~1-2s.",
     "Pass 2 (gemini-2.5-flash): strict JSON via response_schema — forces the",
@@ -187,8 +189,8 @@ const DEFAULT_DESCRIPTIONS = {
     "Fallback chain per pass: flash-lite → flash → flash-2.0 → flash-1.5,",
     "then OpenAI GPT-4o-mini → GPT-4o if every Gemini fails.",
     "",
-    "Skill layer: base skill + optional carrier patch + optional wind/hail",
-    "or bundle_separate supplement.",
+    "Skill layer (v2): parse_<type>/SKILL.md (carrier overrides baked in) +",
+    "optional parse_wind_hail or parse_bundle_separate supplement.",
   ].join("\n"),
 };
 

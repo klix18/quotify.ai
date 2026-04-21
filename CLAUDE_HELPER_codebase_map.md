@@ -31,12 +31,12 @@ quotify-ai/
 │   ├── parsers/
 │   │   ├── unified_parser_api.py   Single POST /api/parse-quote endpoint; 3-pass pipeline
 │   │   ├── schema_registry.py      JSON schemas + keys for all insurance types
-│   │   ├── skill_loader.py         Loads base .md + carrier patch (+ @include resolution)
-│   │   ├── carrier_detector.py     Vision pass to identify carrier from logo
+│   │   ├── skill_loader.py         Loads parse_<type>/SKILL.md (+ @include resolution)
+│   │   ├── carrier_detector.py     Vision pass to identify carrier from logo (legacy; carriers now baked into SKILL.md)
 │   │   ├── post_process.py         Schema-driven default filling + confidence flattening
 │   │   ├── _model_fallback.py      Gemini model-chain fallback + OpenAI cross-provider failover
 │   │   ├── _openai_fallback.py     OpenAI Responses API streaming/gen fallback path
-│   │   └── skills/*.md             Prompt skills per insurance type (+ carrier sub-dirs)
+│   │   └── skills/parse_<type>/SKILL.md  Prompt skill per insurance type (YAML frontmatter + baked-in carrier overrides)
 │   ├── fillers/                Five near-identical PDF generators (one per insurance type)
 │   │   └── *_filler_api.py     Jinja2 → Chromium PDF → qpdf → DB store
 │   ├── skills/                 Analytics chatbot skill markdown (admin + advisor scope)
@@ -1142,5 +1142,84 @@ trade-offs (latency vs. manual-edit count across different designs).
 - **If you rename a parse function or change its file,** re-check the
   `__devSession` block is still in scope across its try/finally — it
   lives in the function body above the try, not inside it.
+
+### Manual Changes Leaderboard closed-state height match (2026-04-20)
+
+The admin dashboard pairs **Team Leaderboard** (left) and **Manual Changes
+Leaderboard** (right) in a `1fr 1fr` grid. Team Leaderboard is a full
+`<table>` with a 36px `<thead>` and 56px avatar rows (12px+12px padding +
+32px avatar), so 5 rows ≈ 312px tall. Manual Changes Leaderboard rows are
+a 13px label + 8px bar with 10px gaps, so 5 rows ≈ 165px tall — leaving
+~150px of empty vertical space on the right when collapsed.
+
+Fix in `AdminDashboard.jsx:2327`: the collapsed `limit` for
+`ManualChangesLeaderboard` is now **9** (was 5). Expanded limit unchanged
+at 15. Inline comment at the call site explains the asymmetry so a future
+refactor doesn't re-symmetrize the two caps and re-introduce the gap.
+
+### Parser skills library v2 — folder redesign + baked-in carrier overrides (2026-04-20)
+
+**Context.** The v1 skills library had base `<type>.md` files at the root
+of `backend/parsers/skills/` and separate carrier patch files under
+`backend/parsers/skills/<type>/<carrier_key>.md`. Patches were merged at
+load time by `load_skill_with_carrier(type, carrier_key)` which in turn
+relied on `carrier_detector.detect_carrier(...)` (a vision Pass 0 on
+Gemini flash-lite) to choose the carrier. Each patch was only ~20 lines /
+<1 KB, and carrier detection added a full LLM round-trip to every parse.
+
+**What changed.** The skills library now follows the standard "skill
+folder" shape (one directory per skill, containing a `SKILL.md` with YAML
+frontmatter). Every carrier patch is concatenated into its parent base
+skill under a `## Carrier-Specific Overrides` section. New layout:
+
+```
+backend/parsers/skills/
+  parse_homeowners/SKILL.md       ← base + SageSure + Tower Hill overrides
+  parse_auto/SKILL.md             ← base + Progressive overrides
+  parse_dwelling/SKILL.md         ← base + 6 carrier overrides (american_modern,
+                                    jj, markel, ncjua, sagesure, tower_hill)
+  parse_commercial/SKILL.md       ← base only (no carrier patches existed)
+  parse_bundle/SKILL.md           ← uses > @include homeowners / > @include auto
+  parse_bundle_separate/SKILL.md  ← supplement for two-PDF bundle mode
+  parse_wind_hail/SKILL.md        ← supplement for wind/hail second PDF
+  DELETE_<old>.md, DELETE_<old>/  ← marked for deletion in a follow-up commit
+```
+
+Each `SKILL.md` starts with:
+```yaml
+---
+name: parse_<type>
+description: Use this skill when parsing a <type> insurance quote PDF
+---
+```
+followed by the body, which still carries `> VERSION: 2.0` and `> TYPE:
+<type>` metadata lines for `get_skill_version()` to parse.
+
+**skill_loader.py changes.** Path resolution moved from
+`SKILLS_DIR / f"{type}.md"` to `SKILLS_DIR / f"parse_{type}" / "SKILL.md"`.
+New `_strip_frontmatter()` helper removes the YAML block before returning
+the body (so the LLM never sees it). `load_skill_with_carrier(type,
+carrier_key)` is kept for API stability but now returns
+`(load_skill(type), False)` — patches are already baked into the base.
+`list_carrier_patches(...)` always returns `[]`. `_resolve_includes()`
+was updated to look at the new path shape for `> @include <type>`
+directives (used only by `parse_bundle`).
+
+**Zero blast radius on callers.** `unified_parser_api.py` still imports
+the same four names (`load_skill`, `load_skill_with_carrier`,
+`get_skill_version`, `get_quick_pass_fields`) and uses them identically.
+Frontend (`QuotifyHome.jsx`, `trackEvent.js`), DB column
+(`parse_metrics.skill_version`), and `track_api.py` only read a
+`skill_version` STRING — they don't care about filesystem layout.
+The separate analytics chatbot skills directory at `backend/skills/`
+is a different system and was NOT touched.
+
+**Why this is load-bearing for Design 2.** Because all carrier overrides
+are now inside each base SKILL.md and the prompt is tiny (~13 KB for
+bundle, smaller for singletons), we can ship the entire skill as a
+prompt-cached system instruction and drop the Pass 0 carrier detection
+round-trip entirely. `carrier_detector.py` will become dead code in the
+Design 2 commit — for now it's left in place and still imported, but it
+no longer selects different skill content.
 
 

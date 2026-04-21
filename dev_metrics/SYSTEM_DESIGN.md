@@ -27,20 +27,24 @@ download the full dataset as JSONL.
 
 A single endpoint (`POST /api/parse-quote`) runs a **3-pass Gemini pipeline**
 (quick draft → strict JSON → self-healing) over the uploaded PDF, with an
-upfront **vision pass** for carrier detection, a **skill + carrier-patch**
-prompt layer, and an **OpenAI fallback** that kicks in if every Gemini model
-in the chain fails.
+upfront **vision pass** for carrier detection (observability only in v2),
+a **single-file SKILL.md** prompt layer (carrier-specific overrides are
+baked directly into the base skill), and an **OpenAI fallback** that kicks
+in if every Gemini model in the chain fails.
 
 ---
 
 ## The passes (in order)
 
-### Pass 0 — Carrier detection (vision)
+### Pass 0 — Carrier detection (vision, observability only in v2)
 - Model: `gemini-2.5-flash-lite` (vision call on page 1)
 - Purpose: identify the carrier from its logo (e.g. "frontline",
-  "dairyland", "progressive") and load the matching carrier patch
-  (`backend/parsers/skills/<type>/<carrier_key>.md`) to append to the base
-  skill before the real extraction starts.
+  "dairyland", "progressive"). In the v2 skills library (2026-04-20+),
+  carrier-specific overrides are **baked directly** into each base
+  `parse_<type>/SKILL.md` under a `## Carrier-Specific Overrides`
+  section, so the detected `carrier_key` no longer changes what prompt
+  content is sent to the model — it is recorded in `parse_metrics` for
+  observability and future routing decisions only.
 - Cost: ~1 small call per parse.
 
 ### Pass 1 — Quick draft (key:value streaming)
@@ -54,8 +58,9 @@ in the chain fails.
 
 ### Pass 2 — Strict JSON (structured output)
 - Model: `gemini-2.5-flash`
-- System prompt: `CORE_SYSTEM_PROMPT` + the full merged skill (base +
-  carrier patch + any wind/hail or bundle-separate supplement).
+- System prompt: `CORE_SYSTEM_PROMPT` + the full `parse_<type>/SKILL.md`
+  (carrier overrides baked in) + any wind/hail or bundle-separate
+  supplement when applicable.
 - User prompt: "Extract all fields..." with multi-PDF boundary wording when
   applicable.
 - `response_schema`: a per-insurance-type JSON schema from
@@ -96,17 +101,21 @@ attached with the same boundary-marker text in both providers.
 
 ---
 
-## Skill layer
+## Skill layer (v2 — folder per type)
 
-- Base skill: `backend/parsers/skills/<type>.md`. Loaded via
-  `skill_loader.load_skill(...)`. Supports `@include other-type` for
-  composition (e.g. `bundle.md` includes both `homeowners` and `auto`).
-- Carrier patch: `backend/parsers/skills/<type>/<carrier_key>.md`.
-  Optional. Appended after the base skill when the carrier is detected.
+- Skill file: `backend/parsers/skills/parse_<type>/SKILL.md`. Loaded via
+  `skill_loader.load_skill(...)`. Each file begins with a YAML
+  frontmatter block (`name` + `description`) that is stripped before the
+  body is sent to the model. Supports `> @include <other-type>` for
+  composition (e.g. `parse_bundle/SKILL.md` includes both `homeowners`
+  and `auto`).
+- Carrier-specific overrides: baked directly into each base SKILL.md
+  under a `## Carrier-Specific Overrides` section (no separate patch
+  files). Adding a new carrier quirk = editing the base SKILL.md.
 - Supplements (conditionally appended):
-  - `skills/wind_hail.md` — when a separate wind/hail PDF is attached.
-  - `skills/bundle_separate.md` — when Bundle is uploaded as two separate
-    PDFs (homeowners + auto).
+  - `skills/parse_wind_hail/SKILL.md` — when a separate wind/hail PDF is attached.
+  - `skills/parse_bundle_separate/SKILL.md` — when Bundle is uploaded as
+    two separate PDFs (homeowners + auto).
 
 ---
 
@@ -158,7 +167,8 @@ they'd otherwise dominate the noise in the "accuracy" signal.
 - Healing threshold: same file — `HEALING_THRESHOLD`, `HEALING_MAX_FIELDS`.
 - System prompts: same file — `QUICK_PASS_SYSTEM_PROMPT`,
   `CORE_SYSTEM_PROMPT`.
-- Skill content: `backend/parsers/skills/*.md`.
+- Skill content: `backend/parsers/skills/parse_<type>/SKILL.md` (carrier
+  overrides live under `## Carrier-Specific Overrides` in each file).
 - Model fallback chain: `backend/parsers/_model_fallback.py` —
   `DEFAULT_QUICK_FALLBACKS`, `DEFAULT_FINAL_FALLBACKS`.
 - OpenAI fallback chain: `backend/parsers/_openai_fallback.py`.

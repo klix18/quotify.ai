@@ -2324,7 +2324,12 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
                 {(expanded) => <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} clerkUsersList={clerkUsersList} onSelectUser={setSelectedUser} limit={expanded ? 15 : 5} />}
               </Section>
               <Section title="Manual Changes Leaderboard" expandable>
-                {(expanded) => <ManualChangesLeaderboard data={manualChanges?.leaderboard} limit={expanded ? 15 : 5} />}
+                {/* Closed-state limit is 9 (not 5) because the sibling Team
+                    Leaderboard on the left — a full <table> with a thead and
+                    56px avatar rows — runs ~150px taller than 5 manual-change
+                    rows would. Matching the visual weight of the left card
+                    keeps the side-by-side grid from looking lopsided. */}
+                {(expanded) => <ManualChangesLeaderboard data={manualChanges?.leaderboard} limit={expanded ? 15 : 9} />}
               </Section>
             </div>
 

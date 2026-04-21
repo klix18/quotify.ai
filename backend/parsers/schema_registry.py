@@ -11,7 +11,8 @@ Post-processing is handled generically by parsers/post_process.py
 which walks the schema to fill defaults. No per-type normalizers needed.
 
 Adding a new insurance type: define its schema here,
-then add a skills/{type}.md skill file. That's it.
+then add a skills/parse_{type}/SKILL.md skill file (with YAML frontmatter
+``name`` + ``description``). That's it.
 """
 
 from __future__ import annotations

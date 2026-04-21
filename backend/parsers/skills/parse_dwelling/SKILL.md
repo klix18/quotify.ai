@@ -1,5 +1,10 @@
+---
+name: parse_dwelling
+description: Use this skill when parsing a dwelling (DP1/DP2/DP3) insurance quote PDF
+---
+
 # Dwelling Insurance Extraction Skill
-> VERSION: 1.0
+> VERSION: 2.0
 > TYPE: dwelling
 
 ## Overview
@@ -142,3 +147,92 @@ three as "".
   "Included" as a limit value.
 - Each property is a separate array element.
 - The premium_summary array must have one entry per property in the same order.
+
+## Carrier-Specific Overrides
+Detect the carrier from the PDF logo / letterhead. When the carrier matches one
+of the sections below, apply its overrides ON TOP of the base rules above. The
+base rules still apply for any field not mentioned in the override section.
+
+### American Modern
+Layout Overrides:
+- **"Dwelling Details"** section contains year_built, construction_type, roof_year.
+- Coverages are listed WITHOUT Coverage A/B/C labels — just "Dwelling", "Other Structures", etc.
+- **"Policy Type: Dwelling Special"** = DP3.
+- "Annual Policy Premium" is the base total; "Total Estimated Cost" includes fees — use
+  "Total Estimated Cost" as `total_premium`.
+
+Label Overrides:
+- "Loss of Rents" → `fair_rental_value_limit` (rental property variant).
+- "Fair Rental Value" → `fair_rental_value_limit` (owner-occupied variant).
+- "All Peril Deductible" → `aop_deductible`.
+- Wind/Hail percentage deductible shown as "X% Wind/Hail" — does NOT separate Hurricane from Wind/Hail.
+
+Extra Fields:
+- "Occupancy" field: Owner / Tenant / Vacant → `occupancy`.
+- "Roof Material" → `roof_material` (if present in the schema).
+
+### J&J / Great Lakes
+Layout Overrides:
+- Coverage table uses **"COVERAGE A - DWELLING (RCV)"** format with LIMIT and PREMIUM columns.
+- **"RATING FACTORS & UNDERWRITING INFORMATION"** section (bottom of page or page 2) has:
+  policy_form, occupancy, construction_type, year_built, roof_year.
+  Always prefer these values over any shown elsewhere.
+- Quotes may show multiple options (Option A / Option B) — extract the selected/highlighted
+  option, defaulting to Option A if unclear.
+
+Label Overrides:
+- "Bldg" / "Building" → `dwelling_limit`.
+- "OtherStr" / "Other Structures" → `other_structures_limit`.
+- "Pers Prop" / "PP" → `personal_property_limit`.
+- "ALE" (Additional Living Expense) → `fair_rental_value_limit`.
+- "Med Pay" → `medical_payments_limit`.
+- "Proposed Insured" → `named_insured` (not "Named Insured").
+- "Risk Address" / "Location Address" → `property_address`.
+- "Wind/Hurricane Deductible" → combined wind and hurricane deductible.
+- "Year of Roofing Updates" → `roof_year`.
+
+### Markel / Emerald Bay
+Layout Overrides:
+- **"COVERAGE AND PREMIUM DETAILS"** table on page 1–2 has coverages.
+- **"LOCATION DETAILS"** table (often page 3) has: year_built, construction_type,
+  occupancy, roof_year. Always prefer this table over any front-page values.
+- Policy form is in the **"Effective Date / Expiration Date / Policy Form"** row.
+- May appear under carrier names "RPS", "Emerald Bay", or "Lloyd's" — all normalize to markel.
+
+### NCJUA / FAIR Plan
+Layout Overrides:
+- Simple text layout, NOT a table. Coverages listed as plain text lines:
+  "A - Dwelling $X", "B - Other Structures $X", etc.
+- Single deductible line: **"Deductible: All Perils $X"** → `aop_deductible`.
+- Policy form labeled **"Policy Form:"** as plain text.
+- Premium is the total shown at the bottom of the quote, no separate premium breakdown.
+
+### SageSure
+Layout Overrides:
+- SageSure places policies through multiple admitted carriers. The underlying carrier
+  name (e.g. "Homeowners of America") may appear in small print — ignore it.
+- Coverages are in a standard table on page 1.
+- Payment Plans: **"Full Plan"**, **"2-Pay Plan"**, **"4-Pay Plan"**, **"10-Pay Plan"**.
+  Map: Full Plan → full_pay, 2-Pay → two_pay, 4-Pay → four_pay, 10-Pay → monthly.
+- **Rating & Underwriting** info is on page 2 as a text paragraph (not a table).
+- Premium is in **"Quote Summary"** on the last page. Use "Annual Premium", NOT
+  "Total Policy Cost" (which includes optional fees).
+
+Label Overrides:
+- "Sinkhole" deductible may appear in FL policies → `sinkhole_deductible` (if in schema).
+- "Distance to Coast" → `distance_to_coast` (if in schema).
+
+### Tower Hill
+Layout Overrides:
+- Rating characteristics (year_built, construction_type, roof_year, occupancy, policy_form)
+  are in a small table labeled **"Rating Characteristics:"** at the BOTTOM of page 1.
+  These override any values shown elsewhere — always prefer this table.
+- The **"Program:"** field in that table contains the policy form (e.g. "DP-3" → "DP3").
+- Premium is labeled **"Estimated Annual Premium"** on the declarations page.
+  A summary table with **"Total Due"** on page 2–3 is the most reliable figure.
+
+Label Overrides:
+- "Coverage A – Dwelling" → `dwelling_limit`.
+- "Coverage D – Loss of Use" may appear as **"Fair Rental Value"** → `fair_rental_value_limit`.
+- Wind/Hail deductible may be listed separately from Hurricane — capture both.
+- Hurricane deductible is a **percentage of Coverage A** (e.g. "2%").

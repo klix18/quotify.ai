@@ -1,22 +1,27 @@
+---
+name: parse_bundle_separate
+description: Supplemental skill applied when a bundle is uploaded as two separate PDFs (one homeowners, one auto)
+---
+
 # Bundle — Separate-Mode Supplemental Skill
-> VERSION: 1.2
+> VERSION: 2.0
 > TYPE: bundle_separate
 
 ## Overview
-This skill is a **supplement** that is appended to the base `bundle` skill
+This skill is a **supplement** that is appended to the base `parse_bundle` skill
 when the user has uploaded TWO separate PDFs (one homeowners quote, one auto
 quote) instead of a single combined bundle document.
 
 This skill is NEVER the primary skill. It is injected AFTER the bundle
-skill (and after any carrier patch) to give the model explicit guidance
-about which PDF contains which policy's data — otherwise the model
-treats both PDFs as one combined document and under-extracts auto.
+skill to give the model explicit guidance about which PDF contains which
+policy's data — otherwise the model treats both PDFs as one combined
+document and under-extracts auto.
 
 ## PDF Ordering — READ THIS CAREFULLY
 You are receiving **TWO PDFs** in this call. Their order matters:
 
 1. **PDF #1 (the FIRST attachment after the prompt)** is the
-   **HOMEOWNERS quote**. Apply homeowners.md rules to PDF #1 to extract
+   **HOMEOWNERS quote**. Apply homeowners rules to PDF #1 to extract
    these schema fields:
    - `dwelling`, `other_structures`, `personal_property`, `loss_of_use`
    - `personal_liability`, `medical_payments`
@@ -26,7 +31,7 @@ You are receiving **TWO PDFs** in this call. Their order matters:
    - `total_premium` and `home_premium` (see premium rules below)
 
 2. **PDF #2 (the SECOND attachment)** is the **AUTO quote**. Apply
-   auto.md rules to PDF #2 to extract these schema fields:
+   auto rules to PDF #2 to extract these schema fields:
    - `policy_term` (exactly "6-Month", "12-Month", or "Unknown")
    - `drivers` (array — capture EVERY driver listed on PDF #2)
    - `vehicles` (array — capture EVERY vehicle listed on PDF #2, with

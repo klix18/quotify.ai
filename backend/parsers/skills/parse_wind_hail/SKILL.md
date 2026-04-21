@@ -1,5 +1,10 @@
+---
+name: parse_wind_hail
+description: Supplemental skill applied when a second wind/hail-only PDF is uploaded alongside a primary homeowners or dwelling quote
+---
+
 # Wind / Hail Supplemental Extraction Skill
-> VERSION: 1.0
+> VERSION: 2.0
 > TYPE: wind_hail
 
 ## Overview

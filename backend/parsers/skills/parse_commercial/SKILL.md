@@ -1,5 +1,10 @@
+---
+name: parse_commercial
+description: Use this skill when parsing a commercial insurance quote/proposal PDF
+---
+
 # Commercial Insurance Extraction Skill
-> VERSION: 1.0
+> VERSION: 2.0
 > TYPE: commercial
 
 ## Overview

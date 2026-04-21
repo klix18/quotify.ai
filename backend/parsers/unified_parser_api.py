@@ -8,26 +8,29 @@ Architecture
 One endpoint  →  POST /api/parse-quote?insurance_type=<type>
 One model set →  gemini-2.5-flash-lite (Pass 1) + gemini-2.5-flash (Pass 2)
 One system prompt (CORE_SYSTEM_PROMPT) — describes HOW to extract
-Per-type skill  (.md file) — describes WHAT to extract for each insurance type
-Per-carrier patch (.md file) — describes what differs for a specific carrier
+Per-type skill  (parse_<type>/SKILL.md) — describes WHAT to extract;
+    all carrier-specific overrides are baked into each SKILL.md under
+    a `## Carrier-Specific Overrides` section.
 
 Flow
 ----
-0. Carrier detection (Pass 0):
-     Vision call → identify carrier logo → normalize to carrier key
-     → load carrier patch from skills/{type}/{carrier_key}.md (if exists)
-     → merge into skill for Pass 1 and Pass 2
+0. Carrier detection (Pass 0) — LEGACY:
+     Vision call → identify carrier logo → normalize to carrier key.
+     Since the v2 skills library, carrier overrides live inside each
+     base SKILL.md, so `load_skill_with_carrier` no longer merges a
+     separate patch. The carrier key is still emitted as a telemetry
+     event but does not change prompt content.
    Emits: carrier_detected event
 
 1. Skill load + PDF upload
 
 2. Pass 1 (quick draft):
      system = CORE_SYSTEM_PROMPT
-     user   = quick_user_prompt + merged skill (base + carrier patch) + quick-pass field list
+     user   = quick_user_prompt + skill (with carrier overrides baked in) + quick-pass field list
    → streams draft_patch events to frontend
 
 3. Pass 2 (strict JSON):
-     system = CORE_SYSTEM_PROMPT + full merged skill (base + carrier patch)
+     system = CORE_SYSTEM_PROMPT + full skill (with carrier overrides baked in)
      user   = strict extract prompt
      response_schema = type-specific JSON schema
    → streams final_patch + result events to frontend
@@ -45,13 +48,16 @@ Flow
 Extending
 ---------
 To add a new insurance type:
-  1. Create parsers/skills/<type>.md
+  1. Create parsers/skills/parse_<type>/SKILL.md with YAML frontmatter
+     (name, description) and a `> VERSION:` line in the body.
   2. Add a registry entry in parsers/schema_registry.py
   That's it.
 
 To add carrier-specific hints:
-  1. Create parsers/skills/<type>/<carrier_key>.md
+  1. Append a `### <Carrier Name>` subsection under the base skill's
+     `## Carrier-Specific Overrides` section in parse_<type>/SKILL.md.
   2. Add the carrier name to CARRIER_ALIASES in carrier_detector.py (if new)
+     — currently only used for telemetry.
   No other changes needed.
 
 To swap the AI model:
@@ -457,7 +463,7 @@ def stream_unified_quote(
 
         # ── Load bundle-separate supplemental skill (bundle separate mode) ──
         # When the user uploads TWO separate PDFs for a bundle (one
-        # homeowners quote + one auto quote), the base bundle.md skill
+        # homeowners quote + one auto quote), the base parse_bundle skill
         # alone isn't enough — the model needs explicit guidance that
         # PDF #1 is homeowners and PDF #2 is auto, otherwise it treats
         # both as one combined document and under-extracts auto fields.
@@ -517,16 +523,21 @@ def stream_unified_quote(
             )
 
         # ────────────────────────────────────────────────────────
-        # PASS 0 — Carrier Detection (vision-based)
-        # Fast, non-blocking: identifies the carrier logo on page 1
-        # and loads the matching carrier patch from skills/{type}/{key}.md
+        # PASS 0 — Carrier Detection (vision-based, LEGACY)
+        # Fast, non-blocking: identifies the carrier logo on page 1.
+        # Since the v2 skills library (2026-04-20), carrier overrides
+        # are baked into parse_<type>/SKILL.md, so this step no longer
+        # swaps in a per-carrier patch. The carrier key is still
+        # emitted as a telemetry event.
         # ────────────────────────────────────────────────────────
         yield json.dumps({"type": "status", "message": "Identifying carrier..."}) + "\n"
 
         detection = detect_carrier(uploaded_file, client)
         carrier_key = detection["carrier_key"]
 
-        # Load base skill + carrier patch (merged)
+        # Load skill (carrier overrides are baked into the base SKILL.md).
+        # load_skill_with_carrier() returns (base_skill, False) in v2 but
+        # is kept here for API stability with the legacy signature.
         skill_content, patch_loaded = load_skill_with_carrier(insurance_type, carrier_key)
 
         # Append the wind/hail supplemental skill when a second PDF is
@@ -691,7 +702,7 @@ def stream_unified_quote(
 
         # ────────────────────────────────────────────────────────
         # PASS 2 — Strict structured JSON
-        # System: CORE_SYSTEM_PROMPT + full merged skill (base + carrier patch)
+        # System: CORE_SYSTEM_PROMPT + full skill (carrier overrides baked in)
         # User:   strict extract request
         # response_schema: type-specific JSON schema
         # ────────────────────────────────────────────────────────

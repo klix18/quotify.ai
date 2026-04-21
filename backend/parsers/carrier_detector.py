@@ -13,34 +13,35 @@ Carrier logos are almost always:
   • Top-right
 
 The normalized carrier key (e.g. "tower_hill") is returned to the caller.
-The actual hint file loading is handled by skill_loader.py, which knows
-how to merge the base skill + carrier patch into one combined prompt.
 
-Carrier hints live alongside the base skill they extend:
+NOTE (v2 skills library, 2026-04-20):
+  Carrier-specific overrides are now **baked directly** into each base
+  SKILL.md under a ``## Carrier-Specific Overrides`` section. There are
+  no longer separate carrier patch files to merge at load time. Pass 0
+  (this module) is retained for observability — we still record which
+  carrier was detected in parse_metrics — but the detected carrier_key
+  no longer changes what prompt content is sent to the model.
+
+Skills library layout (v2):
 
     parsers/skills/
-      homeowners.md           ← base skill (all homeowners fields)
-      homeowners/             ← carrier-specific patches for homeowners
-        tower_hill.md         ← only the quirks that differ for Tower Hill
-        sagesure.md
-        american_modern.md
-      dwelling.md
-      dwelling/
-        tower_hill.md
-        jj.md
-        american_modern.md
-      auto.md
-      auto/
-        progressive.md
+      parse_homeowners/SKILL.md   ← base + all homeowners carrier overrides
+      parse_auto/SKILL.md         ← base + all auto carrier overrides
+      parse_dwelling/SKILL.md     ← base + all dwelling carrier overrides
+      parse_commercial/SKILL.md   ← base only (no carrier-specific quirks)
+      parse_bundle/SKILL.md       ← composite, @include home + auto
+      parse_bundle_separate/SKILL.md  ← supplement for two-PDF bundle mode
+      parse_wind_hail/SKILL.md        ← supplement for wind/hail second PDF
 
-The base skill handles ~95% of fields. The carrier patch only documents
-what's different: renamed columns, non-standard layouts, known edge cases.
+Each SKILL.md starts with YAML frontmatter (``name``/``description``),
+which skill_loader.py strips before handing the body to the model.
 
 Extending
 ---------
-To add a new carrier hint:
-  1. Create parsers/skills/<insurance_type>/<carrier_key>.md
-  2. Add carrier name aliases to CARRIER_ALIASES below (if new carrier)
+To add or update a carrier hint:
+  1. Edit the relevant ``parsers/skills/parse_<insurance_type>/SKILL.md``
+     and add or update a subsection under ``## Carrier-Specific Overrides``.
+  2. Add carrier name aliases to CARRIER_ALIASES below (if new carrier).
   No other code changes needed.
 """
 
@@ -56,7 +57,9 @@ MODEL_DETECT: str = "gemini-2.5-flash-lite"
 
 # ── Carrier name → normalized key ────────────────────────────────────────────
 # Maps any string the model might return to a canonical carrier key.
-# Keys must match the .md filenames inside parsers/skills/{insurance_type}/.
+# In the v2 skills library the key is used for observability / telemetry
+# (logged into parse_metrics) and must match the subsection anchor used
+# inside ``## Carrier-Specific Overrides`` in each base SKILL.md.
 CARRIER_ALIASES: dict[str, str] = {
     # Tower Hill
     "tower hill": "tower_hill",
@@ -219,9 +222,11 @@ def detect_carrier(
         "carrier_key": str,   # e.g. "tower_hill" or "unknown"
     }
 
-    Note: hint loading is intentionally NOT done here — skill_loader.py
-    handles merging the base skill + carrier patch, keeping this module
-    focused on just the detection step.
+    Note: in the v2 skills library carrier overrides are baked into each
+    base SKILL.md, so the returned ``carrier_key`` is recorded for
+    observability (parse_metrics) but no longer changes what prompt
+    content is sent to the model. This module stays focused on just the
+    detection step.
     """
     try:
         resp = generate_with_fallback(
