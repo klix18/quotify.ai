@@ -1,0 +1,40 @@
+const COLORS = {
+    blue: "#1765D4",
+    blueDark: "#0F4EAA",
+    blueSoft: "#EAF3FF",
+    blueBorder: "#CFE1FB",
+    black: "#20272D",
+    text: "#20272D",
+    mutedText: "#6F7D90",
+    pageBg: "#F5F7FB",
+    white: "#FFFFFF",
+    lightGrey: "#F2F5FA",
+    panelBg: "#FBFDFF",
+    inputBg: "#F8FBFF",
+    inputBgAlt: "#F6F8FC",
+    hoverShadow: "#C9F2FF",
+    disabledText: "#B0B7C3",
+    disabledBg: "#DFE3E8",
+    disabledIcon: "grayscale(1) opacity(0.38)",
+    borderGrey: "#D7E3F4",
+    borderStrong: "#C4D8F3",
+    subtextGrey: "#98A6B8",
+    green: "#1F9D55",
+    greenSoft: "#E9F8EF",
+    greenBorder: "#BEE8CC",
+    danger: "#D92D20",
+    dangerSoft: "#FEECEC",
+    dangerBorder: "#F6C7C2",
+  };
+
+  // Pastel insurance type colors — shared across dashboard & chat
+  export const INSURANCE_COLORS = {
+    homeowners: "#7EB4E8",   // soft blue
+    auto:       "#6DC8E8",   // pastel cyan
+    dwelling:   "#7ED6A5",   // pastel green
+    commercial: "#F2B872",   // pastel orange
+    bundle:     "#C4A1E0",   // pastel purple
+    wind:       "#A8B5C4",   // pastel slate
+  };
+
+  export default COLORS;

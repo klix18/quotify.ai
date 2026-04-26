@@ -463,7 +463,11 @@ def stream_unified_quote(
         }) + "\n"
 
         # ── Upload PDF ──────────────────────────────────────────
-        yield json.dumps({"type": "status", "message": f"Reading {insurance_type} quote..."}) + "\n"
+        # Single consolidated "Extracting..." status across the whole parse.
+        # Per UX request, the frontend only shows two states: "Extracting"
+        # while a parse is in flight, and "Verified" when the result event
+        # arrives. Don't reintroduce intermediate phase strings here.
+        yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
 
         uploaded_file = upload_with_retry(
             client,
@@ -473,7 +477,7 @@ def stream_unified_quote(
 
         # ── Upload optional wind/hail PDF (separate-mode only) ──
         if wind_pdf_path is not None:
-            yield json.dumps({"type": "status", "message": "Reading wind/hail quote..."}) + "\n"
+            yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
             uploaded_wind_file = upload_with_retry(
                 client,
                 file=str(wind_pdf_path),
@@ -482,7 +486,7 @@ def stream_unified_quote(
 
         # ── Upload optional generic second PDF (bundle separate mode) ──
         if secondary_pdf_path is not None:
-            yield json.dumps({"type": "status", "message": "Reading secondary quote..."}) + "\n"
+            yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
             uploaded_secondary_file = upload_with_retry(
                 client,
                 file=str(secondary_pdf_path),
@@ -564,7 +568,10 @@ def stream_unified_quote(
         #                  confidence scores well-calibrated without
         #                  adding meaningful latency.
         # ────────────────────────────────────────────────────────
-        yield json.dumps({"type": "status", "message": status_msg}) + "\n"
+        # Was: per-type "Verifying extracted ... fields..." string from
+        # schema_registry. Collapsed to the shared "Extracting..." spinner
+        # so the UI shows one phase, not five.
+        yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
 
         system_with_skill = (
             CORE_SYSTEM_PROMPT
@@ -681,7 +688,9 @@ def stream_unified_quote(
         # ── Generate Why Selected ──────────────────────────────
         # One short Gemini call against the final verified data produces
         # the 3-4 "why this plan was selected" bullets shown in the UI.
-        yield json.dumps({"type": "status", "message": "Generating plan summary..."}) + "\n"
+        # Why-selected generation also runs under the same "Extracting..."
+        # spinner — no separate "Generating plan summary..." phase.
+        yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
         data["why_selected"] = generate_why_selected(data, why_type)
 
         yield json.dumps({

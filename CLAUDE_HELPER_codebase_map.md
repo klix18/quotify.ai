@@ -91,7 +91,12 @@ quotify-ai/
 1. **Frontend** uploads PDF to `POST /api/parse-quote?insurance_type=<type>`.
 2. **unified_parser_api.stream_unified_quote** yields ndjson events:
    - `skill_loaded` — from `skill_loader.load_skill(...)`
-   - `status` → progress messages (PDF upload, extraction, why-selected)
+   - `status` → ALL phases emit the same single string `"Extracting..."`
+     (was: per-phase strings like "Reading auto quote...", "Verifying
+     extracted auto fields...", "Generating plan summary..."). The
+     frontend renders `"Extracting..."` while a parse is in flight and
+     flips to `"Verified"` on the `result` event. Don't reintroduce
+     intermediate phase strings here unless the UX explicitly changes.
    - `final_patch*` — single strict-JSON streaming extraction on `gemini-2.5-flash`
      via `stream_with_fallback` + `response_schema`. The system instruction
      (`CORE_SYSTEM_PROMPT` + full `SKILL.md` + any wind/hail or bundle-separate

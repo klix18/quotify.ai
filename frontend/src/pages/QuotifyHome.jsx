@@ -526,7 +526,7 @@ export default function QuotifyHome({ isAdmin }) {
     // user can see that the merge is happening on the backend.
     setFileName(windFile ? `${file.name} + ${windFile.name}` : file.name);
     setErrorMessage("");
-    setParseStatus(windFile ? "Uploading homeowners + wind PDFs..." : "Uploading PDF...");
+    setParseStatus("Extracting...");
     setIsParsing(true);
     startHomeownersFieldState();
 
@@ -631,11 +631,11 @@ export default function QuotifyHome({ isAdmin }) {
           }
 
           if (message.type === "status") {
-            setParseStatus(message.message || "Parsing...");
+            setParseStatus("Extracting...");
           }
 
           if (message.type === "final_patch" && message.data) {
-            setParseStatus("Verifying and refining fields...");
+            setParseStatus("Extracting...");
             applyPatch(message.data, true);
           }
 
@@ -643,7 +643,7 @@ export default function QuotifyHome({ isAdmin }) {
             finalData = message.data;
             finalConfidence = message.confidence || {};
             setLastSkillVersion(message.skill_version || "");
-            setParseStatus("Applying final values...");
+            setParseStatus("Extracting...");
           }
 
           if (message.type === "error") {
@@ -698,7 +698,7 @@ export default function QuotifyHome({ isAdmin }) {
       });
 
       setHomeownersConfidence(finalConfidence);
-      setParseStatus("Done.");
+      setParseStatus("Verified");
 
     } catch (error) {
       if (error.name === "AbortError") { __devSession.aborted = true; return; }
@@ -755,7 +755,7 @@ export default function QuotifyHome({ isAdmin }) {
   const parseAutoFile = async (file) => {
     setFileName(file.name);
     setErrorMessage("");
-    setParseStatus("Uploading PDF...");
+    setParseStatus("Extracting...");
     setIsParsing(true);
     setAutoIsLoading(true);
     setAutoIsParsed(false);
@@ -843,11 +843,11 @@ export default function QuotifyHome({ isAdmin }) {
           }
 
           if (message.type === "status") {
-            setParseStatus(message.message || "Parsing...");
+            setParseStatus("Extracting...");
           }
 
           if (message.type === "final_patch" && message.data) {
-            setParseStatus("Verifying and refining fields...");
+            setParseStatus("Extracting...");
             applyAutoPatch(message.data);
           }
 
@@ -855,7 +855,7 @@ export default function QuotifyHome({ isAdmin }) {
             finalData = message.data;
             finalConfidence = message.confidence || {};
             setLastSkillVersion(message.skill_version || "");
-            setParseStatus("Applying final values...");
+            setParseStatus("Extracting...");
           }
 
           if (message.type === "error") {
@@ -896,7 +896,7 @@ export default function QuotifyHome({ isAdmin }) {
 
       setAutoIsLoading(false);
       setAutoIsParsed(true);
-      setParseStatus("Done.");
+      setParseStatus("Verified");
 
     } catch (error) {
       if (error.name === "AbortError") { __devSession.aborted = true; return; }
@@ -1000,7 +1000,7 @@ export default function QuotifyHome({ isAdmin }) {
     // Show both filenames when a separate wind/hail PDF is merged in.
     setFileName(windFile ? `${file.name} + ${windFile.name}` : file.name);
     setErrorMessage("");
-    setParseStatus(windFile ? "Uploading dwelling + wind PDFs..." : "Uploading PDF...");
+    setParseStatus("Extracting...");
     setIsParsing(true);
     setDwellingIsLoading(true);
     setDwellingIsParsed(false);
@@ -1075,16 +1075,16 @@ export default function QuotifyHome({ isAdmin }) {
           let message;
           try { message = JSON.parse(line); } catch { continue; }
 
-          if (message.type === "status") setParseStatus(message.message || "Parsing...");
+          if (message.type === "status") setParseStatus("Extracting...");
           if (message.type === "final_patch" && message.data) {
-            setParseStatus("Verifying and refining fields...");
+            setParseStatus("Extracting...");
             applyDwellingPatch(message.data);
           }
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
             setLastSkillVersion(message.skill_version || "");
-            setParseStatus("Applying final values...");
+            setParseStatus("Extracting...");
           }
           if (message.type === "error") {
             throw new Error(message.error || "Streaming parse failed.");
@@ -1108,7 +1108,7 @@ export default function QuotifyHome({ isAdmin }) {
       setDwellingConfidence(finalConfidence);
       setDwellingIsLoading(false);
       setDwellingIsParsed(true);
-      setParseStatus("Done.");
+      setParseStatus("Verified");
 
     } catch (error) {
       if (error.name === "AbortError") { __devSession.aborted = true; return; }
@@ -1277,7 +1277,7 @@ export default function QuotifyHome({ isAdmin }) {
     setBundleFileNames(names);
     setFileName(names.join(", "));
     setErrorMessage("");
-    setParseStatus("Uploading PDF" + (fileArr.length > 1 ? "s" : "") + "...");
+    setParseStatus("Extracting...");
     setIsParsing(true);
     setBundleIsLoading(true);
     setBundleIsParsed(false);
@@ -1356,16 +1356,16 @@ export default function QuotifyHome({ isAdmin }) {
           let message;
           try { message = JSON.parse(line); } catch { continue; }
 
-          if (message.type === "status") setParseStatus(message.message || "Parsing...");
+          if (message.type === "status") setParseStatus("Extracting...");
           if (message.type === "final_patch" && message.data) {
-            setParseStatus("Verifying and refining fields...");
+            setParseStatus("Extracting...");
             applyBundlePatch(message.data);
           }
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
             setLastSkillVersion(message.skill_version || "");
-            setParseStatus("Applying final values...");
+            setParseStatus("Extracting...");
           }
           if (message.type === "error") {
             throw new Error(message.error || "Streaming parse failed.");
@@ -1389,7 +1389,7 @@ export default function QuotifyHome({ isAdmin }) {
       setBundleConfidence(finalConfidence);
       setBundleIsLoading(false);
       setBundleIsParsed(true);
-      setParseStatus("Done.");
+      setParseStatus("Verified");
 
     } catch (error) {
       if (error.name === "AbortError") { __devSession.aborted = true; return; }
@@ -1434,7 +1434,7 @@ export default function QuotifyHome({ isAdmin }) {
   const parseCommercialFile = async (file) => {
     setFileName(file.name);
     setErrorMessage("");
-    setParseStatus("Uploading PDF...");
+    setParseStatus("Extracting...");
     setIsParsing(true);
     setCommercialIsLoading(true);
     setCommercialIsParsed(false);
@@ -1507,16 +1507,16 @@ export default function QuotifyHome({ isAdmin }) {
           let message;
           try { message = JSON.parse(line); } catch { continue; }
 
-          if (message.type === "status") setParseStatus(message.message || "Parsing...");
+          if (message.type === "status") setParseStatus("Extracting...");
           if (message.type === "final_patch" && message.data) {
-            setParseStatus("Verifying and refining fields...");
+            setParseStatus("Extracting...");
             applyCommercialPatch(message.data);
           }
           if (message.type === "result") {
             finalData = message.data;
             finalConfidence = message.confidence || {};
             setLastSkillVersion(message.skill_version || "");
-            setParseStatus("Applying final values...");
+            setParseStatus("Extracting...");
           }
           if (message.type === "error") {
             throw new Error(message.error || "Streaming parse failed.");
@@ -1540,7 +1540,7 @@ export default function QuotifyHome({ isAdmin }) {
       setCommercialConfidence(finalConfidence);
       setCommercialIsLoading(false);
       setCommercialIsParsed(true);
-      setParseStatus("Done.");
+      setParseStatus("Verified");
 
     } catch (error) {
       if (error.name === "AbortError") { __devSession.aborted = true; return; }
@@ -1559,7 +1559,7 @@ export default function QuotifyHome({ isAdmin }) {
   const parseWindFile = async (file) => {
     if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
     setWindFileName(file.name);
-    setWindParseStatus("Uploading wind PDF...");
+    setWindParseStatus("Extracting...");
     setWindParsing(true);
 
     try {
@@ -1600,7 +1600,7 @@ export default function QuotifyHome({ isAdmin }) {
           let message;
           try { message = JSON.parse(line); } catch { continue; }
 
-          if (message.type === "status") setWindParseStatus(message.message || "Parsing...");
+          if (message.type === "status") setWindParseStatus("Extracting...");
           if (message.type === "final_patch" && message.data) {
             setCommercialForm((prev) => ({ ...prev, ...message.data }));
           }
@@ -1629,7 +1629,7 @@ export default function QuotifyHome({ isAdmin }) {
         setCommercialForm((prev) => ({ ...prev, ...finalData }));
         setCommercialConfidence((prev) => ({ ...prev, ...finalConfidence }));
       }
-      setWindParseStatus("Done.");
+      setWindParseStatus("Verified");
 
     } catch (error) {
       setWindParseStatus("");
