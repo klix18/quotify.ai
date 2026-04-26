@@ -13,13 +13,13 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
-from usage_tracker import track_openai_usage
+from services.usage_tracker import track_openai_usage
 from openai import AsyncOpenAI
 
-from auth import get_current_user
-from database import get_pool
+from core.auth import get_current_user
+from core.database import get_pool
 from skills import build_skills_prompt
-from chat_memory import (
+from services.chat_memory import (
     get_session,
     create_session,
     add_message,

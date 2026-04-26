@@ -34,7 +34,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from database import get_pool
+from core.database import get_pool
 
 router = APIRouter(tags=["dev-metrics"])
 

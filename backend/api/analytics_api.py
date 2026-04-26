@@ -8,9 +8,9 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from auth import get_current_user, require_admin
-from database import get_pool
-from user_id_backfill import backfill_user_ids_from_clerk
+from core.auth import get_current_user, require_admin
+from core.database import get_pool
+from scripts.user_id_backfill import backfill_user_ids_from_clerk
 
 router = APIRouter(prefix="/api/admin/analytics", tags=["analytics"])
 self_router = APIRouter(prefix="/api/analytics", tags=["analytics-self"])

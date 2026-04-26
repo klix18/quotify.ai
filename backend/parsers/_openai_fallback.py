@@ -410,7 +410,7 @@ def generate_openai_extraction(
             try:
                 usage = getattr(resp, "usage", None)
                 if usage:
-                    from usage_tracker import track_openai_usage
+                    from services.usage_tracker import track_openai_usage
                     track_openai_usage(
                         model=model,
                         input_tokens=getattr(usage, "input_tokens", 0) or 0,

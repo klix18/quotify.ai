@@ -8,10 +8,9 @@ Each skill file is a Markdown document with a YAML frontmatter block,
 followed by body sections describing:
   - Fields to extract (with aliases and mapping rules)
   - Type-specific rules
-  - A quick-pass field list for streaming
-  - Carrier-specific overrides (concatenated into the base skill)
+  - Carrier-specific overrides (baked directly into the base skill)
 
-Folder layout (v2):
+Folder layout:
 
     parsers/skills/
       parse_homeowners/SKILL.md       ← base + all homeowners carrier overrides
@@ -35,11 +34,9 @@ body is returned to callers — the LLM only ever sees the body.
 The @include directive (used by parse_bundle) is resolved at load time so
 composite skills contain the complete text of their dependencies.
 
-Carrier patches used to live as separate .md files under a per-type
-directory; they are now baked directly into each base SKILL.md under a
-``## Carrier-Specific Overrides`` section. `load_skill_with_carrier()` is
-preserved for backwards compatibility with `unified_parser_api.py` but
-simply returns the base skill (carrier context is already baked in).
+Carrier overrides are baked directly into each base SKILL.md under a
+``## Carrier-Specific Overrides`` section, so there is no separate
+carrier-patch merge step.
 """
 
 from __future__ import annotations
@@ -50,9 +47,8 @@ from pathlib import Path
 SKILLS_DIR = Path(__file__).parent / "skills"
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
-# Keyed by "{insurance_type}" for base skills.
-# (Carrier keys are no longer cache-relevant since patches are baked in,
-# but we keep the dict dual-purpose so reload_skills() works for everything.)
+# Keyed by insurance_type. Carrier overrides are baked into the base skill,
+# so no carrier-level caching is needed.
 
 _skill_cache: dict[str, str] = {}
 
@@ -102,32 +98,6 @@ def load_skill(insurance_type: str) -> str:
     return resolved
 
 
-def load_skill_with_carrier(insurance_type: str, carrier_key: str) -> tuple[str, bool]:
-    """
-    Return (skill_text, carrier_patch_loaded).
-
-    In the v2 skills library, carrier-specific guidance lives inside each
-    base SKILL.md under a ``## Carrier-Specific Overrides`` section. There
-    are no longer separate carrier patch files to merge at load time.
-
-    This function is kept for backwards compatibility with callers that
-    still pass a carrier_key; it always returns ``(load_skill(type), False)``.
-
-    Parameters
-    ----------
-    insurance_type : e.g. "homeowners", "dwelling"
-    carrier_key    : accepted but ignored — retained for API stability.
-
-    Returns
-    -------
-    (skill_text, patch_loaded)
-      skill_text   — the base skill (which already contains all carrier overrides)
-      patch_loaded — always False (no external patch is merged)
-    """
-    _ = carrier_key  # accepted for backwards compat; carriers are baked in
-    return load_skill(insurance_type), False
-
-
 def get_skill_version(insurance_type: str) -> str:
     """Return the VERSION string from a skill file, or 'unknown'."""
     try:
@@ -136,32 +106,6 @@ def get_skill_version(insurance_type: str) -> str:
         return m.group(1).strip() if m else "unknown"
     except FileNotFoundError:
         return "unknown"
-
-
-def get_quick_pass_fields(insurance_type: str) -> list[str]:
-    """
-    Parse the '## Quick Pass Fields' section and return field names as a list.
-    """
-    try:
-        skill = load_skill(insurance_type)
-    except FileNotFoundError:
-        return []
-
-    m = re.search(
-        r"##\s*Quick Pass Fields\s*\n(.*?)(?=^##|\Z)",
-        skill,
-        re.DOTALL | re.MULTILINE,
-    )
-    if not m:
-        return []
-
-    section = m.group(1)
-    fields = []
-    for line in section.splitlines():
-        stripped = line.strip().lstrip("-").strip()
-        if re.match(r"^[a-z][a-z0-9_]*$", stripped):
-            fields.append(stripped)
-    return fields
 
 
 def list_available_skills() -> list[str]:
@@ -178,19 +122,6 @@ def list_available_skills() -> list[str]:
         if folder.startswith("parse_"):
             types.append(folder[len("parse_") :])
     return types
-
-
-def list_carrier_patches(insurance_type: str) -> list[str]:
-    """
-    Return the list of carrier keys that have dedicated patches for
-    *insurance_type*.
-
-    In the v2 skills library, carrier overrides are baked into each base
-    SKILL.md and there are no external patch files. This function always
-    returns an empty list, kept for API-stability with earlier callers.
-    """
-    _ = insurance_type
-    return []
 
 
 def reload_skills() -> None:

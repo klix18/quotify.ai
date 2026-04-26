@@ -4,7 +4,7 @@ description: Use this skill when parsing an auto insurance quote PDF
 ---
 
 # Auto Insurance Extraction Skill
-> VERSION: 2.0
+> VERSION: 2.1
 > TYPE: auto
 
 ## Overview
@@ -57,6 +57,17 @@ Extract these fields quickly (key: value, one per line):
     independently. Use "" if not shown for this vehicle.
 - `collision_deductible` — Collision deductible for THIS vehicle. Capture
     each vehicle's value independently. Use "" if not shown for this vehicle.
+- `rental_limit` — Rental / Transportation-expense limit for THIS vehicle.
+    Often shown as a daily × day cap like "$30/day × 30 days" or a total
+    like "$900". Rental limits can differ by vehicle (one car might carry
+    rental reimbursement, another might not), so capture each vehicle's
+    value independently. Use "N/A" if the vehicle clearly does not carry
+    rental; use "" if the document is silent for this vehicle.
+- `towing_limit` — Towing & Labor / Roadside-assistance limit for THIS
+    vehicle. Typical values look like "$75" or "Included". Towing limits
+    can differ by vehicle, so capture each vehicle's value independently.
+    Use "N/A" if the vehicle clearly does not carry towing; use "" if the
+    document is silent for this vehicle.
 - `subtotal` — total premium for this vehicle. Use document value if shown directly.
 
 ### Coverages (policy-level — one value each, NOT per-vehicle)
@@ -67,8 +78,11 @@ Extract these fields quickly (key: value, one per line):
   Check BOTH vehicle-level AND policy-level sections.
 - `umpd_limit` — UM Property Damage limit. "N/A" if not offered.
 - `umpd_deductible` — UMPD deductible. "N/A" if not applicable.
-- `rental_limit` — Rental/Transportation expense limit. "N/A" if absent.
-- `towing_limit` — Towing & Labor / Roadside limit. "N/A" if absent.
+
+> **Note:** Rental/Transportation and Towing/Roadside limits are NOT
+> policy-level — capture them under each vehicle's `rental_limit` and
+> `towing_limit` fields (see Vehicles section above), since they can
+> differ between vehicles on the same policy.
 
 ### Payment Options
 - `full_pay_amount` — single full-pay amount for entire policy term.
@@ -108,9 +122,13 @@ totals.
 ## Type-Specific Rules
 - Each driver and vehicle is a separate array element.
 - Keep per-vehicle coverage premiums attached to the correct vehicle.
-- Comprehensive and Collision deductibles are PER-VEHICLE. Even if every
-  vehicle shows the same value on the quote, populate each vehicle's
-  `comprehensive_deductible` and `collision_deductible` individually.
+- Comprehensive / Collision deductibles and Rental / Towing limits are
+  all PER-VEHICLE. Even if every vehicle shows the same value on the
+  quote, populate each vehicle's `comprehensive_deductible`,
+  `collision_deductible`, `rental_limit`, and `towing_limit`
+  individually. If one vehicle carries rental/towing and another doesn't,
+  reflect that difference here rather than flattening to a policy-wide
+  value.
 - Split limits must use the " / " separator: "$X / $Y".
 - Preserve money formatting with a leading $: "$1,250.00", "$500".
 - Format all dates as MM/DD/YYYY.

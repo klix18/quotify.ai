@@ -4,7 +4,7 @@ description: Supplemental skill applied when a bundle is uploaded as two separat
 ---
 
 # Bundle — Separate-Mode Supplemental Skill
-> VERSION: 2.0
+> VERSION: 2.1
 > TYPE: bundle_separate
 
 ## Overview
@@ -36,10 +36,11 @@ You are receiving **TWO PDFs** in this call. Their order matters:
    - `drivers` (array — capture EVERY driver listed on PDF #2)
    - `vehicles` (array — capture EVERY vehicle listed on PDF #2, with
      each vehicle's own `coverage_premiums`, `comprehensive_deductible`,
-     `collision_deductible`, and `subtotal`)
+     `collision_deductible`, `rental_limit`, `towing_limit`, and
+     `subtotal`)
    - `coverages` (object — policy-level auto limits: `bi_limit`,
      `pd_limit`, `medpay_limit`, `um_uim_bi_limit`, `umpd_limit`,
-     `umpd_deductible`, `rental_limit`, `towing_limit`)
+     `umpd_deductible`)
    - `payment_options` (object — AUTO payment plans: `full_pay`,
      `semi_annual`, `quarterly`, `monthly`, `paid_in_full_discount`)
    - `premium_summary` (object — `vehicle_subtotals`, `total_premium`,

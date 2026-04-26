@@ -6,8 +6,8 @@ Requires authentication via Clerk JWT.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
-from auth import get_current_user, require_admin
-from database import get_pdf, list_pdfs, delete_pdf, delete_all_pdfs, get_pdf_filenames
+from core.auth import get_current_user, require_admin
+from core.database import get_pdf, list_pdfs, delete_pdf, delete_all_pdfs, get_pdf_filenames
 
 router = APIRouter(prefix="/api/pdfs", tags=["pdf-storage"])
 

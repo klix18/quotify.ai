@@ -268,7 +268,10 @@ export default function BundlePanel({
               }
             >
               <div style={gridRow}>
-                <div style={cell4}>
+                {/* Row 1: Year / VIN / Vehicle Use / Garaging ZIP
+                    Row 2: Comprehensive / Collision / Rental / Towing
+                    (8 fields × cell3 → two clean rows of 4) */}
+                <div style={cell3}>
                   <FieldControl
                     fieldKey="year_make_model_trim"
                     label="Year / Make / Model / Trim"
@@ -277,7 +280,7 @@ export default function BundlePanel({
                     {...fp(`vehicles.${vi}.year_make_model_trim`)}
                   />
                 </div>
-                <div style={cell4}>
+                <div style={cell3}>
                   <FieldControl
                     fieldKey="vin"
                     label="VIN"
@@ -286,7 +289,7 @@ export default function BundlePanel({
                     {...fp(`vehicles.${vi}.vin`)}
                   />
                 </div>
-                <div style={cell4}>
+                <div style={cell3}>
                   <FieldControl
                     fieldKey="vehicle_use"
                     label="Vehicle Use"
@@ -295,7 +298,7 @@ export default function BundlePanel({
                     {...fp(`vehicles.${vi}.vehicle_use`)}
                   />
                 </div>
-                <div style={cell4}>
+                <div style={cell3}>
                   <FieldControl
                     fieldKey="garaging_zip_county"
                     label="Garaging ZIP / County"
@@ -305,9 +308,11 @@ export default function BundlePanel({
                   />
                 </div>
 
-                {/* Per-vehicle deductibles (Comprehensive + Collision) */}
+                {/* Per-vehicle limits & deductibles
+                    (Comprehensive / Collision deductibles +
+                     Rental / Towing limits) */}
                 {BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS.map(([dkey, dlabel]) => (
-                  <div key={dkey} style={cell4}>
+                  <div key={dkey} style={cell3}>
                     <FieldControl
                       fieldKey={dkey}
                       label={dlabel}
@@ -342,8 +347,8 @@ export default function BundlePanel({
             {...fp("auto_policy_term")}
           />
         </div>
-        {/* Rows 1–3 continued: all 8 coverage fields span 4 → 3 per row
-            (Policy Term + 8 coverages = 9 items total = 3 rows of 3) */}
+        {/* Policy Term + 6 policy-level coverages = 7 items total.
+            Rental / Towing limits render on each vehicle (not here). */}
         {BUNDLE_AUTO_COVERAGE_FIELDS.map(([key, label]) => (
           <div key={key} style={cell4}>
             <FieldControl

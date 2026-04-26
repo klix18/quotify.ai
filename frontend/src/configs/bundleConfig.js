@@ -88,10 +88,15 @@ export const BUNDLE_AUTO_VEHICLE_FIELDS = [
   ["garaging_zip_county", "Garaging ZIP / County"],
 ];
 
-// Per-vehicle deductibles (Comprehensive + Collision vary by vehicle).
+// Per-vehicle limits & deductibles.
+//   - Comprehensive + Collision deductibles vary by vehicle.
+//   - Rental / Towing limits vary by vehicle too (older cars often carry
+//     lower rental caps — or none at all — while newer cars do).
 export const BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS = [
   ["comprehensive_deductible", "Comprehensive Deductible"],
   ["collision_deductible", "Collision Deductible"],
+  ["rental_limit", "Rental / Transportation Limit"],
+  ["towing_limit", "Towing & Labor / Roadside Limit"],
 ];
 
 export const emptyVehicle = () => ({
@@ -112,12 +117,15 @@ export const emptyVehicle = () => ({
   },
   comprehensive_deductible: "",
   collision_deductible: "",
+  rental_limit: "",
+  towing_limit: "",
   subtotal: "",
 });
 
 // ─── Auto Coverages ──────────────────────────────────────────────
-// Comprehensive + Collision deductibles are captured per-vehicle (see
-// BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS) since they can vary between vehicles.
+// Comprehensive + Collision deductibles and Rental / Towing limits are
+// captured per-vehicle (see BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS) since
+// they can vary between vehicles on the same policy.
 export const BUNDLE_AUTO_COVERAGE_FIELDS = [
   ["bi_limit", "Bodily Injury (BI) Limit"],
   ["pd_limit", "Property Damage (PD) Limit"],
@@ -125,8 +133,6 @@ export const BUNDLE_AUTO_COVERAGE_FIELDS = [
   ["um_uim_bi_limit", "UM/UIM Bodily Injury Limit"],
   ["umpd_limit", "Uninsured Motorist PD (UMPD) Limit"],
   ["umpd_deductible", "UMPD Deductible"],
-  ["rental_limit", "Rental / Transportation Limit"],
-  ["towing_limit", "Towing & Labor / Roadside Limit"],
 ];
 
 // ─── Auto Payment Options ────────────────────────────────────────
@@ -222,7 +228,8 @@ export const EMPTY_BUNDLE_FORM = {
   vehicles: [],
 
   // ── Auto Coverages (policy-level) ──
-  // Comprehensive + Collision deductibles live on each vehicle, not here.
+  // Comprehensive + Collision deductibles and Rental / Towing limits all
+  // live on each vehicle, not here.
   coverages: {
     bi_limit: "",
     pd_limit: "",
@@ -230,8 +237,6 @@ export const EMPTY_BUNDLE_FORM = {
     um_uim_bi_limit: "",
     umpd_limit: "",
     umpd_deductible: "",
-    rental_limit: "",
-    towing_limit: "",
   },
 
   // ── Auto Payment Options ──

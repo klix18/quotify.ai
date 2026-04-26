@@ -5,8 +5,8 @@ and API usage tracking data.
 
 from fastapi import APIRouter, Depends, Query
 
-from auth import get_current_user, require_admin
-from database import get_setting, set_setting, get_api_usage
+from core.auth import get_current_user, require_admin
+from core.database import get_setting, set_setting, get_api_usage
 
 router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
 

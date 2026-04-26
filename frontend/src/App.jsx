@@ -7,10 +7,10 @@ import {
   useUser,
 } from "@clerk/clerk-react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
-import COLORS from "./colors";
-import QuotifyHome from "./QuotifyHome";
-import AdminDashboard from "./AdminDashboard";
-import ChatMemoryPage from "./ChatMemoryPage";
+import COLORS from "./lib/colors";
+import QuotifyHome from "./pages/QuotifyHome";
+import AdminDashboard from "./pages/AdminDashboard";
+import ChatMemoryPage from "./pages/ChatMemoryPage";
 
 function SignInPage() {
   const mainRef = React.useRef(null);

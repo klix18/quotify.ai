@@ -13,7 +13,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-from database import get_pool
+from core.database import get_pool
 
 load_dotenv()
 

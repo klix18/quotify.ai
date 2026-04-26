@@ -3,66 +3,67 @@ unified_parser_api.py
 =====================
 Single entry point for ALL insurance quote parsing.
 
-Architecture
-------------
+Architecture (Design 2 — single-pass + prompt caching, 2026-04-21)
+------------------------------------------------------------------
 One endpoint  →  POST /api/parse-quote?insurance_type=<type>
-One model set →  gemini-2.5-flash-lite (Pass 1) + gemini-2.5-flash (Pass 2)
-One system prompt (CORE_SYSTEM_PROMPT) — describes HOW to extract
-Per-type skill  (parse_<type>/SKILL.md) — describes WHAT to extract;
-    all carrier-specific overrides are baked into each SKILL.md under
-    a `## Carrier-Specific Overrides` section.
+One model     →  gemini-2.5-flash
+One system prompt (CORE_SYSTEM_PROMPT + full SKILL.md) — cached once per
+    (insurance_type, supplement_set, skill_version) tuple via Gemini's
+    explicit context-cache API. The system instruction is stable and
+    never changes per request; caching it eliminates the dominant prompt
+    prefill cost on every parse.
+Per-type skill (parse_<type>/SKILL.md) — describes WHAT to extract; all
+    carrier-specific overrides are baked into each SKILL.md under a
+    ``## Carrier-Specific Overrides`` section, so the LLM reads carrier
+    quirks straight from its active skill — no separate carrier pass.
 
 Flow
 ----
-0. Carrier detection (Pass 0) — LEGACY:
-     Vision call → identify carrier logo → normalize to carrier key.
-     Since the v2 skills library, carrier overrides live inside each
-     base SKILL.md, so `load_skill_with_carrier` no longer merges a
-     separate patch. The carrier key is still emitted as a telemetry
-     event but does not change prompt content.
-   Emits: carrier_detected event
-
-1. Skill load + PDF upload
-
-2. Pass 1 (quick draft):
-     system = CORE_SYSTEM_PROMPT
-     user   = quick_user_prompt + skill (with carrier overrides baked in) + quick-pass field list
-   → streams draft_patch events to frontend
-
-3. Pass 2 (strict JSON):
-     system = CORE_SYSTEM_PROMPT + full skill (with carrier overrides baked in)
-     user   = strict extract prompt
+1. Load skill (+ optional wind/hail / bundle-separate supplement)
+2. Upload PDF(s) to Gemini files API
+3. Get-or-create the system-instruction cache for this
+   (type, supplements, skill_version) tuple — TTL 1 hour
+4. Single extraction pass on gemini-2.5-flash:
+     cached_content  = system cache (CORE_SYSTEM_PROMPT + full SKILL.md)
+     contents        = user prompt + PDF part(s) with boundary markers
      response_schema = type-specific JSON schema
-   → streams final_patch + result events to frontend
+     thinking_config = small thinking budget (~512 tokens) — kept non-zero
+                       to preserve the accuracy of the "confidence" object
+                       the model emits per field.
+   → streams final_patch events to frontend
+   → emits result with data + confidence + skill_version
+5. Generate "Why Selected" bullets from final data (single Gemini call)
 
-4. Self-Healing Retry (Pass 3):
-     Inspect confidence scores from Pass 2.
-     If any extractable field has confidence < HEALING_THRESHOLD, fire a
-     targeted Pass 3 asking ONLY for those specific low-confidence fields,
-     providing their current (uncertain) values as context.
-     Merge improvements back into data.
-   Emits: healing_patch events for each improved field
-
-5. Generic post-process (fill defaults from schema, flatten confidence)
+Removed vs legacy design (baseline-2026-04-20)
+-----------------------------------------------
+  • Pass 0 (vision-based carrier detection) — carrier overrides are now
+    baked into each SKILL.md, so a separate detection call no longer
+    changes prompt content. ``carrier_detector.py`` remains importable
+    for future use but is not called on the hot path.
+  • Pass 1 (fast key:value quick draft) — the cached system prompt and
+    small thinking budget make the single strict-JSON pass fast enough
+    that the progressive-draft stage was net negative on p50 latency.
+  • Pass 3 (self-healing retry on low-confidence fields) — the response
+    schema still emits confidence scores; they now drive the frontend
+    "Double Check" pill but are not used to trigger a second LLM call.
+  • Draft "Why Selected" — replaced by a single refine call against the
+    final data.
 
 Extending
 ---------
 To add a new insurance type:
   1. Create parsers/skills/parse_<type>/SKILL.md with YAML frontmatter
      (name, description) and a `> VERSION:` line in the body.
-  2. Add a registry entry in parsers/schema_registry.py
-  That's it.
+  2. Add a registry entry in parsers/schema_registry.py.
+  That's it — the loader + cache builder pick it up automatically.
 
 To add carrier-specific hints:
   1. Append a `### <Carrier Name>` subsection under the base skill's
      `## Carrier-Specific Overrides` section in parse_<type>/SKILL.md.
-  2. Add the carrier name to CARRIER_ALIASES in carrier_detector.py (if new)
-     — currently only used for telemetry.
-  No other changes needed.
+  2. Bump the `> VERSION:` line on the skill so stale caches expire.
 
 To swap the AI model:
-  Change MODEL_QUICK / MODEL_FINAL constants below.
-  All types instantly use the new model.
+  Change MODEL_EXTRACT below. All types instantly use the new model.
 """
 
 from __future__ import annotations
@@ -81,66 +82,58 @@ from google import genai
 from google.genai import types
 
 from parsers._model_fallback import (
-    DEFAULT_FINAL_FALLBACKS,
-    DEFAULT_QUICK_FALLBACKS,
-    generate_with_fallback,
+    DEFAULT_FALLBACKS,
     stream_with_fallback,
     upload_with_retry,
 )
 from parsers._openai_fallback import stream_openai_extraction
-from parsers.carrier_detector import detect_carrier
 from parsers.skill_loader import (
-    get_quick_pass_fields,
     get_skill_version,
     load_skill,
-    load_skill_with_carrier,
 )
 from parsers.post_process import post_process
 from parsers.schema_registry import get_registration, supported_types
-from pdf_storage_helpers import store_uploaded_pdf
+from services.pdf_storage_helpers import store_uploaded_pdf
+from services.why_selected_generator import generate_why_selected
 
 load_dotenv()
 
 router = APIRouter()
 
 # ── Model configuration — change here to upgrade ALL types at once ──
-MODEL_QUICK: str = "gemini-2.5-flash-lite"   # Pass 0 + Pass 1: fast draft
-MODEL_FINAL: str = "gemini-2.5-flash"        # Pass 2: strict JSON
-MODEL_HEAL:  str = "gemini-2.5-flash"        # Pass 3: targeted self-healing
+MODEL_EXTRACT: str = "gemini-2.5-flash"   # single-pass strict-JSON extractor
 
-# ── Self-Healing configuration ──────────────────────────────────────
-# Fields with confidence < this threshold are retried in Pass 3.
-HEALING_THRESHOLD: float = 0.45
-# Maximum number of low-confidence fields to retry in a single Pass 3.
-# Keeps the healing prompt focused and fast.
-HEALING_MAX_FIELDS: int = 8
+# ── Thinking budget ──────────────────────────────────────────────────
+# Kept intentionally non-zero so the confidence scores the model emits in
+# the response schema remain well-calibrated. 512 tokens is small enough
+# that the overhead is a few hundred ms, and large enough that the model
+# has room to plan the extraction before committing to output.
+THINKING_BUDGET: int = 512
+
+# ── System-prompt cache config ───────────────────────────────────────
+# The system instruction (CORE_SYSTEM_PROMPT + full SKILL.md +
+# supplements) is stable across requests for a given (insurance_type,
+# supplement_set, skill_version) tuple. We create a Gemini explicit
+# context cache once per tuple and reuse it for the cache TTL window.
+# If cache creation or lookup fails we fall back transparently to
+# sending the system instruction inline on each call.
+SYSTEM_CACHE_TTL_SECONDS: int = 3600           # 1 hour
+SYSTEM_CACHE_TTL: str = f"{SYSTEM_CACHE_TTL_SECONDS}s"
+
+# Process-local registry of cache names, keyed by the tuple described
+# above. Entries are names returned by ``client.caches.create(...).name``
+# (of the form ``cachedContents/<id>``) and are cheap to invalidate when
+# the cache expires server-side.
+_SYSTEM_CACHE_REGISTRY: dict[str, str] = {}
 
 
-# ── Pass 1 system prompt — key:value quick draft ───────────────────
+# ── System prompt — strict structured JSON (cached) ────────────────
 #
-# Intentionally simple. The model MUST output "field_key: value" lines.
-# Using CORE_SYSTEM_PROMPT here would conflict ("Return ONLY JSON")
-# and cause the model to output JSON instead of key:value lines,
-# breaking _parse_quick_pass_lines and killing streaming.
-#
-QUICK_PASS_SYSTEM_PROMPT = """\
-You are a fast insurance document field extractor.
-Your ONLY job is to scan the PDF and output field values as quickly as possible.
-
-Output ONLY lines in this exact format (one per line, nothing else):
-field_key: value
-
-Rules:
-- One field per line, no blank lines between fields
-- Skip fields you cannot identify — do NOT guess
-- Do NOT output JSON, markdown, explanations, or any other format
-- Prefer speed over perfection — Pass 2 will clean up
-"""
-
-# ── Pass 2 system prompt — strict structured JSON ──────────────────
-#
-# Used for Pass 2 (strict JSON with response_schema) and Pass 3 (healing).
-# The WHAT is injected per-call from the skill .md file.
+# This prompt is stable; the only per-request variation is the active
+# SKILL.md content which is appended below and then cached together with
+# the core prompt. The model outputs a JSON object matching the per-type
+# response schema, including a `confidence` object that mirrors the
+# data structure with a 0.0-1.0 score for every leaf field.
 #
 CORE_SYSTEM_PROMPT = """\
 You are an expert insurance document data extractor.
@@ -190,27 +183,6 @@ def _get_client() -> genai.Client:
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not set.")
     return genai.Client(api_key=api_key)
-
-
-# ── Quick-pass line parser (type-aware) ────────────────────────────
-
-def _parse_quick_pass_lines(text: str, all_keys: list[str]) -> dict:
-    """
-    Parse key:value lines from Pass 1 into a dict.
-    Accepts any key that is either in all_keys or contains '_' (for numbered
-    fields like driver_1_name, vehicle_2_vin used by auto/dwelling parsers).
-    """
-    found = {}
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        key = key.strip()
-        value = value.strip()
-        if value and (key in all_keys or re.match(r"[a-z][a-z0-9]*_\d+_", key)):
-            found[key] = value
-    return found
 
 
 def _try_parse_json(text: str) -> dict:
@@ -293,114 +265,81 @@ def _try_parse_json(text: str) -> dict:
     return {}
 
 
-# ── Self-healing helpers ───────────────────────────────────────────
+# ── System-prompt cache helpers ────────────────────────────────────
 
-def _flatten_confidence(conf: dict, prefix: str = "") -> dict[str, float]:
-    """
-    Flatten a nested confidence dict into {dotted.key: score} pairs.
-    Only includes leaf values that are floats/ints.
-    """
-    flat = {}
-    for k, v in conf.items():
-        full_key = f"{prefix}.{k}" if prefix else k
-        if isinstance(v, dict):
-            flat.update(_flatten_confidence(v, full_key))
-        elif isinstance(v, list):
-            for i, item in enumerate(v):
-                if isinstance(item, dict):
-                    flat.update(_flatten_confidence(item, f"{full_key}[{i}]"))
-                elif isinstance(item, (int, float)):
-                    flat[f"{full_key}[{i}]"] = float(item)
-        elif isinstance(v, (int, float)):
-            flat[full_key] = float(v)
-    return flat
-
-
-def _get_nested(d: dict, dotted_key: str):
-    """Retrieve a value from a nested dict using a dotted key path."""
-    keys = re.split(r"[.\[\]]", dotted_key)
-    val = d
-    for k in keys:
-        if not k:
-            continue
-        try:
-            val = val[int(k)] if isinstance(val, list) else val[k]
-        except (KeyError, IndexError, TypeError):
-            return None
-    return val
-
-
-def _find_low_confidence_fields(
-    data: dict,
-    confidence: dict,
-    threshold: float,
-    max_fields: int,
-) -> list[dict]:
-    """
-    Find fields where confidence < threshold.
-
-    Returns a list of dicts:
-      [{"key": "dwelling", "current": "$0", "confidence": 0.3}, ...]
-
-    Only returns top-level string fields for simplicity — nested arrays
-    like drivers/vehicles are excluded from healing (too complex to merge).
-    Skips fields that are already empty-string with high absence confidence.
-    """
-    flat_conf = _flatten_confidence(confidence)
-    candidates = []
-
-    for dotted_key, score in flat_conf.items():
-        # Skip array-nested fields (contain brackets)
-        if "[" in dotted_key:
-            continue
-        # Skip if already confident it's absent
-        current_val = _get_nested(data, dotted_key)
-        if current_val in ("", None) and score >= 0.85:
-            continue
-        if score < threshold:
-            candidates.append({
-                "key": dotted_key,
-                "current": str(current_val) if current_val is not None else "",
-                "confidence": round(score, 3),
-            })
-
-    # Sort by lowest confidence first, take top N
-    candidates.sort(key=lambda x: x["confidence"])
-    return candidates[:max_fields]
-
-
-def _build_healing_prompt(
+def _system_cache_key(
     insurance_type: str,
-    low_conf_fields: list[dict],
-    skill_content: str,
-    pdf_count: int = 1,
+    skill_version: str,
+    has_wind: bool,
+    has_separate: bool,
 ) -> str:
-    """Build the Pass 3 targeted re-extraction prompt."""
-    field_lines = "\n".join(
-        f"  {f['key']}: (current value: {f['current']!r}, confidence: {f['confidence']})"
-        for f in low_conf_fields
-    )
-    doc_phrase = "this PDF" if pdf_count == 1 else f"these {pdf_count} PDFs"
-    multi_doc_hint = (
-        " (read BOTH documents — the active skill tells you which fields "
-        "come from which PDF)"
-        if pdf_count > 1 else ""
-    )
-    return (
-        f"ACTIVE SKILL: {insurance_type.upper()} INSURANCE\n\n"
-        f"{skill_content}\n\n"
-        "---\n"
-        f"The following fields from {doc_phrase}{multi_doc_hint} were extracted "
-        "with LOW CONFIDENCE and need a second look:\n\n"
-        f"{field_lines}\n\n"
-        "Please re-examine the document carefully and return ONLY a JSON object "
-        "with these specific keys. Use the exact key names listed above.\n"
-        "Rules:\n"
-        '• If you find a better value, return it.\n'
-        '• If the current value was correct, return it unchanged.\n'
-        '• If the field genuinely does not exist, return "" for that key.\n'
-        "• Return ONLY the JSON object, no prose, no markdown."
-    )
+    """Build a stable key for the system-prompt cache registry.
+
+    Distinct cache entries are required whenever the system instruction
+    text differs, which is whenever ANY of the following change:
+      - insurance type (different SKILL.md)
+      - skill version (edits to a SKILL.md invalidate the cache)
+      - whether the wind/hail supplement is appended
+      - whether the bundle-separate supplement is appended
+    """
+    parts = [insurance_type, f"v{skill_version or 'unknown'}"]
+    if has_wind:
+        parts.append("wind")
+    if has_separate:
+        parts.append("separate")
+    return "|".join(parts)
+
+
+def _get_or_create_system_cache(
+    client: genai.Client,
+    key: str,
+    model: str,
+    system_instruction: str,
+) -> str | None:
+    """Return the cache name for ``key`` (cachedContents/...), creating
+    it on first use and re-creating it transparently if the previously
+    stored name has expired server-side.
+
+    Returns None on any failure — the caller MUST fall back to sending
+    the system instruction inline. A failed cache must never block a
+    parse from completing.
+    """
+    cached_name = _SYSTEM_CACHE_REGISTRY.get(key)
+    if cached_name:
+        # Verify the cache still exists on the Gemini side. If get() fails
+        # we assume it was evicted (TTL or admin action) and recreate.
+        try:
+            client.caches.get(name=cached_name)
+            return cached_name
+        except Exception:
+            _SYSTEM_CACHE_REGISTRY.pop(key, None)
+
+    try:
+        cache = client.caches.create(
+            model=f"models/{model}",
+            config=types.CreateCachedContentConfig(
+                display_name=f"quotify-{key}"[:120],
+                system_instruction=system_instruction,
+                ttl=SYSTEM_CACHE_TTL,
+            ),
+        )
+        _SYSTEM_CACHE_REGISTRY[key] = cache.name
+        print(
+            f"[system-cache] CREATED key={key} name={cache.name} "
+            f"ttl={SYSTEM_CACHE_TTL}",
+            flush=True,
+        )
+        return cache.name
+    except Exception as exc:
+        # Common failure modes: quota, minimum-token-count not met on a
+        # tiny skill, model-doesn't-support-caching, transient 5xx.
+        # All are non-fatal — we just skip caching for this request.
+        print(
+            f"[system-cache] create FAILED key={key} err={str(exc)[:160]} "
+            f"(falling back to inline system_instruction)",
+            flush=True,
+        )
+        return None
 
 
 # ── Core streaming pipeline ────────────────────────────────────────
@@ -408,26 +347,28 @@ def _build_healing_prompt(
 def stream_unified_quote(
     pdf_path: Path,
     insurance_type: str,
-    model_quick: str = MODEL_QUICK,
-    model_final: str = MODEL_FINAL,
-    model_quick_fallbacks=DEFAULT_QUICK_FALLBACKS,
-    model_final_fallbacks=DEFAULT_FINAL_FALLBACKS,
+    model_extract: str = MODEL_EXTRACT,
+    model_fallbacks=DEFAULT_FALLBACKS,
     wind_pdf_path: Path | None = None,
     secondary_pdf_path: Path | None = None,
 ) -> Iterator[str]:
     """
-    3-pass extraction pipeline for any insurance type.
+    Single-pass extraction pipeline for any insurance type (Design 2).
+
+    The stable system instruction (CORE_SYSTEM_PROMPT + full SKILL.md,
+    including any wind/hail or bundle-separate supplement) is cached via
+    Gemini's explicit context-cache API on first use per
+    (insurance_type, supplement_set, skill_version) tuple and reused for
+    subsequent requests. If caching is unavailable for any reason we fall
+    back transparently to sending the system instruction inline.
 
     Yields ndjson strings:
-      {"type": "status",           "message": "..."}
-      {"type": "skill_loaded",     "skill_type": "...", "version": "..."}
-      {"type": "carrier_detected", "carrier_key": "...", "raw": "...", "hint_loaded": bool}
-      {"type": "draft_patch",      "data": {...}}
-      {"type": "final_patch",      "data": {...}}
-      {"type": "healing_patch",    "data": {...}, "fields_healed": [...]}
-      {"type": "result",           "data": {...}, "confidence": {...},
-                                   "skill_version": "...", "carrier_key": "..."}
-      {"type": "error",            "error": "..."}
+      {"type": "status",        "message": "..."}
+      {"type": "skill_loaded",  "skill_type": "...", "version": "..."}
+      {"type": "final_patch",   "data": {...}}
+      {"type": "result",        "data": {...}, "confidence": {...},
+                                "skill_version": "..."}
+      {"type": "error",         "error": "..."}
     """
     client = _get_client()
     uploaded_file = None
@@ -437,9 +378,8 @@ def stream_unified_quote(
     try:
         # ── Load base skill and registry ────────────────────────
         try:
-            base_skill_content = load_skill(insurance_type)
+            skill_content = load_skill(insurance_type)
             skill_version = get_skill_version(insurance_type)
-            quick_fields = get_quick_pass_fields(insurance_type)
         except FileNotFoundError as e:
             yield json.dumps({"type": "error", "error": str(e)}) + "\n"
             return
@@ -483,9 +423,36 @@ def stream_unified_quote(
                     "fields in PDF #1 or home fields in PDF #2."
                 )
 
+        # Append any supplements to the skill content BEFORE building the
+        # system-prompt cache. The cache key includes which supplements
+        # are active, so (type=homeowners, wind=True) hits a different
+        # cache entry than (type=homeowners, wind=False).
+        if wind_skill_content:
+            skill_content = (
+                skill_content
+                + "\n\n"
+                + "━" * 60 + "\n"
+                + "## WIND / HAIL SUPPLEMENT — SECOND PDF ATTACHED\n"
+                + "A standalone wind/hail quote has been provided as a SECOND PDF.\n"
+                + "Follow the rules below to merge its values into the primary quote.\n"
+                + "━" * 60 + "\n\n"
+                + wind_skill_content
+            )
+
+        if bundle_separate_skill_content:
+            skill_content = (
+                skill_content
+                + "\n\n"
+                + "━" * 60 + "\n"
+                + "## BUNDLE SEPARATE-MODE SUPPLEMENT — TWO PDFS ATTACHED\n"
+                + "PDF #1 = HOMEOWNERS quote. PDF #2 = AUTO quote.\n"
+                + "Apply homeowners rules to PDF #1 fields, auto rules to PDF #2 fields.\n"
+                + "━" * 60 + "\n\n"
+                + bundle_separate_skill_content
+            )
+
         registration = get_registration(insurance_type)
         schema = registration["schema"]
-        all_keys = registration["all_keys"]
         status_msg = registration["status_msg"]
         why_type = registration["why_selected_type"]
 
@@ -522,67 +489,6 @@ def stream_unified_quote(
                 config={"mime_type": "application/pdf"},
             )
 
-        # ────────────────────────────────────────────────────────
-        # PASS 0 — Carrier Detection (vision-based, LEGACY)
-        # Fast, non-blocking: identifies the carrier logo on page 1.
-        # Since the v2 skills library (2026-04-20), carrier overrides
-        # are baked into parse_<type>/SKILL.md, so this step no longer
-        # swaps in a per-carrier patch. The carrier key is still
-        # emitted as a telemetry event.
-        # ────────────────────────────────────────────────────────
-        yield json.dumps({"type": "status", "message": "Identifying carrier..."}) + "\n"
-
-        detection = detect_carrier(uploaded_file, client)
-        carrier_key = detection["carrier_key"]
-
-        # Load skill (carrier overrides are baked into the base SKILL.md).
-        # load_skill_with_carrier() returns (base_skill, False) in v2 but
-        # is kept here for API stability with the legacy signature.
-        skill_content, patch_loaded = load_skill_with_carrier(insurance_type, carrier_key)
-
-        # Append the wind/hail supplemental skill when a second PDF is
-        # present. The wind skill's instructions tell the model how to
-        # merge the wind/hail deductible and sum the premium.
-        if uploaded_wind_file is not None and wind_skill_content:
-            skill_content = (
-                skill_content
-                + "\n\n"
-                + "━" * 60 + "\n"
-                + "## WIND / HAIL SUPPLEMENT — SECOND PDF ATTACHED\n"
-                + "A standalone wind/hail quote has been provided as a SECOND PDF.\n"
-                + "Follow the rules below to merge its values into the primary quote.\n"
-                + "━" * 60 + "\n\n"
-                + wind_skill_content
-            )
-
-        # Append the bundle-separate supplement when the user uploaded
-        # two separate PDFs (one homeowners, one auto) for a bundle.
-        # Without this, the model treats both PDFs as a single combined
-        # document and under-extracts auto fields.
-        if uploaded_secondary_file is not None and bundle_separate_skill_content:
-            skill_content = (
-                skill_content
-                + "\n\n"
-                + "━" * 60 + "\n"
-                + "## BUNDLE SEPARATE-MODE SUPPLEMENT — TWO PDFS ATTACHED\n"
-                + "PDF #1 = HOMEOWNERS quote. PDF #2 = AUTO quote.\n"
-                + "Apply homeowners rules to PDF #1 fields, auto rules to PDF #2 fields.\n"
-                + "━" * 60 + "\n\n"
-                + bundle_separate_skill_content
-            )
-
-        yield json.dumps({
-            "type": "carrier_detected",
-            "carrier_key": carrier_key,
-            "raw": detection["raw"],
-            "hint_loaded": patch_loaded,
-        }) + "\n"
-
-        # ────────────────────────────────────────────────────────
-        # PASS 1 — Quick draft (fast, key:value lines)
-        # System: CORE_SYSTEM_PROMPT (methodology only)
-        # User:   quick extract request + merged skill + quick-pass field list
-        # ────────────────────────────────────────────────────────
         # Count of PDFs actually attached so the prompt can say "TWO PDFs"
         # instead of "this PDF" when we're in wind/hail or bundle-separate
         # mode. Singular wording demonstrably leads Gemini to ignore the
@@ -590,25 +496,9 @@ def stream_unified_quote(
         pdf_count = 1 + (1 if uploaded_wind_file is not None else 0) + (1 if uploaded_secondary_file is not None else 0)
         pdf_phrase = "this PDF" if pdf_count == 1 else f"these {pdf_count} PDFs"
 
-        fields_list = "\n".join(f"  {f}" for f in quick_fields) if quick_fields else "  (see skill for fields)"
-        quick_user_prompt = (
-            f"ACTIVE SKILL: {insurance_type.upper()} INSURANCE"
-            + (f" — {carrier_key.replace('_', ' ').title()}" if carrier_key != "unknown" else "")
-            + f"\n\n{skill_content}\n\n"
-            "---\n"
-            f"Quickly extract likely fields from {pdf_phrase} "
-            + ("(read BOTH documents in order — PDF #1 first, PDF #2 second). " if pdf_count > 1 else "")
-            + f"This is a {insurance_type} quote.\n"
-            "Output ONLY lines in this exact format (one per line):\n"
-            "field_key: value\n\n"
-            "Priority fields:\n"
-            f"{fields_list}\n\n"
-            "Skip fields you cannot identify. Do not explain anything. Prefer speed over perfection."
-        )
-
         # Shared PDF label list — identifies which policy each attached PDF
         # represents. Used by both the Gemini ``_build_contents`` helper
-        # (below) and the OpenAI fallback lambdas (``pdf_labels=`` kw-arg).
+        # (below) and the OpenAI fallback lambda (``pdf_labels=`` kw-arg).
         # Keep these in sync so the model sees the SAME boundary markers
         # regardless of which provider handles the pass.
         pdf_labels: list[str] = []
@@ -661,50 +551,18 @@ def stream_unified_quote(
                 parts.append(f)
             return parts
 
-        quick_contents = _build_contents(quick_user_prompt)
-
-        quick_text = ""
-        sent_draft: dict = {}
-        quick_stream = stream_with_fallback(
-            client,
-            model_quick,
-            model_quick_fallbacks,
-            contents=quick_contents,
-            config=types.GenerateContentConfig(
-                system_instruction=QUICK_PASS_SYSTEM_PROMPT,
-                temperature=0,
-            ),
-            openai_fallback=lambda: stream_openai_extraction(
-                pdf_path,
-                system_instruction=QUICK_PASS_SYSTEM_PROMPT,
-                user_prompt=quick_user_prompt,
-                extra_pdf_paths=extra_pdf_paths,
-                pdf_labels=pdf_labels,
-            ),
-        )
-
-        for chunk in quick_stream:
-            text = chunk.text or ""
-            if not text:
-                continue
-            quick_text += text
-            found = _parse_quick_pass_lines(quick_text, all_keys)
-            patch = {k: v for k, v in found.items() if sent_draft.get(k) != v}
-            if patch:
-                sent_draft.update(patch)
-                yield json.dumps({"type": "draft_patch", "data": patch}) + "\n"
-
-        # Draft "Why Selected" after Pass 1
-        from why_selected_generator import generate_why_selected_draft, generate_why_selected_refine
-        draft_bullets = generate_why_selected_draft(dict(sent_draft), why_type)
-        if draft_bullets:
-            yield json.dumps({"type": "draft_patch", "data": {"why_selected": draft_bullets}}) + "\n"
-
         # ────────────────────────────────────────────────────────
-        # PASS 2 — Strict structured JSON
-        # System: CORE_SYSTEM_PROMPT + full skill (carrier overrides baked in)
-        # User:   strict extract request
-        # response_schema: type-specific JSON schema
+        # EXTRACTION — single-pass, strict structured JSON
+        # System: CORE_SYSTEM_PROMPT + full skill (carrier overrides
+        #         baked into SKILL.md, supplements pre-appended above).
+        #         Cached via explicit context cache so the stable prefix
+        #         only incurs prefill cost on first use per
+        #         (type, supplements, skill_version) tuple.
+        # User:   "Extract all … fields" with multi-PDF boundaries.
+        # response_schema: type-specific JSON schema with confidence.
+        # thinking_config: small non-zero budget — keeps the model's
+        #                  confidence scores well-calibrated without
+        #                  adding meaningful latency.
         # ────────────────────────────────────────────────────────
         yield json.dumps({"type": "status", "message": status_msg}) + "\n"
 
@@ -712,9 +570,21 @@ def stream_unified_quote(
             CORE_SYSTEM_PROMPT
             + "\n\n═══ ACTIVE SKILL: "
             + insurance_type.upper()
-            + (f" — {carrier_key.replace('_', ' ').title()}" if carrier_key != "unknown" else "")
             + " ═══════════════════════\n\n"
             + skill_content
+        )
+
+        # Try to reuse (or build) the explicit system-prompt cache for
+        # this (type, supplements, skill_version) tuple. Never blocks the
+        # parse — a None return falls through to inline system_instruction.
+        cache_key = _system_cache_key(
+            insurance_type=insurance_type,
+            skill_version=skill_version,
+            has_wind=uploaded_wind_file is not None,
+            has_separate=uploaded_secondary_file is not None,
+        )
+        cached_name = _get_or_create_system_cache(
+            client, cache_key, model_extract, system_with_skill
         )
 
         if pdf_count > 1:
@@ -728,23 +598,43 @@ def stream_unified_quote(
         else:
             final_user_prompt = f"Extract all {insurance_type} insurance quote fields from this PDF."
 
-        # Same labeled-interleave pattern as Pass 1 — keep the boundaries
-        # visible so Gemini reads BOTH PDFs and doesn't stop after the first.
+        # Interleaved labels + files — keep boundaries visible so Gemini
+        # reads BOTH PDFs and doesn't stop after the first.
         final_contents = _build_contents(final_user_prompt)
+
+        # ``cached_content`` and ``system_instruction`` are mutually
+        # exclusive in the Gemini SDK — pass whichever one is available.
+        # When the cache exists we omit system_instruction; the cached
+        # prefix IS the system prompt on the server side.
+        if cached_name:
+            gen_config = types.GenerateContentConfig(
+                cached_content=cached_name,
+                temperature=0,
+                response_mime_type="application/json",
+                response_schema=schema,
+                thinking_config=types.ThinkingConfig(thinking_budget=THINKING_BUDGET),
+            )
+        else:
+            gen_config = types.GenerateContentConfig(
+                system_instruction=system_with_skill,
+                temperature=0,
+                response_mime_type="application/json",
+                response_schema=schema,
+                thinking_config=types.ThinkingConfig(thinking_budget=THINKING_BUDGET),
+            )
 
         full_text = ""
         sent_final: dict = {}
         final_stream = stream_with_fallback(
             client,
-            model_final,
-            model_final_fallbacks,
+            model_extract,
+            model_fallbacks,
             contents=final_contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_with_skill,
-                temperature=0,
-                response_mime_type="application/json",
-                response_schema=schema,
-            ),
+            config=gen_config,
+            # OpenAI fallback can't use Gemini's cache, so we pass the
+            # system instruction inline. Accuracy stays the same; only
+            # latency regresses — and this path only fires when every
+            # Gemini model in the chain has already failed.
             openai_fallback=lambda: stream_openai_extraction(
                 pdf_path,
                 system_instruction=system_with_skill,
@@ -773,7 +663,7 @@ def stream_unified_quote(
                     sent_final = dict(partial)
                     yield json.dumps({"type": "final_patch", "data": partial}) + "\n"
 
-        # ── Post-process Pass 2 result ─────────────────────────
+        # ── Post-process extraction result ────────────────────
         # Use the lenient _try_parse_json helper (code-fence strip,
         # substring-between-braces, balanced-brace truncation) so one
         # dropped byte from the LLM doesn't kill the whole parse. If
@@ -788,82 +678,17 @@ def stream_unified_quote(
             )
         data, confidence = post_process(parsed, schema)
 
-        # ────────────────────────────────────────────────────────
-        # PASS 3 — Self-Healing Retry
-        # Find fields where Pass 2 confidence < HEALING_THRESHOLD
-        # and fire a targeted re-extraction for only those fields.
-        # ────────────────────────────────────────────────────────
-        low_conf_fields = _find_low_confidence_fields(
-            data, confidence, HEALING_THRESHOLD, HEALING_MAX_FIELDS
-        )
-
-        if low_conf_fields:
-            yield json.dumps({
-                "type": "status",
-                "message": f"Re-checking {len(low_conf_fields)} uncertain field(s)...",
-            }) + "\n"
-
-            healing_prompt = _build_healing_prompt(
-                insurance_type, low_conf_fields, skill_content, pdf_count=pdf_count
-            )
-
-            heal_contents = _build_contents(healing_prompt)
-
-            try:
-                heal_resp = generate_with_fallback(
-                    client,
-                    MODEL_HEAL,
-                    DEFAULT_FINAL_FALLBACKS,
-                    contents=heal_contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=CORE_SYSTEM_PROMPT,
-                        temperature=0,
-                    ),
-                )
-                heal_text = (heal_resp.text or "").strip()
-                healed = _try_parse_json(heal_text)
-
-                if healed:
-                    # Only accept improvements — don't overwrite confident values
-                    # with empty strings from a confused healing pass
-                    improved_fields = []
-                    for field_info in low_conf_fields:
-                        key = field_info["key"]
-                        if key in healed:
-                            new_val = healed[key]
-                            old_val = data.get(key, "")
-                            # Accept the new value if:
-                            #  1. It's non-empty (healing found something), OR
-                            #  2. The old value was also empty (confirming absence)
-                            if new_val or not old_val:
-                                data[key] = new_val
-                                improved_fields.append(key)
-
-                    if improved_fields:
-                        heal_patch = {k: data[k] for k in improved_fields}
-                        yield json.dumps({
-                            "type": "healing_patch",
-                            "data": heal_patch,
-                            "fields_healed": improved_fields,
-                        }) + "\n"
-
-            except Exception as heal_exc:
-                # Self-healing failure is non-fatal — result still has Pass 2 data
-                yield json.dumps({
-                    "type": "status",
-                    "message": f"Self-healing skipped: {heal_exc}",
-                }) + "\n"
-
-        # ── Finalize Why Selected ───────────────────────────────
+        # ── Generate Why Selected ──────────────────────────────
+        # One short Gemini call against the final verified data produces
+        # the 3-4 "why this plan was selected" bullets shown in the UI.
         yield json.dumps({"type": "status", "message": "Generating plan summary..."}) + "\n"
-        data["why_selected"] = generate_why_selected_refine(data, draft_bullets, why_type)
+        data["why_selected"] = generate_why_selected(data, why_type)
 
         yield json.dumps({
             "type": "result",
             "data": data,
             "confidence": confidence,
             "skill_version": skill_version,
-            "carrier_key": carrier_key,
         }) + "\n"
 
     except Exception as exc:
@@ -934,13 +759,11 @@ async def parse_quote(
     `wind_file`, the wind/hail skill supplement is NOT injected.
 
     Stream events (ndjson):
-      skill_loaded     — skill file loaded and version confirmed
-      carrier_detected — carrier identified from document logo
-      draft_patch      — progressive field updates from Pass 1
-      final_patch      — progressive field updates from Pass 2
-      healing_patch    — field corrections from Pass 3 self-healing
-      result           — final extracted data with confidence scores
-      error            — non-recoverable error
+      skill_loaded — skill file loaded and version confirmed
+      status       — human-readable progress messages
+      final_patch  — progressive field updates as the JSON is streamed
+      result       — final extracted data with confidence scores
+      error        — non-recoverable error
     """
     try:
         get_registration(insurance_type)

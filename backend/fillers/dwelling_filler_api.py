@@ -4,9 +4,9 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from jinja2 import Environment, FileSystemLoader
-from browser_manager import get_browser
-from pdf_optimizer import optimize_pdf
-from pdf_storage_helpers import store_generated_pdf
+from core.browser_manager import get_browser
+from services.pdf_optimizer import optimize_pdf
+from services.pdf_storage_helpers import store_generated_pdf
 from fillers._filename import build_pdf_filename
 
 router = APIRouter()

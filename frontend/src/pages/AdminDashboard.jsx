@@ -1,8 +1,8 @@
 import React from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
-import COLORS, { INSURANCE_COLORS } from "./colors";
-import ChatPanel from "./ChatPanel";
+import COLORS, { INSURANCE_COLORS } from "../lib/colors";
+import ChatPanel from "../components/ChatPanel";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 

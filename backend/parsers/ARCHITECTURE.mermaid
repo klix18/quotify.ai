@@ -5,6 +5,7 @@ flowchart TD
     classDef schema fill:#fefce8,stroke:#ca8a04,color:#92400e
     classDef model fill:#fdf4ff,stroke:#9333ea,color:#6b21a8
     classDef fallback fill:#fff7ed,stroke:#ea580c,color:#c2410c
+    classDef cache fill:#eef2ff,stroke:#4f46e5,color:#3730a3
     classDef output fill:#f0f9ff,stroke:#0891b2,color:#0e7490
 
     FE["🖥️ Frontend\nPOST /api/parse-quote\n{ insurance_type, file }"]:::frontend
@@ -27,50 +28,50 @@ flowchart TD
         S5["📦 parse_bundle/SKILL.md\nv2.0\n@include homeowners\n@include auto"]:::skill
     end
 
-    subgraph PASS1["Pass 1 — Quick Draft  ·  gemini-2.5-flash-lite"]
-        direction LR
-        P1SYS["System:\nCORE_PROMPT\n(universal extraction rules)"]:::model
-        P1USR["User:\n'Quick extract {type} fields'\n+ skill quick-pass field list"]:::model
-        P1OUT["→ key:value stream\n→ draft_patch events\n→ frontend updates live"]:::output
-        P1SYS --- P1USR --> P1OUT
+    subgraph CACHE["System-Prompt Cache  ·  client.caches (TTL 1h)"]
+        direction TB
+        CKEY["🔑 cache key\n(insurance_type, supplements, skill_version)"]:::cache
+        CREG["🗃️ _SYSTEM_CACHE_REGISTRY\nprocess-local name lookup"]:::cache
+        CGEM["☁️ Gemini explicit cache\ncachedContents/...\nCORE_PROMPT + full SKILL.md"]:::cache
+        CKEY --> CREG
+        CREG --> CGEM
     end
 
-    subgraph PASS2["Pass 2 — Strict JSON  ·  gemini-2.5-flash"]
+    subgraph EXTRACT["Extraction — Single Pass  ·  gemini-2.5-flash"]
         direction LR
-        P2SYS["System:\nCORE_PROMPT\n+ full SKILL.md (carrier overrides baked in)"]:::model
-        P2USR["User:\n'Extract all {type} fields'\nresponse_schema = type schema"]:::model
-        P2OUT["→ full JSON\n→ final_patch events\n→ normalized result"]:::output
-        P2SYS --- P2USR --> P2OUT
+        EXSYS["System (cached):\nCORE_PROMPT\n+ full SKILL.md\n+ wind/hail or bundle_separate supplement"]:::model
+        EXUSR["User:\n'Extract all {type} fields'\nresponse_schema = type schema\nthinking_budget = 512"]:::model
+        EXOUT["→ JSON stream\n→ final_patch events\n→ normalized result + confidence"]:::output
+        EXSYS --- EXUSR --> EXOUT
     end
 
     subgraph FALLBACK["Fallback Chain  ·  _model_fallback.py + _openai_fallback.py"]
         direction LR
         FB1["⚡ Gemini 503 / overload\ndetected on first chunk"]:::fallback
-        FB2["→ OpenAI Responses API\ngpt-4o-mini → gpt-4o\nwith same system + skill"]:::fallback
+        FB2["→ OpenAI Responses API\ngpt-4o-mini → gpt-4o\nsystem_instruction inline (no cache)"]:::fallback
         FB1 --> FB2
     end
 
-    NRM["🔧 normalizer\n(per type in schema_registry)\nensure all keys, extract confidence\nstrict=False JSON parse"]:::schema
-    WSG["✍️ why_selected_generator\nPass 1 draft → Pass 2 refine\nskill type passed through"]:::core
-    OUT["📤 Streaming ndjson\nstatus · draft_patch\nfinal_patch · result"]:::output
+    NRM["🔧 post_process\n(per type via schema_registry)\nfill defaults · flatten confidence\nlenient JSON recovery"]:::schema
+    WSG["✍️ why_selected_generator\nsingle Gemini Flash call\nskill type passed through"]:::core
+    OUT["📤 Streaming ndjson\nstatus · skill_loaded\nfinal_patch · result"]:::output
 
     FE --> EP
     SL -.->|reads| SKILLS
-    SR -.->|provides schema| PASS2
-    EP --> PASS1
-    PASS1 --> WSG
-    PASS1 --> PASS2
-    PASS1 -.->|on error| FALLBACK
-    PASS2 -.->|on error| FALLBACK
-    PASS2 --> NRM
-    NRM --> OUT
-    WSG -.->|why_selected bullets| OUT
+    SR -.->|provides schema| EXTRACT
+    EP --> CACHE
+    CACHE -.->|cached_content=name| EXTRACT
+    EP --> EXTRACT
+    EXTRACT -.->|on error| FALLBACK
+    EXTRACT --> NRM
+    NRM --> WSG
+    WSG --> OUT
     OUT --> FE
 
     subgraph FUTURE["🔮 Future Agent Capabilities"]
         direction TB
-        CAP1["🔍 Carrier Detection Pre-Pass\nzero-shot carrier ID → load\ncarrier-specific sub-skill"]:::skill
-        CAP2["🔁 Self-Healing Retry\nif avg confidence < threshold\nre-query low-confidence fields only"]:::core
+        CAP1["🔍 Carrier-aware routing\ndetect carrier once, route to\nper-carrier sub-skill overrides"]:::skill
+        CAP2["🔁 Selective self-healing\noptionally re-query only\nvery-low-confidence fields"]:::core
         CAP3["📊 Skill Versioning\nVERSION header per skill\nlogged with every parse event"]:::skill
         CAP4["🧩 Skill Composition\nbundle @includes home + auto\nskills are composable units"]:::skill
         CAP5["🧠 Carrier Memory\nremember carrier quirks per org\nauto-inject learned hints"]:::core

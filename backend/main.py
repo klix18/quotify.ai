@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from advisor_info_api import router as advisor_router
+from api.advisor_info_api import router as advisor_router
 
 # Unified parser — single endpoint for all insurance types via skills system
 from parsers.unified_parser_api import router as unified_parser_router
@@ -15,19 +15,19 @@ from fillers.bundle_filler_api import router as bundle_filler_router
 from fillers.dwelling_filler_api import router as dwelling_filler_router
 from fillers.commercial_filler_api import router as commercial_filler_router
 
-from analytics_api import router as analytics_router, self_router as analytics_self_router
-from track_api import router as track_router
-from pdf_storage_api import router as pdf_storage_router
-from clerk_users_api import router as clerk_users_router
-from chat_api import router as chat_router
-from report_generator import router as report_router
+from api.analytics_api import router as analytics_router, self_router as analytics_self_router
+from api.track_api import router as track_router
+from api.pdf_storage_api import router as pdf_storage_router
+from api.clerk_users_api import router as clerk_users_router
+from api.chat_api import router as chat_router
+from services.report_generator import router as report_router
 
-from settings_api import router as settings_router, usage_router as api_usage_router
-from dev_metrics_api import router as dev_metrics_router
-from auto_clear_task import start_auto_clear_loop
-from browser_manager import get_browser, close_browser
-from database import init_db, close_pool
-from user_id_backfill import run_startup_backfill
+from api.settings_api import router as settings_router, usage_router as api_usage_router
+from api.dev_metrics_api import router as dev_metrics_router
+from services.auto_clear_task import start_auto_clear_loop
+from core.browser_manager import get_browser, close_browser
+from core.database import init_db, close_pool
+from scripts.user_id_backfill import run_startup_backfill
 
 
 @asynccontextmanager

@@ -7,37 +7,46 @@ Prepared during a 4-pass cleanup review. Scope: debugging + straggler code only
 
 ## 1. High-level structure
 
+> **Reorganized 2026-04-25** — backend root flattened into `api/`, `core/`,
+> `services/`, `scripts/`; frontend `src/` flattened into `pages/`,
+> `components/`, `lib/`, `styles/`. All imports updated.
+
 ```
 quotify-ai/
-├── backend/                    FastAPI app (main.py)
+├── backend/                    FastAPI app (main.py at root — Dockerfile entry: `uvicorn main:app`)
 │   ├── main.py                 app + router mounts + lifespan (browser, DB, auto-clear task)
-│   ├── auth.py                 Clerk JWT → user payload (verify_clerk_token / get_current_user / require_admin)
-│   ├── database.py             asyncpg pool, PDFs, analytics, chat_memory, api_usage, settings
-│   ├── chat_memory.py          3-layer memory (in-mem session / DB session summary / DB long-term)
-│   ├── chat_api.py             Snappy analytics chatbot SSE endpoint + session + memory management
-│   ├── analytics_api.py        Admin analytics endpoints (totals, leaderboards, timeline, per-user)
-│   ├── report_generator.py     Periodic Resend-sent HTML report (Gemini-generated)
-│   ├── settings_api.py         Admin auto-clear setting + api-usage endpoints
-│   ├── track_api.py            POST /api/track-event — analytics event logger
-│   ├── pdf_storage_api.py      List / download / delete stored PDFs
-│   ├── pdf_storage_helpers.py  store_uploaded_pdf / store_generated_pdf (await store_pdf(...))
-│   ├── clerk_users_api.py      Admin user role management via Clerk API
-│   ├── advisor_info_api.py     Reads advisor Excel sheet → /api/advisors
-│   ├── auto_clear_task.py      Background loop that clears PDFs on schedule
-│   ├── browser_manager.py      Playwright Chromium singleton (for PDF rendering)
-│   ├── pdf_optimizer.py        qpdf lossless PDF optimizer (post Chromium render)
-│   ├── usage_tracker.py        Fire-and-forget token usage logger (Gemini + OpenAI)
-│   ├── why_selected_generator.py  2-pass "Why this plan?" bullets (Gemini)
-│   ├── parsers/
-│   │   ├── unified_parser_api.py   Single POST /api/parse-quote endpoint; 3-pass pipeline
+│   ├── api/                    FastAPI routers (mounted in main.py)
+│   │   ├── advisor_info_api.py   Reads advisor Excel sheet → /api/advisors
+│   │   ├── analytics_api.py      Admin analytics endpoints (totals, leaderboards, timeline, per-user)
+│   │   ├── chat_api.py           Snappy analytics chatbot SSE endpoint + session + memory management
+│   │   ├── clerk_users_api.py    Admin user role management via Clerk API
+│   │   ├── dev_metrics_api.py    Dev-only parse_metrics endpoints
+│   │   ├── pdf_storage_api.py    List / download / delete stored PDFs
+│   │   ├── settings_api.py       Admin auto-clear setting + api-usage endpoints
+│   │   └── track_api.py          POST /api/track-event — analytics event logger
+│   ├── core/                   Infrastructure / shared concerns
+│   │   ├── auth.py               Clerk JWT → user payload (verify_clerk_token / get_current_user / require_admin)
+│   │   ├── database.py           asyncpg pool, PDFs, analytics, chat_memory, api_usage, settings
+│   │   └── browser_manager.py    Playwright Chromium singleton (for PDF rendering)
+│   ├── services/               Business logic / helpers (no routers, except report_generator which mounts under /api/admin)
+│   │   ├── chat_memory.py        3-layer memory (in-mem session / DB session summary / DB long-term)
+│   │   ├── report_generator.py   Periodic Resend-sent HTML report (Gemini-generated)
+│   │   ├── why_selected_generator.py  "Why this plan?" bullets (single refine call, gpt-4o)
+│   │   ├── pdf_storage_helpers.py  store_uploaded_pdf / store_generated_pdf (await store_pdf(...))
+│   │   ├── pdf_optimizer.py      qpdf lossless PDF optimizer (post Chromium render)
+│   │   ├── auto_clear_task.py    Background loop that clears PDFs on schedule
+│   │   └── usage_tracker.py      Fire-and-forget token usage logger (Gemini + OpenAI)
+│   ├── scripts/                One-off / startup scripts
+│   │   └── user_id_backfill.py   run_startup_backfill + backfill_user_ids_from_clerk
+│   ├── parsers/                Parser pipeline (unchanged)
+│   │   ├── unified_parser_api.py   Single POST /api/parse-quote endpoint; single-pass + cached system prompt (Design 2)
 │   │   ├── schema_registry.py      JSON schemas + keys for all insurance types
 │   │   ├── skill_loader.py         Loads parse_<type>/SKILL.md (+ @include resolution)
-│   │   ├── carrier_detector.py     Vision pass to identify carrier from logo (legacy; carriers now baked into SKILL.md)
 │   │   ├── post_process.py         Schema-driven default filling + confidence flattening
 │   │   ├── _model_fallback.py      Gemini model-chain fallback + OpenAI cross-provider failover
 │   │   ├── _openai_fallback.py     OpenAI Responses API streaming/gen fallback path
 │   │   └── skills/parse_<type>/SKILL.md  Prompt skill per insurance type (YAML frontmatter + baked-in carrier overrides)
-│   ├── fillers/                Five near-identical PDF generators (one per insurance type)
+│   ├── fillers/                Five near-identical PDF generators (one per insurance type) — unchanged
 │   │   └── *_filler_api.py     Jinja2 → Chromium PDF → qpdf → DB store
 │   ├── skills/                 Analytics chatbot skill markdown (admin + advisor scope)
 │   ├── templates/              Jinja2 + CSS for quote PDFs
@@ -46,36 +55,68 @@ quotify-ai/
 │
 └── frontend/                   Vite + React 19 + Clerk
     └── src/
-        ├── main.jsx            Bootstraps ClerkProvider + BrowserRouter + <App/>
-        ├── App.jsx             SignInPage, TopNav, AuthenticatedApp, MobileBlocker
-        ├── QuotifyHome.jsx     Main quote workflow UI (3363 lines)
-        ├── AdminDashboard.jsx  Admin analytics dashboard (2314 lines)
-        ├── ChatPanel.jsx       Snappy chat panel (SSE consumer)
-        ├── ChatMemoryPage.jsx  Admin-only memory inspector
-        ├── colors.js           COLORS + INSURANCE_COLORS palettes
-        ├── trackEvent.js       trackEvent() + getManualFieldNames()
-        ├── sparkleFlow.js      Visual "sparkle" animation helper
+        ├── main.jsx            (root) Bootstraps ClerkProvider + BrowserRouter + <App/>
+        ├── App.jsx             (root) SignInPage, TopNav, AuthenticatedApp, MobileBlocker
+        ├── pages/              Route-level page components
+        │   ├── QuotifyHome.jsx       Main quote workflow UI
+        │   ├── AdminDashboard.jsx    Admin analytics dashboard
+        │   └── ChatMemoryPage.jsx    Admin-only memory inspector
+        ├── components/         Reusable UI components
+        │   └── ChatPanel.jsx         Snappy chat panel (SSE consumer)
+        ├── lib/                JS utilities / helpers (no React)
+        │   ├── colors.js             COLORS + INSURANCE_COLORS palettes
+        │   ├── trackEvent.js         trackEvent() + getManualFieldNames()
+        │   ├── sparkleFlow.js        Visual "sparkle" animation helper
+        │   └── devMetrics.js         parse_metrics logger + SYSTEM_DESIGN_VERSION
+        ├── styles/             Global stylesheets
+        │   ├── index.css             Imported by main.jsx
+        │   └── App.css               (currently unused; kept for reference)
         ├── panels/             Per-type form panels (Homeowners, Auto, Dwelling, Bundle, Commercial)
-        └── configs/            Per-type field constants used by the panels
+        ├── configs/            Per-type field constants used by the panels
+        └── assets/
 ```
+
+### Import conventions after reorg
+- Backend top-level: `from core.X`, `from services.X`, `from api.X`, `from scripts.X`,
+  `from parsers.X`, `from fillers.X`. `skills` (chatbot prompt loader) is still at root.
+- Frontend from `pages/` or `components/`: `import X from "../lib/X"`,
+  `import Y from "../components/Y"`, `import Z from "../configs/Z"`.
+- Frontend from root (`App.jsx`, `main.jsx`): `import X from "./lib/X"`,
+  `import P from "./pages/P"`, `import "./styles/index.css"`.
 
 ---
 
-## 2. Data flow — parsing pipeline
+## 2. Data flow — parsing pipeline (Design 2, `single-pass-cached-2026-04-21`)
 
 1. **Frontend** uploads PDF to `POST /api/parse-quote?insurance_type=<type>`.
 2. **unified_parser_api.stream_unified_quote** yields ndjson events:
    - `skill_loaded` — from `skill_loader.load_skill(...)`
-   - `status` → PDF uploaded via `upload_with_retry`
-   - `carrier_detected` — `carrier_detector.detect_carrier(...)` (Pass 0, vision)
-   - `draft_patch*` — Pass 1 quick key:value extraction (`stream_with_fallback`)
-   - `final_patch*` — Pass 2 schema-enforced JSON (`stream_with_fallback` + `response_schema`)
-   - `healing_patch*` — Pass 3 re-check of low-confidence fields (`generate_with_fallback`)
-   - `result` — final post-processed data + flattened confidence
-3. Model-chain fallback: Gemini flash-lite → flash → flash-2.0 → flash-1.5 → OpenAI fallback chain
-   (gpt-4o-mini → gpt-4o). OpenAI path handled by `_openai_fallback.py`.
-4. `post_process.post_process(...)` fills defaults from JSON schema (generic — no per-type
-   normalizers) and flattens the confidence dict for the UI.
+   - `status` → progress messages (PDF upload, extraction, why-selected)
+   - `final_patch*` — single strict-JSON streaming extraction on `gemini-2.5-flash`
+     via `stream_with_fallback` + `response_schema`. The system instruction
+     (`CORE_SYSTEM_PROMPT` + full `SKILL.md` + any wind/hail or bundle-separate
+     supplement) is served from a Gemini explicit context cache, created once per
+     `(insurance_type, supplement_set, skill_version)` tuple with a 1-hour TTL
+     (see `_system_cache_key` / `_get_or_create_system_cache` + the
+     `_SYSTEM_CACHE_REGISTRY` process-local dict in `unified_parser_api.py`).
+     `thinking_config=ThinkingConfig(thinking_budget=512)` is kept non-zero so
+     the model's per-field confidence scores stay well-calibrated.
+   - `result` — final post-processed data + flattened confidence + `skill_version`
+3. Model-chain fallback: primary Gemini only (`DEFAULT_FALLBACKS` is empty),
+   then straight to OpenAI (gpt-4o-mini → gpt-4o). The OpenAI path
+   (`_openai_fallback.py`) receives the system instruction inline; it can't
+   share Gemini's cache.
+4. `post_process.post_process(...)` fills defaults from JSON schema (generic — no
+   per-type normalizers) and flattens the confidence dict for the UI.
+5. Finally, `why_selected_generator.generate_why_selected(data, why_type)`
+   produces the bullets (single `gemini-2.5-flash-lite` call) before the
+   `result` event fires.
+
+**Removed vs `baseline-2026-04-20`:** Pass 0 (`carrier_detector.detect_carrier`
+vision call), Pass 1 (quick key:value `draft_patch` stream), Pass 3 (self-healing
+`healing_patch` retry on low-confidence fields), and the draft stage of
+why-selected. Confidence thresholds still drive the frontend "Double Check"
+pill — they just no longer trigger a second LLM call.
 
 ## 3. Data flow — quote PDF generation
 
@@ -612,12 +653,12 @@ PDF #2 is wind/hail".
   `secondary_pdf_path is not None`, then appended to the merged skill
   content with a banner header (parallel to the wind/hail supplement
   block). Non-fatal fallback inlines a terse version if the file is
-  missing. Append happens after `load_skill_with_carrier` so the
-  supplement is authoritative for PDF ordering.
+  missing. Append happens after `load_skill` so the supplement is
+  authoritative for PDF ordering.
 
-**Layer 2 — multi-PDF-aware prompt wording.** All three pass prompts
-(quick / final / heal) literally said "from this PDF" (singular) even
-when 2 PDFs were attached, which biased Gemini to read only PDF #1.
+**Layer 2 — multi-PDF-aware prompt wording.** The single extraction
+prompt used to say "from this PDF" (singular) even when 2 PDFs were
+attached, which biased Gemini to read only PDF #1.
 
 - New helpers in `stream_unified_quote`:
   ```python
@@ -709,24 +750,29 @@ Final state:
     `.detail-table`.
   - **Deductibles placement rule**: weight =
     `(vehicles|length * 2) + (drivers|length * 1)`.
-    - Weight ≤ 11 → Deductibles renders **inline** at the bottom of
-      Page 3, right after Vehicles (same `.detail-table r8`, tighter
-      `margin-top: 10px` heading since it's continuing a page).
-    - Weight > 11 → Deductibles gets its own **Page 4** with the
-      full logo + heading + disclaimer treatment
+    - Weight ≤ 9 → Deductibles & Optional Coverages renders **inline**
+      at the bottom of Page 3, right after Vehicles (same
+      `.detail-table r8`, tighter `margin-top: 10px` heading since it's
+      continuing a page).
+    - Weight > 9 → Deductibles & Optional Coverages gets its own
+      **Page 4** with the full logo + heading + disclaimer treatment
       (`margin-top: 20px` heading).
     - Rationale: each vehicle row consumes more visual weight than a
-      driver row because the deductibles table is keyed per-vehicle,
-      so vehicles count as 2 and drivers as 1.
+      driver row because the table is keyed per-vehicle, so vehicles
+      count as 2 and drivers as 1. The threshold was tightened from
+      11 → 9 after rental/towing added two extra columns to the table.
     - Jinja: `{% set _vehicle_count = ... %}` /
       `{% set _driver_count = ... %}` /
       `{% set _ded_weight = ... %}` /
-      `{% set _ded_on_separate_page = _ded_weight > 11 %}` set at the
+      `{% set _ded_on_separate_page = _ded_weight > 9 %}` set at the
       top of Page 3 and reused by both conditional blocks.
   - Both placements share the `{% set _ded_any = namespace(flag=false) %}`
-    pre-scan — neither renders when no vehicle has deductible data.
-    Table in both cases is `.detail-table r8` with colgroup 50/25/25
-    and columns Vehicle / Comprehensive / Collision. No descriptions.
+    pre-scan — neither renders when no vehicle has deductible / rental /
+    towing data. Table in both cases is `.detail-table r8` with colgroup
+    32/17/17/17/17 and columns Vehicle / Comprehensive / Collision /
+    Rental Limit / Towing Limit. Section heading is "Deductibles &
+    Optional Coverages" (renamed from "Deductibles" when rental + towing
+    moved from policy-level to per-vehicle). No descriptions.
   - Payment Options page renumbered from PAGE 4 to PAGE 5 in the
     comment marker (it's only actually Page 5 when Deductibles takes
     its own page; otherwise Payment Options is effectively Page 4,
@@ -742,11 +788,11 @@ Final state:
     quote's Page 3: Drivers table (colgroup 35/18/25/22), Vehicles
     table (colgroup 38/28/14/20, subtitle "Vehicles covered under
     this policy." — no more "…along with their premium breakdowns"),
-    and inline Deductibles (`.detail-table r8`, colgroup 50/25/25)
-    when weight ≤ 11. Per-vehicle premium cards are NO LONGER on
-    this page.
+    and inline Deductibles & Optional Coverages (`.detail-table r8`,
+    colgroup 32/17/17/17/17) when weight ≤ 9. Per-vehicle premium
+    cards are NO LONGER on this page.
   - Page 5: **Deductibles (large rosters)** — same standalone page
-    as auto's Page 4, only renders when weight > 11.
+    as auto's Page 4, only renders when weight > 9.
   - Page 6: **Payment Options & Paid-in-Full Discount** (last page —
     mirrors auto quote's Page 5 exactly). Contains:
       1. Payment Options grid (same structure as auto's Page 5).
@@ -808,20 +854,57 @@ so switching to 3-per-row means `span 4` cells instead of `span 3`.
 
 - `frontend/src/panels/AutoPanel.jsx` — Vehicles section: all four top
   fields (year/make/model/trim, VIN, vehicle use, garaging zip/county)
-  changed from `span 3` → `span 4`; the two per-vehicle deductibles
-  (Comprehensive, Collision) changed from `span 6` → `span 4`, so all
-  six vehicle fields now render as two rows of 3. Coverages section:
-  merged the previous slice(0,4)/slice(4,6) split into a single
-  `.slice(0, 6)` loop with `span 4` (BI, PD, MedPay, UM/UIM BI, UMPD
-  Limit, UMPD Deductible → two rows of 3). The trailing `.slice(6)`
-  (Rental, Towing) stays at `span 6` — two items fill the row evenly.
+  changed from `span 3` → `span 4`; the per-vehicle limits & deductibles
+  (`AUTO_VEHICLE_DEDUCTIBLE_FIELDS` — Comprehensive, Collision, Rental
+  Limit, Towing Limit) render at `span 3` so all four fit on one row
+  below the header fields. Coverages section: a single
+  `AUTO_COVERAGE_FIELDS.map` loop with `span 4` (BI, PD, MedPay, UM/UIM
+  BI, UMPD Limit, UMPD Deductible → two rows of 3). Rental / Towing are
+  no longer rendered here — they live on each vehicle.
 - `frontend/src/panels/BundlePanel.jsx` — Vehicles section: same edit,
-  all `cell3` → `cell4` on the four top fields and `cell6` → `cell4`
-  on the deductibles. Auto Coverages section consolidated: Policy
-  Term + all 8 `BUNDLE_AUTO_COVERAGE_FIELDS` now render with `cell4`
-  (9 items total = 3 rows of 3 exactly). Removed the previous
-  slice(0,3)/slice(3,6)/slice(6) split since the whole list is uniform
-  now.
+  `cell4` on the four top fields and `cell3` on all four per-vehicle
+  limits & deductibles. Auto Coverages section: Policy Term + 6
+  `BUNDLE_AUTO_COVERAGE_FIELDS` render with `cell4` (7 items total,
+  wraps naturally). Rental / Towing are captured per-vehicle, not here.
+
+### Rental / Towing limits moved to per-vehicle (2026-04-24)
+
+User requested rental and towing coverages follow the same per-vehicle
+pattern as comprehensive/collision deductibles — the same car might
+carry rental reimbursement while another on the policy skips it.
+
+- `backend/parsers/schema_registry.py` — `rental_limit` + `towing_limit`
+  removed from `_AUTO_COVERAGE_KEYS`, appended to
+  `_AUTO_VEHICLE_DEDUCTIBLE_KEYS`. Both `AUTO_SCHEMA` and `BUNDLE_SCHEMA`
+  pick up the shape change automatically since they share the constants.
+- `backend/parsers/skills/parse_auto/SKILL.md` — version bumped 2.0 →
+  2.1 (invalidates the prompt cache). Vehicle-fields section gains per
+  vehicle `rental_limit` / `towing_limit` entries; policy-level Coverages
+  section replaced with a note pointing readers to the Vehicle fields.
+- `backend/parsers/skills/parse_bundle/SKILL.md` + `parse_bundle_separate
+  /SKILL.md` — both versions bumped to 2.1; bundle_separate's auto
+  field list moves rental/towing into the per-vehicle bullet.
+- `frontend/src/configs/autoConfig.js` + `bundleConfig.js` —
+  `AUTO_VEHICLE_DEDUCTIBLE_FIELDS` / `BUNDLE_AUTO_VEHICLE_DEDUCTIBLE_FIELDS`
+  grow to 4 entries; the policy-level `AUTO_COVERAGE_FIELDS` /
+  `BUNDLE_AUTO_COVERAGE_FIELDS` shrink to 6. `emptyVehicle()` adds
+  `rental_limit` + `towing_limit`; the policy-level `coverages` object
+  in both `EMPTY_*_FORM` constants drops them.
+- `frontend/src/panels/{AutoPanel,BundlePanel}.jsx` — per-vehicle
+  cells use `span 3` / `cell3` so all four fit on one row; the
+  coverages-section map no longer slices off a trailing Rental / Towing
+  row.
+- `backend/templates/auto/auto_quote.html` +
+  `backend/templates/bundle/bundle_quote.html` — policy-level "Rental
+  Reimbursement" and "Towing & Roadside" liab-cards deleted. The
+  per-vehicle "Deductibles" table is renamed to "Deductibles &
+  Optional Coverages" and gains `Rental Limit` + `Towing Limit`
+  columns (colgroup 32/17/17/17/17). Both the inline (Page 3 / Page 4)
+  and standalone-page (Page 4 / Page 5) variants updated to match.
+- `backend/fillers/auto_filler_api.py` + `bundle_filler_api.py` —
+  policy-level `rental_limit` / `towing_limit` pulls from `coverages`
+  removed. Vehicle dicts flow through untouched, so per-vehicle values
+  reach Jinja automatically.
 
 Cell helpers in `BundlePanel.jsx` (`cell3`/`cell4`/`cell6`) are unchanged
 — only which helper gets used changed. No config or schema changes.
@@ -1162,10 +1245,10 @@ refactor doesn't re-symmetrize the two caps and re-introduce the gap.
 **Context.** The v1 skills library had base `<type>.md` files at the root
 of `backend/parsers/skills/` and separate carrier patch files under
 `backend/parsers/skills/<type>/<carrier_key>.md`. Patches were merged at
-load time by `load_skill_with_carrier(type, carrier_key)` which in turn
-relied on `carrier_detector.detect_carrier(...)` (a vision Pass 0 on
-Gemini flash-lite) to choose the carrier. Each patch was only ~20 lines /
-<1 KB, and carrier detection added a full LLM round-trip to every parse.
+load time by a helper that relied on `carrier_detector.detect_carrier(...)`
+(a vision Pass 0 on Gemini flash-lite) to choose the carrier. Each patch
+was only ~20 lines / <1 KB, and carrier detection added a full LLM
+round-trip to every parse.
 
 **What changed.** The skills library now follows the standard "skill
 folder" shape (one directory per skill, containing a `SKILL.md` with YAML
@@ -1182,7 +1265,6 @@ backend/parsers/skills/
   parse_bundle/SKILL.md           ← uses > @include homeowners / > @include auto
   parse_bundle_separate/SKILL.md  ← supplement for two-PDF bundle mode
   parse_wind_hail/SKILL.md        ← supplement for wind/hail second PDF
-  DELETE_<old>.md, DELETE_<old>/  ← marked for deletion in a follow-up commit
 ```
 
 Each `SKILL.md` starts with:
@@ -1195,20 +1277,19 @@ description: Use this skill when parsing a <type> insurance quote PDF
 followed by the body, which still carries `> VERSION: 2.0` and `> TYPE:
 <type>` metadata lines for `get_skill_version()` to parse.
 
-**skill_loader.py changes.** Path resolution moved from
-`SKILLS_DIR / f"{type}.md"` to `SKILLS_DIR / f"parse_{type}" / "SKILL.md"`.
-New `_strip_frontmatter()` helper removes the YAML block before returning
-the body (so the LLM never sees it). `load_skill_with_carrier(type,
-carrier_key)` is kept for API stability but now returns
-`(load_skill(type), False)` — patches are already baked into the base.
-`list_carrier_patches(...)` always returns `[]`. `_resolve_includes()`
-was updated to look at the new path shape for `> @include <type>`
-directives (used only by `parse_bundle`).
+**skill_loader.py.** Path resolution is
+`SKILLS_DIR / f"parse_{type}" / "SKILL.md"`. `_strip_frontmatter()`
+removes the YAML block before returning the body (so the LLM never sees
+it). `_resolve_includes()` handles `> @include <type>` directives (used
+only by `parse_bundle`). Public surface is now just `load_skill`,
+`get_skill_version`, `list_available_skills`, and `reload_skills` — the
+legacy `load_skill_with_carrier`, `get_quick_pass_fields`, and
+`list_carrier_patches` shims were deleted in the Design 2 cleanup since
+no caller used them.
 
-**Zero blast radius on callers.** `unified_parser_api.py` still imports
-the same four names (`load_skill`, `load_skill_with_carrier`,
-`get_skill_version`, `get_quick_pass_fields`) and uses them identically.
-Frontend (`QuotifyHome.jsx`, `trackEvent.js`), DB column
+**Callers.** `unified_parser_api.py` imports `load_skill` + `get_skill_version`
+and threads the skill body into the system instruction. Frontend
+(`QuotifyHome.jsx`, `trackEvent.js`), DB column
 (`parse_metrics.skill_version`), and `track_api.py` only read a
 `skill_version` STRING — they don't care about filesystem layout.
 The separate analytics chatbot skills directory at `backend/skills/`
@@ -1218,8 +1299,126 @@ is a different system and was NOT touched.
 are now inside each base SKILL.md and the prompt is tiny (~13 KB for
 bundle, smaller for singletons), we can ship the entire skill as a
 prompt-cached system instruction and drop the Pass 0 carrier detection
-round-trip entirely. `carrier_detector.py` will become dead code in the
-Design 2 commit — for now it's left in place and still imported, but it
-no longer selects different skill content.
+round-trip entirely. `carrier_detector.py` has been removed from the
+extraction path (the file itself is marked `DELETE_carrier_detector.py`
+pending a follow-up commit that deletes it outright).
+
+### Parser Design 2 — single-pass extraction + system-prompt cache (2026-04-21)
+
+**Config id in `parse_metrics`:** `single-pass-cached-2026-04-21`
+(bumped from `baseline-2026-04-20` in `frontend/src/devMetrics.js`).
+
+**Context.** The baseline 3-pass pipeline (Pass 0 vision carrier detection
+→ Pass 1 quick draft → Pass 2 strict JSON → Pass 3 self-healing retry) was
+designed when carrier overrides were still swapped per-request and the
+confidence scores drove a second LLM call on low-confidence fields. Once
+the skills library v2 work baked carriers into each SKILL.md (section
+above), three of those four passes were no longer earning their latency.
+
+**What changed in `backend/parsers/unified_parser_api.py`:**
+
+- **Pass 0 removed.** `detect_carrier(...)` is no longer called on the
+  hot path. `carrier_detector.py` has been renamed to
+  `DELETE_carrier_detector.py` pending full removal. No `carrier_detected`
+  event is emitted.
+- **Pass 1 removed.** `MODEL_QUICK`, `QUICK_PASS_SYSTEM_PROMPT`,
+  `_parse_quick_pass_lines`, and `get_quick_pass_fields` were all
+  deleted. No `draft_patch` event is emitted.
+- **Pass 3 removed.** `MODEL_HEAL`, `HEALING_THRESHOLD`,
+  `HEALING_MAX_FIELDS`, `_find_low_confidence_fields`,
+  `_flatten_confidence`, `_get_nested`, `_build_healing_prompt`, and
+  `generate_with_fallback` all deleted. No `healing_patch` event is
+  emitted. The `confidence` object still flows through from the response
+  schema and drives the frontend "Double Check" status pill — it just
+  doesn't trigger a second LLM call anymore.
+- **Fallback constants consolidated.** The old `DEFAULT_QUICK_FALLBACKS`
+  / `DEFAULT_FINAL_FALLBACKS` / legacy singular variants in
+  `_model_fallback.py` were collapsed to a single `DEFAULT_FALLBACKS:
+  List[str] = []`. Gemini-family hopping never helped during real 503
+  waves, so the primary Gemini call now falls straight through to the
+  OpenAI cross-provider fallback when it fails.
+- **Single extraction pass.** `MODEL_EXTRACT = "gemini-2.5-flash"` is the
+  only model constant. The call uses `response_mime_type=application/json`
+  + per-type `response_schema` (same as baseline Pass 2), plus
+  `thinking_config=ThinkingConfig(thinking_budget=512)` — kept non-zero
+  so confidence scores stay well-calibrated.
+- **System-prompt cache.** New constants `SYSTEM_CACHE_TTL_SECONDS = 3600`
+  / `SYSTEM_CACHE_TTL = "3600s"` + process-local
+  `_SYSTEM_CACHE_REGISTRY: dict[str, str]`. New helpers:
+  - `_system_cache_key(type, skill_version, has_wind, has_separate)` —
+    stable key for the registry; changing any input creates a new cache
+    entry (different system instruction text).
+  - `_get_or_create_system_cache(client, key, model, system_instruction)` —
+    get-or-create via `client.caches.create(...)` with the system
+    instruction as the cached prefix; verifies the stored name still
+    exists via `client.caches.get(name=...)` before reusing; returns
+    `None` on any failure so the caller falls back to inline
+    `system_instruction=...`. Never blocks the parse.
+  The call site builds the cache key from
+  `(insurance_type, skill_version, wind?, separate?)`, gets/creates the
+  cache, and uses `cached_content=cache_name` in `GenerateContentConfig`
+  when available (mutually exclusive with `system_instruction`).
+- **Why Selected collapsed to one call.** Previously Pass 1 seeded a
+  draft of the "Why this plan?" bullets, then a refine call produced the
+  final bullets after Pass 2. Design 2 bypassed the draft by passing
+  `draft_bullets=""`, so the refine branch was never used. The cleanup
+  pass removed the draft/refine split outright: there is now a single
+  `why_selected_generator.generate_why_selected(final_data, insurance_type)`
+  — one Gemini Flash Lite call, final bullets only.
+- **Signature.** `stream_unified_quote(pdf_path, insurance_type,
+  model_extract=MODEL_EXTRACT, model_fallbacks=DEFAULT_FALLBACKS,
+  wind_pdf_path=None, secondary_pdf_path=None)`. The old Pass-1/Pass-2
+  model + fallback kwargs are gone. The route function at
+  `/api/parse-quote` didn't pass those kwargs explicitly, so no caller
+  breaks.
+- **Result event.** `{type: "result", data, confidence, skill_version}`.
+  `carrier_key` is no longer emitted on the result (no detection pass).
+
+**Frontend (`frontend/src/QuotifyHome.jsx`).** The dead event handlers
+for `draft_patch`, `carrier_detected`, and `healing_patch` were removed
+from every per-type streaming block (homeowners, auto, dwelling, bundle,
+commercial, and the wind/hail branch). The only patch event the UI now
+handles is `final_patch`. The unreachable "Draft" status pill was also
+removed from `getStatus()` and replaced with a `Verified` defensive
+fallback. The "Double Check" pill continues to fire off
+`confidence < CONFIDENCE_THRESHOLD` from the `final_patch`/`result`
+confidence object.
+
+**Docs updated alongside the code:**
+
+- `dev_metrics/SYSTEM_DESIGN.md` — new header section describes the
+  current design, legacy `baseline-2026-04-20` section moved to the
+  bottom.
+- `dev_metrics/viewer.html` — `DEFAULT_DESCRIPTIONS["single-pass-cached-2026-04-21"]`
+  added, baseline description retained for old rows.
+- `backend/parsers/ARCHITECTURE.mermaid` — new `CACHE` subgraph, single
+  `EXTRACT` subgraph replacing the Pass 1 + Pass 2 subgraphs, FUTURE
+  subgraph notes carrier routing + optional self-healing as deferred
+  work.
+- `frontend/src/devMetrics.js` — `SYSTEM_DESIGN_VERSION` bumped.
+
+**What to know when touching this next:**
+
+- The `_SYSTEM_CACHE_REGISTRY` dict lives at module scope. In a
+  multi-worker Railway deploy each worker has its own registry, so the
+  first parse per (worker, tuple) pays the cache-create cost (~1 RT);
+  subsequent parses for the same tuple hit the cache. This is fine —
+  caches auto-expire after 1h anyway.
+- Bumping the `> VERSION:` line on a SKILL.md invalidates that type's
+  cache entry on the next parse (the key includes `skill_version`). So
+  edits to SKILL.md files propagate automatically on the next parse of
+  that type, without a manual cache flush.
+- Supplements (`parse_wind_hail/SKILL.md`,
+  `parse_bundle_separate/SKILL.md`) are still appended to `skill_content`
+  BEFORE the cache lookup, so different supplement combinations hit
+  different cache entries — the key carries `has_wind` / `has_separate`
+  flags.
+- If you ever need to force-flush the cache without restart, clear
+  `_SYSTEM_CACHE_REGISTRY` (in-memory) — the next request will recreate.
+- The OpenAI fallback path (`_openai_fallback.stream_openai_extraction`)
+  gets the system instruction inline — Gemini's cache doesn't cross
+  providers. Only the Gemini hot path benefits from caching; the fallback
+  costs full prefill tokens on OpenAI. That's acceptable because the
+  fallback only fires when every Gemini model has already errored.
 
 

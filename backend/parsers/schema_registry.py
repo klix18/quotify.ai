@@ -2,9 +2,9 @@
 schema_registry.py
 ==================
 Central registry mapping insurance_type → {
-    schema:     Gemini/OpenAI structured-output JSON schema
-    all_keys:   flat list of expected output keys (used for quick-pass parsing)
-    status_msg: human-readable status string for the UI spinner
+    schema:            Gemini/OpenAI structured-output JSON schema
+    status_msg:        human-readable status string for the UI spinner
+    why_selected_type: key passed to the why-selected generator
 }
 
 Post-processing is handled generically by parsers/post_process.py
@@ -56,11 +56,14 @@ _AUTO_FLAT_KEYS = [
 ]
 _AUTO_COVERAGE_KEYS = [
     "bi_limit", "pd_limit", "medpay_limit", "um_uim_bi_limit", "umpd_limit",
-    "umpd_deductible", "rental_limit", "towing_limit",
+    "umpd_deductible",
 ]
-# Deductibles that are captured per-vehicle (they can differ between vehicles).
+# Limits / deductibles that are captured per-vehicle — they can differ between
+# vehicles on the same policy (e.g. an older car often has lower rental limits
+# or a higher comprehensive deductible than a newer one).
 _AUTO_VEHICLE_DEDUCTIBLE_KEYS = [
     "comprehensive_deductible", "collision_deductible",
+    "rental_limit", "towing_limit",
 ]
 _AUTO_VEHICLE_PREMIUM_KEYS = [
     "bi_premium", "pd_premium", "medpay_premium", "um_uim_bi_premium", "umpd_premium",
@@ -108,7 +111,8 @@ _AUTO_DATA_PROPS = {
         "coverage_premiums": {"type": "object",
             "properties": {k: {"type": "string"} for k in _AUTO_VEHICLE_PREMIUM_KEYS},
             "required": _AUTO_VEHICLE_PREMIUM_KEYS},
-        # Comprehensive + Collision deductibles vary per vehicle.
+        # Comprehensive + Collision deductibles and Rental / Towing limits
+        # all vary per vehicle.
         **{k: {"type": "string"} for k in _AUTO_VEHICLE_DEDUCTIBLE_KEYS},
         "subtotal": {"type": "string"},
     }, "required": [
@@ -438,31 +442,26 @@ BUNDLE_SCHEMA = _make_bundle_schema()
 _REGISTRY: dict[str, dict] = {
     "homeowners": {
         "schema": HOMEOWNERS_SCHEMA,
-        "all_keys": _HO_KEYS,
         "status_msg": "Verifying extracted homeowners fields...",
         "why_selected_type": "homeowners",
     },
     "auto": {
         "schema": AUTO_SCHEMA,
-        "all_keys": _AUTO_FLAT_KEYS + _AUTO_COVERAGE_KEYS,
         "status_msg": "Verifying extracted auto fields...",
         "why_selected_type": "auto",
     },
     "dwelling": {
         "schema": DWELLING_SCHEMA,
-        "all_keys": ["named_insured", "quote_date", "quote_effective_date", "quote_expiration_date"],
         "status_msg": "Verifying extracted dwelling fields...",
         "why_selected_type": "dwelling",
     },
     "commercial": {
         "schema": COMMERCIAL_SCHEMA,
-        "all_keys": _COMM_FLAT_KEYS,
         "status_msg": "Verifying extracted commercial fields...",
         "why_selected_type": "commercial",
     },
     "bundle": {
         "schema": BUNDLE_SCHEMA,
-        "all_keys": _HO_KEYS + _AUTO_FLAT_KEYS,
         "status_msg": "Verifying extracted bundle fields...",
         "why_selected_type": "bundle",
     },

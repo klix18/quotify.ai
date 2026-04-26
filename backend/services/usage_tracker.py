@@ -8,7 +8,7 @@ They won't match invoices exactly but give a good picture of spend.
 
 import asyncio
 import logging
-from database import log_api_usage
+from core.database import log_api_usage
 
 _log = logging.getLogger("usage_tracker")
 

@@ -122,7 +122,7 @@
 <h1>Quotify — Parse Metrics Viewer</h1>
 <div class="sub">
   Dev-only. Each <b>Design</b> below is a distinct <code>system_design</code> tag
-  set in <code>frontend/src/devMetrics.js</code>. Change the tag to create a new design
+  set in <code>frontend/src/lib/devMetrics.js</code>. Change the tag to create a new design
   — new parses are tagged to the new design and stop polluting the old one, so you
   can compare orchestrations side-by-side.
 </div>
@@ -172,8 +172,38 @@ const STATE = {
  * the first time the textarea is blank; you can type whatever you want and
  * it persists to localStorage keyed by the tag. */
 const DEFAULT_DESCRIPTIONS = {
+  "single-pass-cached-2026-04-21": [
+    "Single-pass extraction with cached system prompt + OpenAI fallback.",
+    "",
+    "One strict-JSON call on gemini-2.5-flash over the uploaded PDF:",
+    "  response_mime_type = application/json",
+    "  response_schema    = per-type schema (includes 0-1 confidence per leaf)",
+    "  thinking_config    = ThinkingConfig(thinking_budget=512)  [kept non-zero",
+    "                       to preserve confidence-score calibration]",
+    "",
+    "System prompt (CORE_SYSTEM_PROMPT + full SKILL.md + any supplements) is",
+    "cached via client.caches.create(...) with a 1-hour TTL, keyed by",
+    "(insurance_type, supplement_set, skill_version). Subsequent requests for",
+    "the same tuple use cached_content=<name> — the stable prefix only incurs",
+    "prefill cost on first use. Cache failures fall back to inline",
+    "system_instruction=... transparently.",
+    "",
+    "After extraction: one generate_why_selected call (gemini-2.5-flash-lite)",
+    "produces the 'Why Selected' bullets from the final data.",
+    "",
+    "Fallback chain: Gemini primary only, then straight to OpenAI",
+    "GPT-4o-mini → GPT-4o (DEFAULT_FALLBACKS is empty).",
+    "",
+    "Removed vs baseline-2026-04-20: Pass 0 (vision carrier detection),",
+    "Pass 1 (quick draft), Pass 3 (self-healing retry), and the draft",
+    "why-selected call. Confidence thresholds still drive the frontend",
+    "'Double Check' pill — they just no longer trigger a second LLM call.",
+    "",
+    "Skill layer (v2): parse_<type>/SKILL.md (carrier overrides baked in) +",
+    "optional parse_wind_hail or parse_bundle_separate supplement.",
+  ].join("\n"),
   "baseline-2026-04-20": [
-    "3-pass Gemini pipeline with OpenAI fallback.",
+    "3-pass Gemini pipeline with OpenAI fallback. (Replaced 2026-04-21.)",
     "",
     "Pass 0 (vision, gemini-2.5-flash-lite): detect carrier from page-1 logo.",
     "  In v2 skills library, carrier-specific overrides are baked into each",

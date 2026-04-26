@@ -70,10 +70,15 @@ export const VEHICLE_COVERAGE_PREMIUM_KEYS = [
   "towing_premium",
 ];
 
-// Per-vehicle deductibles (Comprehensive + Collision vary by vehicle).
+// Per-vehicle limits & deductibles.
+//   - Comprehensive + Collision deductibles vary by vehicle.
+//   - Rental / Towing limits vary by vehicle too (older cars often carry
+//     lower rental caps — or none at all — while newer cars do).
 export const AUTO_VEHICLE_DEDUCTIBLE_FIELDS = [
   ["comprehensive_deductible", "Comprehensive Deductible"],
   ["collision_deductible", "Collision Deductible"],
+  ["rental_limit", "Rental / Transportation Limit"],
+  ["towing_limit", "Towing & Labor / Roadside Limit"],
 ];
 
 export const emptyVehicle = () => ({
@@ -86,12 +91,15 @@ export const emptyVehicle = () => ({
   ),
   comprehensive_deductible: "",
   collision_deductible: "",
+  rental_limit: "",
+  towing_limit: "",
   subtotal: "",
 });
 
 // ─── Section 5: Coverages (Policy-Level Limits / Deductibles) ───
-// Comprehensive + Collision deductibles are captured per-vehicle (see
-// AUTO_VEHICLE_DEDUCTIBLE_FIELDS) since they can vary between vehicles.
+// Comprehensive + Collision deductibles and Rental / Towing limits are
+// captured per-vehicle (see AUTO_VEHICLE_DEDUCTIBLE_FIELDS) since they
+// can vary between vehicles on the same policy.
 export const AUTO_COVERAGE_FIELDS = [
   ["bi_limit", "Bodily Injury (BI) Limit"],
   ["pd_limit", "Property Damage (PD) Limit"],
@@ -99,20 +107,17 @@ export const AUTO_COVERAGE_FIELDS = [
   ["um_uim_bi_limit", "UM/UIM Bodily Injury Limit"],
   ["umpd_limit", "Uninsured Motorist PD (UMPD) Limit"],
   ["umpd_deductible", "UMPD Deductible"],
-  ["rental_limit", "Rental / Transportation Limit"],
-  ["towing_limit", "Towing & Labor / Roadside Limit"],
 ];
 
 // Maps coverage field → per-vehicle premium key (umpd_deductible has no
-// separate premium since it is already captured by umpd_limit)
+// separate premium since it is already captured by umpd_limit). Rental
+// and Towing limits live on the vehicle itself, not here.
 export const AUTO_COVERAGE_PREMIUM_MAP = {
   bi_limit: "bi_premium",
   pd_limit: "pd_premium",
   medpay_limit: "medpay_premium",
   um_uim_bi_limit: "um_uim_bi_premium",
   umpd_limit: "umpd_premium",
-  rental_limit: "rental_premium",
-  towing_limit: "towing_premium",
 };
 
 // ─── Section 6: Payment Options ──────────────────────────────────
@@ -191,7 +196,7 @@ export const EMPTY_AUTO_FORM = {
   vehicles: [],
 
   // S5: Coverages (policy-level). Comprehensive + Collision deductibles
-  // live on each vehicle, not here.
+  // and Rental / Towing limits all live on each vehicle, not here.
   coverages: {
     bi_limit: "",
     pd_limit: "",
@@ -199,8 +204,6 @@ export const EMPTY_AUTO_FORM = {
     um_uim_bi_limit: "",
     umpd_limit: "",
     umpd_deductible: "",
-    rental_limit: "",
-    towing_limit: "",
   },
 
   // S6: Payment Options

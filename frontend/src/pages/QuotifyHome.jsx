@@ -1,41 +1,41 @@
 import React from "react";
 import { useUser, useAuth } from "@clerk/clerk-react";
-import COLORS from "./colors";
-import { trackEvent, getManualFieldNames } from "./trackEvent";
+import COLORS from "../lib/colors";
+import { trackEvent, getManualFieldNames } from "../lib/trackEvent";
 import {
   startParseTimer,
   logParseComplete,
   logQuoteGenerated,
-} from "./devMetrics";
-import { INSURANCE_OPTIONS } from "./configs/insuranceOptions";
+} from "../lib/devMetrics";
+import { INSURANCE_OPTIONS } from "../configs/insuranceOptions";
 import {
   HOMEOWNERS_FIELDS,
   EMPTY_HOMEOWNERS_FORM,
-} from "./configs/homeownersConfig";
+} from "../configs/homeownersConfig";
 import {
   EMPTY_AUTO_FORM,
   emptyDriver,
   emptyVehicle,
-} from "./configs/autoConfig";
+} from "../configs/autoConfig";
 import {
   EMPTY_DWELLING_FORM,
   emptyProperty,
-} from "./configs/dwellingConfig";
+} from "../configs/dwellingConfig";
 import {
   EMPTY_COMMERCIAL_FORM,
   emptyWcClassCode,
-} from "./configs/commercialConfig";
+} from "../configs/commercialConfig";
 import {
   EMPTY_BUNDLE_FORM,
   emptyDriver as emptyBundleDriver,
   emptyVehicle as emptyBundleVehicle,
-} from "./configs/bundleConfig";
-import HomeownersPanel from "./panels/HomeownersPanel";
-import AutoPanel from "./panels/AutoPanel";
-import DwellingPanel from "./panels/DwellingPanel";
-import CommercialPanel from "./panels/CommercialPanel";
-import BundlePanel from "./panels/BundlePanel";
-import { triggerSparkleFlow } from "./sparkleFlow";
+} from "../configs/bundleConfig";
+import HomeownersPanel from "../panels/HomeownersPanel";
+import AutoPanel from "../panels/AutoPanel";
+import DwellingPanel from "../panels/DwellingPanel";
+import CommercialPanel from "../panels/CommercialPanel";
+import BundlePanel from "../panels/BundlePanel";
+import { triggerSparkleFlow } from "../lib/sparkleFlow";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -634,24 +634,8 @@ export default function QuotifyHome({ isAdmin }) {
             setParseStatus(message.message || "Parsing...");
           }
 
-          if (message.type === "draft_patch" && message.data) {
-            setParseStatus("Filling likely fields...");
-            applyPatch(message.data, false);
-          }
-
           if (message.type === "final_patch" && message.data) {
             setParseStatus("Verifying and refining fields...");
-            applyPatch(message.data, true);
-          }
-
-          if (message.type === "carrier_detected") {
-            setParseStatus(message.hint_loaded
-              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
-              : "Carrier identified...");
-          }
-
-          if (message.type === "healing_patch" && message.data) {
-            setParseStatus("Re-checking uncertain fields...");
             applyPatch(message.data, true);
           }
 
@@ -672,11 +656,7 @@ export default function QuotifyHome({ isAdmin }) {
         try {
           const message = JSON.parse(buffer);
 
-          if (message.type === "draft_patch" && message.data) {
-            applyPatch(message.data, false);
-          } else if (message.type === "final_patch" && message.data) {
-            applyPatch(message.data, true);
-          } else if (message.type === "healing_patch" && message.data) {
+          if (message.type === "final_patch" && message.data) {
             applyPatch(message.data, true);
           } else if (message.type === "result") {
             finalData = message.data;
@@ -866,24 +846,8 @@ export default function QuotifyHome({ isAdmin }) {
             setParseStatus(message.message || "Parsing...");
           }
 
-          if (message.type === "draft_patch" && message.data) {
-            setParseStatus("Filling likely fields...");
-            applyAutoPatch(message.data);
-          }
-
           if (message.type === "final_patch" && message.data) {
             setParseStatus("Verifying and refining fields...");
-            applyAutoPatch(message.data);
-          }
-
-          if (message.type === "carrier_detected") {
-            setParseStatus(message.hint_loaded
-              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
-              : "Carrier identified...");
-          }
-
-          if (message.type === "healing_patch" && message.data) {
-            setParseStatus("Re-checking uncertain fields...");
             applyAutoPatch(message.data);
           }
 
@@ -903,11 +867,7 @@ export default function QuotifyHome({ isAdmin }) {
       if (buffer.trim()) {
         try {
           const message = JSON.parse(buffer);
-          if (message.type === "draft_patch" && message.data) {
-            applyAutoPatch(message.data);
-          } else if (message.type === "final_patch" && message.data) {
-            applyAutoPatch(message.data);
-          } else if (message.type === "healing_patch" && message.data) {
+          if (message.type === "final_patch" && message.data) {
             applyAutoPatch(message.data);
           } else if (message.type === "result") {
             finalData = message.data;
@@ -1116,21 +1076,8 @@ export default function QuotifyHome({ isAdmin }) {
           try { message = JSON.parse(line); } catch { continue; }
 
           if (message.type === "status") setParseStatus(message.message || "Parsing...");
-          if (message.type === "draft_patch" && message.data) {
-            setParseStatus("Filling likely fields...");
-            applyDwellingPatch(message.data);
-          }
           if (message.type === "final_patch" && message.data) {
             setParseStatus("Verifying and refining fields...");
-            applyDwellingPatch(message.data);
-          }
-          if (message.type === "carrier_detected") {
-            setParseStatus(message.hint_loaded
-              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
-              : "Carrier identified...");
-          }
-          if (message.type === "healing_patch" && message.data) {
-            setParseStatus("Re-checking uncertain fields...");
             applyDwellingPatch(message.data);
           }
           if (message.type === "result") {
@@ -1148,9 +1095,7 @@ export default function QuotifyHome({ isAdmin }) {
       if (buffer.trim()) {
         try {
           const message = JSON.parse(buffer);
-          if (message.type === "draft_patch" && message.data) applyDwellingPatch(message.data);
-          else if (message.type === "final_patch" && message.data) applyDwellingPatch(message.data);
-          else if (message.type === "healing_patch" && message.data) applyDwellingPatch(message.data);
+          if (message.type === "final_patch" && message.data) applyDwellingPatch(message.data);
           else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; setLastSkillVersion(message.skill_version || ""); }
           else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
         } catch (_) {}
@@ -1412,21 +1357,8 @@ export default function QuotifyHome({ isAdmin }) {
           try { message = JSON.parse(line); } catch { continue; }
 
           if (message.type === "status") setParseStatus(message.message || "Parsing...");
-          if (message.type === "draft_patch" && message.data) {
-            setParseStatus("Filling likely fields...");
-            applyBundlePatch(message.data);
-          }
           if (message.type === "final_patch" && message.data) {
             setParseStatus("Verifying and refining fields...");
-            applyBundlePatch(message.data);
-          }
-          if (message.type === "carrier_detected") {
-            setParseStatus(message.hint_loaded
-              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
-              : "Carrier identified...");
-          }
-          if (message.type === "healing_patch" && message.data) {
-            setParseStatus("Re-checking uncertain fields...");
             applyBundlePatch(message.data);
           }
           if (message.type === "result") {
@@ -1444,9 +1376,7 @@ export default function QuotifyHome({ isAdmin }) {
       if (buffer.trim()) {
         try {
           const message = JSON.parse(buffer);
-          if (message.type === "draft_patch" && message.data) applyBundlePatch(message.data);
-          else if (message.type === "final_patch" && message.data) applyBundlePatch(message.data);
-          else if (message.type === "healing_patch" && message.data) applyBundlePatch(message.data);
+          if (message.type === "final_patch" && message.data) applyBundlePatch(message.data);
           else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; setLastSkillVersion(message.skill_version || ""); }
           else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
         } catch (_) {}
@@ -1578,21 +1508,8 @@ export default function QuotifyHome({ isAdmin }) {
           try { message = JSON.parse(line); } catch { continue; }
 
           if (message.type === "status") setParseStatus(message.message || "Parsing...");
-          if (message.type === "draft_patch" && message.data) {
-            setParseStatus("Filling likely fields...");
-            applyCommercialPatch(message.data);
-          }
           if (message.type === "final_patch" && message.data) {
             setParseStatus("Verifying and refining fields...");
-            applyCommercialPatch(message.data);
-          }
-          if (message.type === "carrier_detected") {
-            setParseStatus(message.hint_loaded
-              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
-              : "Carrier identified...");
-          }
-          if (message.type === "healing_patch" && message.data) {
-            setParseStatus("Re-checking uncertain fields...");
             applyCommercialPatch(message.data);
           }
           if (message.type === "result") {
@@ -1610,9 +1527,7 @@ export default function QuotifyHome({ isAdmin }) {
       if (buffer.trim()) {
         try {
           const message = JSON.parse(buffer);
-          if (message.type === "draft_patch" && message.data) applyCommercialPatch(message.data);
-          else if (message.type === "final_patch" && message.data) applyCommercialPatch(message.data);
-          else if (message.type === "healing_patch" && message.data) applyCommercialPatch(message.data);
+          if (message.type === "final_patch" && message.data) applyCommercialPatch(message.data);
           else if (message.type === "result") { finalData = message.data; finalConfidence = message.confidence || {}; setLastSkillVersion(message.skill_version || ""); }
           else if (message.type === "error") throw new Error(message.error || "Streaming parse failed.");
         } catch (_) {}
@@ -1686,12 +1601,7 @@ export default function QuotifyHome({ isAdmin }) {
           try { message = JSON.parse(line); } catch { continue; }
 
           if (message.type === "status") setWindParseStatus(message.message || "Parsing...");
-          if (message.type === "carrier_detected") {
-            setWindParseStatus(message.hint_loaded
-              ? `Carrier: ${message.carrier_key.replace(/_/g, " ")} — loading hints...`
-              : "Carrier identified...");
-          }
-          if ((message.type === "draft_patch" || message.type === "final_patch" || message.type === "healing_patch") && message.data) {
+          if (message.type === "final_patch" && message.data) {
             setCommercialForm((prev) => ({ ...prev, ...message.data }));
           }
           if (message.type === "result") {
@@ -1706,7 +1616,7 @@ export default function QuotifyHome({ isAdmin }) {
       if (buffer.trim()) {
         try {
           const message = JSON.parse(buffer);
-          if ((message.type === "draft_patch" || message.type === "final_patch" || message.type === "healing_patch") && message.data) {
+          if (message.type === "final_patch" && message.data) {
             setCommercialForm((prev) => ({ ...prev, ...message.data }));
           } else if (message.type === "result") {
             finalData = message.data;
@@ -3672,12 +3582,10 @@ function FieldControl({
       };
     }
 
-    return {
-      text: "Draft",
-      bg: "#F3F5F7",
-      color: "#6E7B89",
-      border: "#E3E8EE",
-    };
+    // Defensive fallback — in Design 2, hasValue only occurs together with
+    // isFinal=true (we removed draft_patch), so this branch is effectively
+    // unreachable. Kept to avoid an undefined status if state ever diverges.
+    return successStatus("Verified");
   };
 
   const status = getStatus();

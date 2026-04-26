@@ -4,9 +4,9 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from jinja2 import Environment, FileSystemLoader
-from browser_manager import get_browser
-from pdf_optimizer import optimize_pdf
-from pdf_storage_helpers import store_generated_pdf
+from core.browser_manager import get_browser
+from services.pdf_optimizer import optimize_pdf
+from services.pdf_storage_helpers import store_generated_pdf
 from fillers._filename import build_pdf_filename
 
 router = APIRouter()
@@ -42,15 +42,14 @@ async def render_auto_pdf(output_path: Path, data: dict):
         "agent_address": data.get("agent_address", ""),
         "agent_phone": data.get("agent_phone", ""),
         "agent_email": data.get("agent_email", ""),
-        # Coverages (policy-level)
+        # Coverages (policy-level). Rental / Towing limits are per-vehicle
+        # and flow through on each vehicle dict — not listed here.
         "bi_limit": coverages.get("bi_limit", ""),
         "pd_limit": coverages.get("pd_limit", ""),
         "medpay_limit": coverages.get("medpay_limit", ""),
         "um_uim_bi_limit": coverages.get("um_uim_bi_limit", ""),
         "umpd_limit": coverages.get("umpd_limit", ""),
         "umpd_deductible": coverages.get("umpd_deductible", ""),
-        "rental_limit": coverages.get("rental_limit", ""),
-        "towing_limit": coverages.get("towing_limit", ""),
         # Drivers & Vehicles (arrays passed through)
         "drivers": data.get("drivers", []),
         "vehicles": data.get("vehicles", []),

@@ -7,7 +7,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from database import get_setting, set_setting, delete_all_pdfs
+from core.database import get_setting, set_setting, delete_all_pdfs
 
 _log = logging.getLogger("auto_clear")
 

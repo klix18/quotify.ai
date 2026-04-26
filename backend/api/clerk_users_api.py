@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from auth import get_current_user, require_admin
+from core.auth import get_current_user, require_admin
 
 load_dotenv()
 

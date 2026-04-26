@@ -13,10 +13,10 @@ from fastapi import APIRouter, Depends
 from google import genai
 from google.genai import types
 
-from auth import require_admin
-from database import get_pool
+from core.auth import require_admin
+from core.database import get_pool
 from parsers._model_fallback import (
-    DEFAULT_FINAL_FALLBACKS,
+    DEFAULT_FALLBACKS,
     generate_with_fallback,
 )
 
@@ -167,7 +167,7 @@ async def _generate_report_html(data: dict, period_label: str) -> str:
     response = generate_with_fallback(
         client,
         "gemini-2.5-flash",
-        DEFAULT_FINAL_FALLBACKS,
+        DEFAULT_FALLBACKS,
         contents=types.Content(
             role="user",
             parts=[types.Part(text=f"""Generate a professional HTML email report for the Sizemore Insurance analytics dashboard.
@@ -196,7 +196,7 @@ Respond with ONLY the HTML, no markdown code blocks or explanation.""")]
 
     # Track Gemini usage
     try:
-        from usage_tracker import track_gemini_response
+        from services.usage_tracker import track_gemini_response
         track_gemini_response(response, "gemini-2.5-flash", call_type="report")
     except Exception:
         pass

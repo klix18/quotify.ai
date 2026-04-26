@@ -98,24 +98,11 @@
       <div class="liab-desc">The amount you pay out of pocket before your uninsured motorist property damage coverage begins.</div>
     </div>
 
-    <div class="liab-card r8">
-      <div class="liab-left">
-        <div class="liab-name">Rental Reimbursement</div>
-        <div class="liab-val">{{ rental_limit }}</div>
-      </div>
-      <div class="liab-desc">Pays for a rental car while your vehicle is being repaired after a covered claim.</div>
-    </div>
-
-    <div class="liab-card r8">
-      <div class="liab-left">
-        <div class="liab-name">Towing &amp; Roadside</div>
-        <div class="liab-val">{{ towing_limit }}</div>
-      </div>
-      <div class="liab-desc">Covers towing costs and roadside assistance such as jump-starts, lockouts, and flat tire changes.</div>
-    </div>
-
 
   </div>
+  {# Rental Reimbursement and Towing & Roadside limits are listed per
+     vehicle on the Deductibles table below, since these limits can differ
+     between vehicles on the same policy. #}
   <div class="disclaimer">This proposal does not constitute an offer to bind coverage and is just a summary of available quotes subject to final underwriting and policy conditions and exclusions.</div>
 </div>
 
@@ -128,7 +115,8 @@
 {% set _ded_any = namespace(flag=false) %}
 {% if vehicles and vehicles|length > 0 %}
 {% for _v in vehicles %}
-  {% if _v.comprehensive_deductible or _v.collision_deductible %}
+  {% if _v.comprehensive_deductible or _v.collision_deductible
+        or _v.rental_limit or _v.towing_limit %}
     {% set _ded_any.flag = true %}
   {% endif %}
 {% endfor %}
@@ -136,7 +124,7 @@
 {% set _vehicle_count = (vehicles|length) if vehicles else 0 %}
 {% set _driver_count = (drivers|length) if drivers else 0 %}
 {% set _ded_weight = _vehicle_count * 2 + _driver_count * 1 %}
-{% set _ded_on_separate_page = _ded_weight > 11 %}
+{% set _ded_on_separate_page = _ded_weight > 9 %}
 
 <div class="page">
   <div class="page-inner">
@@ -212,32 +200,42 @@
 
     {% endif %}
 
-    <!-- Deductibles (inline — rendered here when the driver/vehicle roster
-         is small enough that it fits on this page). -->
+    <!-- Deductibles & Optional Coverages (inline — rendered here when
+         the driver/vehicle roster is small enough that it fits on this
+         page). Rental and Towing limits are listed per-vehicle alongside
+         the Comprehensive / Collision deductibles since all four values
+         can differ between vehicles on the same policy. -->
     {% if _ded_any.flag and not _ded_on_separate_page %}
-    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Deductibles</div>
-    <div class="section-sub">Your out-of-pocket amounts before coverage applies, shown per vehicle.</div>
+    <div class="section-heading sentient" style="margin-top: 10px; margin-bottom: 4px;">Deductibles &amp; Optional Coverages</div>
+    <div class="section-sub">Your out-of-pocket deductibles and rental / towing limits, shown per vehicle.</div>
 
     <table class="detail-table r8">
       <colgroup>
-        <col style="width: 50%;">
-        <col style="width: 25%;">
-        <col style="width: 25%;">
+        <col style="width: 32%;">
+        <col style="width: 17%;">
+        <col style="width: 17%;">
+        <col style="width: 17%;">
+        <col style="width: 17%;">
       </colgroup>
       <thead>
         <tr>
           <th>Vehicle</th>
           <th>Comprehensive</th>
           <th>Collision</th>
+          <th>Rental Limit</th>
+          <th>Towing Limit</th>
         </tr>
       </thead>
       <tbody>
         {% for vehicle in vehicles %}
-        {% if vehicle.comprehensive_deductible or vehicle.collision_deductible %}
+        {% if vehicle.comprehensive_deductible or vehicle.collision_deductible
+              or vehicle.rental_limit or vehicle.towing_limit %}
         <tr>
           <td>{{ vehicle.year_make_model_trim or ('Vehicle ' ~ loop.index) }}</td>
           <td>{{ vehicle.comprehensive_deductible or '—' }}</td>
           <td>{{ vehicle.collision_deductible or '—' }}</td>
+          <td>{{ vehicle.rental_limit or '—' }}</td>
+          <td>{{ vehicle.towing_limit or '—' }}</td>
         </tr>
         {% endif %}
         {% endfor %}
@@ -261,32 +259,41 @@
       <img src="assets/logo.png" alt="Sizemore Insurance">
     </div>
 
-    <!-- Deductibles (per-vehicle) — styled to match the other detail tables
-         on the drivers/vehicles page: same header treatment, same fonts,
-         same row heights. -->
-    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Deductibles</div>
-    <div class="section-sub">Your out-of-pocket amounts before coverage applies, shown per vehicle.</div>
+    <!-- Deductibles & Optional Coverages (per-vehicle) — styled to match
+         the other detail tables on the drivers/vehicles page: same header
+         treatment, same fonts, same row heights. Includes Rental and
+         Towing limits alongside the Comprehensive / Collision deductibles
+         since all four values can differ between vehicles. -->
+    <div class="section-heading sentient" style="margin-top: 20px; margin-bottom: 4px;">Deductibles &amp; Optional Coverages</div>
+    <div class="section-sub">Your out-of-pocket deductibles and rental / towing limits, shown per vehicle.</div>
 
     <table class="detail-table r8">
       <colgroup>
-        <col style="width: 50%;">
-        <col style="width: 25%;">
-        <col style="width: 25%;">
+        <col style="width: 32%;">
+        <col style="width: 17%;">
+        <col style="width: 17%;">
+        <col style="width: 17%;">
+        <col style="width: 17%;">
       </colgroup>
       <thead>
         <tr>
           <th>Vehicle</th>
           <th>Comprehensive</th>
           <th>Collision</th>
+          <th>Rental Limit</th>
+          <th>Towing Limit</th>
         </tr>
       </thead>
       <tbody>
         {% for vehicle in vehicles %}
-        {% if vehicle.comprehensive_deductible or vehicle.collision_deductible %}
+        {% if vehicle.comprehensive_deductible or vehicle.collision_deductible
+              or vehicle.rental_limit or vehicle.towing_limit %}
         <tr>
           <td>{{ vehicle.year_make_model_trim or ('Vehicle ' ~ loop.index) }}</td>
           <td>{{ vehicle.comprehensive_deductible or '—' }}</td>
           <td>{{ vehicle.collision_deductible or '—' }}</td>
+          <td>{{ vehicle.rental_limit or '—' }}</td>
+          <td>{{ vehicle.towing_limit or '—' }}</td>
         </tr>
         {% endif %}
         {% endfor %}

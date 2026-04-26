@@ -1,32 +1,16 @@
 """
-Shared helper for Gemini model fallback across all parsers.
+Shared helpers for Gemini model fallback + upload retry across all parsers.
 
-All parsers use a 2-pass pipeline:
-  Pass 1 = fast draft  (primary: gemini-2.5-flash-lite)
-  Pass 2 = strict JSON (primary: gemini-2.5-flash)
+Each parser issues a single strict-JSON extraction call (Design 2). When
+Google's Gemini tier is degraded (503 UNAVAILABLE, overloaded, resource
+exhausted, etc.) we walk a chain of Gemini fallback models — if that
+chain is empty or also fails, we fall through to a cross-provider
+``openai_fallback`` callable the caller supplies.
 
-When Google's Gemini tier is degraded (503 UNAVAILABLE, overloaded, resource
-exhausted, etc.) we transparently walk down a *chain* of fallback models so
-uploads don't dead-end in the UI. We try multiple models because during a
-broad Gemini outage, a single fallback may also be down.
-
-Fallback policy (per the product decision):
-  * Pass 1 (quick draft):  lean LIGHTER — prefer cheaper, older, or smaller
-                           tiers. We're OK with losing a bit of quality on
-                           the draft because Pass 2 will overwrite it, and
-                           lighter tiers tend to live on separate capacity
-                           pools that stay healthy during flash-lite spikes.
-
-  * Pass 2 (strict JSON):  lean MORE CAPABLE — prefer models with better
-                           JSON schema compliance. We only pay the extra
-                           cost when flash is actively failing, and pro
-                           tends to have better availability during flash
-                           demand spikes.
-
-Consumers of ``stream_with_fallback`` should already be idempotent on repeated
-chunks (e.g. via a ``sent_draft``/``sent_final`` dedupe dict) since a retry
-restarts the stream from scratch. Every parser in this package is already
-written this way, so callers can drop this helper in directly.
+Consumers of ``stream_with_fallback`` should already be idempotent on
+repeated chunks (e.g. via a ``sent_final`` dedupe dict) since a retry
+restarts the stream from scratch. Every parser in this package is
+already written this way.
 """
 
 import sys
@@ -42,7 +26,7 @@ StreamFallbackFn = Callable[[], Iterator[Any]]
 GenFallbackFn = Callable[[], Any]
 
 # ── Diagnostic logging ──────────────────────────────────────────
-# Prints one line per model attempt to stdout so you can see in the
+# Prints one line per model attempt to stderr so you can see in the
 # backend logs exactly which model is being called and whether the
 # fallback chain actually ran. When the chain silently succeeds on
 # the primary there will be exactly ONE line per request. When it
@@ -67,7 +51,7 @@ print(
     file=sys.stderr,
 )
 
-# Gemini fallback chains are intentionally EMPTY.
+# The Gemini fallback chain is intentionally EMPTY.
 #
 # History: we used to walk within the Gemini family (2.5-flash → 2.5-pro →
 # 2.0-flash → 2.5-flash-lite) but on 2026-04-10 we observed that during a
@@ -75,19 +59,12 @@ print(
 # returns 404 "no longer available to new users" for this account, and the
 # chain never reaches 2.5-flash-lite. Cross-provider (OpenAI) fallback is
 # the only reliable recovery path, and it's handled via the
-# ``openai_fallback`` parameter on ``stream_with_fallback`` / ``generate_with_fallback``.
+# ``openai_fallback`` parameter on ``stream_with_fallback`` /
+# ``generate_with_fallback``.
 #
-# Parsers should therefore pass these empty lists as the fallback argument
+# Callers should therefore pass this empty list as the fallback argument
 # and supply an ``openai_fallback=`` closure. See ``_openai_fallback.py``.
-DEFAULT_QUICK_FALLBACKS: List[str] = []
-DEFAULT_FINAL_FALLBACKS: List[str] = []
-
-# Backwards-compatible singular aliases — kept so older call sites that
-# imported ``DEFAULT_QUICK_FALLBACK`` (singular) still work. Empty string
-# now that the Gemini fallback lists are empty (OpenAI is the fallback
-# path instead), but still importable so we don't break old callers.
-DEFAULT_QUICK_FALLBACK: str = ""
-DEFAULT_FINAL_FALLBACK: str = ""
+DEFAULT_FALLBACKS: List[str] = []
 
 # Substrings (lower-cased) that indicate a transient / retryable error.
 # We match on the stringified exception because google-genai raises several
@@ -286,7 +263,7 @@ def generate_with_fallback(
             _log(f"gen OK: model={model}")
             # Track Gemini token usage
             try:
-                from usage_tracker import track_gemini_response
+                from services.usage_tracker import track_gemini_response
                 track_gemini_response(resp, model, call_type="parser")
             except Exception:
                 pass

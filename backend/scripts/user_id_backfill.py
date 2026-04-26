@@ -98,7 +98,7 @@ async def backfill_user_ids_from_clerk() -> dict[str, Any]:
     Returns a summary dict with per-user counts and totals so callers can
     log or display the reconciliation result.
     """
-    from database import get_pool  # local import to avoid circular startup order
+    from core.database import get_pool  # local import to avoid circular startup order
 
     clerk_users = await _fetch_all_clerk_users()
     if not clerk_users:

@@ -4,7 +4,7 @@ description: Use this skill when parsing a bundle (homeowners + auto) insurance 
 ---
 
 # Bundle Insurance Extraction Skill
-> VERSION: 2.0
+> VERSION: 2.1
 > TYPE: bundle
 > @include homeowners
 > @include auto

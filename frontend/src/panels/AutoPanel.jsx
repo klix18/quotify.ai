@@ -244,7 +244,10 @@ export default function AutoPanel({
                   gap: 14,
                 }}
               >
-                <div style={{ gridColumn: "span 4", minWidth: 0 }}>
+                {/* Row 1: Year / VIN / Vehicle Use / Garaging ZIP
+                    Row 2: Comprehensive / Collision / Rental / Towing
+                    (8 fields × span 3 → two clean rows of 4) */}
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="year_make_model_trim"
                     label="Year / Make / Model / Trim"
@@ -253,7 +256,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.year_make_model_trim`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 4", minWidth: 0 }}>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="vin"
                     label="VIN"
@@ -262,7 +265,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.vin`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 4", minWidth: 0 }}>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="vehicle_use"
                     label="Vehicle Use"
@@ -271,7 +274,7 @@ export default function AutoPanel({
                     {...fp(`vehicles.${vi}.vehicle_use`)}
                   />
                 </div>
-                <div style={{ gridColumn: "span 4", minWidth: 0 }}>
+                <div style={{ gridColumn: "span 3", minWidth: 0 }}>
                   <FieldControl
                     fieldKey="garaging_zip_county"
                     label="Garaging ZIP / County"
@@ -281,11 +284,13 @@ export default function AutoPanel({
                   />
                 </div>
 
-                {/* Per-vehicle deductibles (Comprehensive + Collision) */}
+                {/* Per-vehicle limits & deductibles
+                    (Comprehensive / Collision deductibles +
+                     Rental / Towing limits) */}
                 {AUTO_VEHICLE_DEDUCTIBLE_FIELDS.map(([dkey, dlabel]) => (
                   <div
                     key={dkey}
-                    style={{ gridColumn: "span 4", minWidth: 0 }}
+                    style={{ gridColumn: "span 3", minWidth: 0 }}
                   >
                     <FieldControl
                       fieldKey={dkey}
@@ -316,22 +321,10 @@ export default function AutoPanel({
           gap: 14,
         }}
       >
-        {/* Rows 1–2: BI, PD, MedPay, UM/UIM BI, UMPD Limit, UMPD Deductible (3 per row) */}
-        {AUTO_COVERAGE_FIELDS.slice(0, 6).map(([key, label]) => (
+        {/* Rows 1–2: BI, PD, MedPay, UM/UIM BI, UMPD Limit, UMPD Deductible (3 per row).
+            Rental / Towing limits live on each vehicle (see Section 4). */}
+        {AUTO_COVERAGE_FIELDS.map(([key, label]) => (
           <div key={key} style={{ gridColumn: "span 4", minWidth: 0 }}>
-            <FieldControl
-              fieldKey={`coverages.${key}`}
-              label={label}
-              value={form.coverages?.[key] || ""}
-              onChange={onFieldChange}
-              {...fp(`coverages.${key}`)}
-            />
-          </div>
-        ))}
-
-        {/* Row 3: Rental, Towing (2 per row) */}
-        {AUTO_COVERAGE_FIELDS.slice(6).map(([key, label]) => (
-          <div key={key} style={{ gridColumn: "span 6", minWidth: 0 }}>
             <FieldControl
               fieldKey={`coverages.${key}`}
               label={label}

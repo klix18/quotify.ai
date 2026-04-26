@@ -5,7 +5,7 @@ Import these into parser and filler APIs to auto-save documents.
 
 from pathlib import Path
 
-from database import store_pdf
+from core.database import store_pdf
 
 
 async def store_uploaded_pdf(

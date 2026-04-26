@@ -7,8 +7,8 @@ Requires a valid Clerk JWT (any authenticated user).
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from auth import get_current_user
-from database import log_event
+from core.auth import get_current_user
+from core.database import log_event
 
 router = APIRouter(tags=["tracking"])
 
