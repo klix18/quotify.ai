@@ -4,8 +4,12 @@ from typing import List, Dict
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
-BASE_DIR = Path(__file__).resolve().parent
-ADVISOR_EXCEL_PATH = BASE_DIR / "advisor_info_list" / "advisor_info_list.xlsx"
+# Resolve relative to the backend/ root, not this file's directory.
+# This file lives at backend/api/advisor_info_api.py and the Excel sheet
+# lives at backend/advisor_info_list/advisor_info_list.xlsx, so we go
+# one level up from this file's parent.
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+ADVISOR_EXCEL_PATH = BACKEND_DIR / "advisor_info_list" / "advisor_info_list.xlsx"
 
 router = APIRouter()
 
