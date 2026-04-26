@@ -1,22 +1,24 @@
 # Python
+# NOTE: leading slash anchors patterns to repo root so they don't match
+# nested folders like frontend/src/lib/. Without it, `lib/` would ignore
+# our React utility folder.
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+/build/
+/develop-eggs/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
+/share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -177,3 +179,6 @@ tmp/
 
 # Generated quote PDFs (contain client PII — never commit)
 backend/generated_quotes/
+
+# Dev-metrics viewer local config (contains DEV_METRICS_API_KEY)
+dev_metrics/local.config.js
