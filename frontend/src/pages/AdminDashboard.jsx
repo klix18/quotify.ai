@@ -2179,10 +2179,8 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
             </Section>
 
             {/* PDF Storage Management */}
-            <Section title="PDF Storage" expandable>
-              {(expanded) => expanded ? <PdfStorageManager getToken={getToken} isAdmin={isAdmin} onRefresh={fetchAnalytics} /> : (
-                <div style={{ color: COLORS.mutedText, fontSize: 13 }}>Expand to manage stored PDFs, set auto-clear schedule, or clear storage.</div>
-              )}
+            <Section title="PDF Storage" expandable defaultExpanded>
+              {() => <PdfStorageManager getToken={getToken} isAdmin={isAdmin} onRefresh={fetchAnalytics} />}
             </Section>
           </div>
         )}
