@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/pdfs", tags=["pdf-storage"])
 async def list_documents(
     insurance_type: str = Query("", description="Filter by insurance type"),
     doc_type: str = Query("", description="Filter by doc_type: 'uploaded' or 'generated'"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
 ):

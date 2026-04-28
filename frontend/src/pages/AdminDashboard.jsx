@@ -1225,7 +1225,7 @@ function UserSnapshotHistory({ events, getToken }) {
     if (!fileName || fileName === "—") return;
     try {
       const token = await getToken();
-      const listResp = await fetch(`${API_BASE_URL}/api/pdfs?doc_type=${type}&limit=200`, {
+      const listResp = await fetch(`${API_BASE_URL}/api/pdfs?doc_type=${type}&limit=10000`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!listResp.ok) return;
@@ -1374,7 +1374,7 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
     if (!fileName || fileName === "—") return;
     try {
       const token = await getToken();
-      const listResp = await fetch(`${API_BASE_URL}/api/pdfs?doc_type=${type}&limit=200`, {
+      const listResp = await fetch(`${API_BASE_URL}/api/pdfs?doc_type=${type}&limit=10000`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!listResp.ok) return;
@@ -1649,7 +1649,7 @@ function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
     setLoading(true);
     try {
       const token = await getToken();
-      const resp = await fetch(`${API_BASE_URL}/api/pdfs?limit=200`, { headers: { Authorization: `Bearer ${token}` } });
+      const resp = await fetch(`${API_BASE_URL}/api/pdfs?limit=10000`, { headers: { Authorization: `Bearer ${token}` } });
       if (resp.ok) {
         const d = await resp.json();
         const list = d.documents || [];
