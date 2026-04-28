@@ -7,7 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from core.auth import get_current_user, require_admin
-from core.database import get_pdf, list_pdfs, delete_pdf, delete_all_pdfs, get_pdf_filenames
+from core.database import (
+    get_pdf,
+    list_pdfs,
+    delete_pdf,
+    delete_all_pdfs,
+    get_pdf_filenames,
+    get_pdf_stats,
+)
 
 router = APIRouter(prefix="/api/pdfs", tags=["pdf-storage"])
 
@@ -21,7 +28,12 @@ async def list_documents(
     user: dict = Depends(get_current_user),
 ):
     """List PDF metadata. Both admins and advisors can see all documents
-    so they can download PDFs that appear in the snapshot history."""
+    so they can download PDFs that appear in the snapshot history.
+
+    Also returns ``total_count`` and ``total_size`` for the filtered set
+    (independent of ``limit``/``offset``) so the UI can show the true
+    storage totals without paging through every row.
+    """
     docs = await list_pdfs(
         user_id="",  # no per-user filter
         insurance_type=insurance_type,
@@ -36,7 +48,29 @@ async def list_documents(
             doc["created_at"] = doc["created_at"].isoformat()
         doc["id"] = str(doc["id"])
 
-    return {"documents": docs}
+    stats = await get_pdf_stats(
+        insurance_type=insurance_type,
+        doc_type=doc_type,
+    )
+
+    return {
+        "documents": docs,
+        "total_count": stats["total_count"],
+        "total_size": stats["total_size"],
+    }
+
+
+@router.get("/stats")
+async def get_storage_stats(
+    insurance_type: str = Query("", description="Filter by insurance type"),
+    doc_type: str = Query("", description="Filter by doc_type: 'uploaded' or 'generated'"),
+    user: dict = Depends(get_current_user),
+):
+    """Return total count and total size of stored PDFs (filterable)."""
+    return await get_pdf_stats(
+        insurance_type=insurance_type,
+        doc_type=doc_type,
+    )
 
 
 @router.get("/filenames")

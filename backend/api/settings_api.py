@@ -1,12 +1,11 @@
 """
-API endpoints for app-level settings (auto-clear schedule, etc.)
-and API usage tracking data.
+API endpoints for app-level settings (auto-clear schedule, etc.).
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 
 from core.auth import get_current_user, require_admin
-from core.database import get_setting, set_setting, get_api_usage
+from core.database import get_setting, set_setting
 
 router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
 
@@ -34,22 +33,3 @@ async def set_auto_clear(
         value = "never"
     await set_setting("pdf_auto_clear", value)
     return {"status": "ok", "value": value}
-
-
-# ── API Usage ────────────────────────────────────────────────────────
-
-usage_router = APIRouter(prefix="/api/admin/api-usage", tags=["api-usage"])
-
-
-@usage_router.get("")
-async def get_usage(
-    period: str = Query("month"),
-    _user: dict = Depends(get_current_user),
-):
-    """Return daily API usage data grouped by provider for charting."""
-    rows = await get_api_usage(period)
-    # Serialize dates
-    for r in rows:
-        if r.get("date"):
-            r["date"] = r["date"].isoformat()
-    return {"usage": rows}

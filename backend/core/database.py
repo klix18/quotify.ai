@@ -97,24 +97,6 @@ async def init_db():
             );
         """)
 
-        # API usage log — tracks tokens & estimated cost per AI call
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS api_usage_log (
-                id              BIGSERIAL PRIMARY KEY,
-                created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                provider        TEXT NOT NULL,
-                model           TEXT NOT NULL,
-                input_tokens    INTEGER NOT NULL DEFAULT 0,
-                output_tokens   INTEGER NOT NULL DEFAULT 0,
-                estimated_cost  DOUBLE PRECISION NOT NULL DEFAULT 0,
-                call_type       TEXT NOT NULL DEFAULT ''
-            );
-            CREATE INDEX IF NOT EXISTS idx_api_usage_created_at
-                ON api_usage_log (created_at);
-            CREATE INDEX IF NOT EXISTS idx_api_usage_provider
-                ON api_usage_log (provider);
-        """)
-
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_session_memories (
                 id              TEXT PRIMARY KEY,
@@ -367,52 +349,35 @@ async def get_pdf_filenames() -> set[str]:
     return {r["file_name"] for r in rows}
 
 
-# ── API usage tracking ──────────────────────────────────────────────
-
-
-async def log_api_usage(
-    provider: str,
-    model: str,
-    input_tokens: int,
-    output_tokens: int,
-    estimated_cost: float,
-    call_type: str = "",
-) -> None:
-    """Log a single AI API call with token counts and cost estimate."""
+async def get_pdf_stats(
+    insurance_type: str = "",
+    doc_type: str = "",
+) -> dict:
+    """Return total count and total size of stored PDFs (with optional filters)."""
     pool = await get_pool()
+    conditions = []
+    params = []
+    idx = 1
+    if insurance_type:
+        conditions.append(f"insurance_type = ${idx}")
+        params.append(insurance_type)
+        idx += 1
+    if doc_type:
+        conditions.append(f"doc_type = ${idx}")
+        params.append(doc_type)
+        idx += 1
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    query = f"""
+        SELECT COUNT(*) AS total_count,
+               COALESCE(SUM(file_size), 0) AS total_size
+        FROM pdf_documents
+        {where}
+    """
     async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO api_usage_log
-                (provider, model, input_tokens, output_tokens, estimated_cost, call_type)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            provider, model, input_tokens, output_tokens, estimated_cost, call_type,
-        )
+        row = await conn.fetchrow(query, *params)
+    return {
+        "total_count": int(row["total_count"]) if row else 0,
+        "total_size": int(row["total_size"]) if row else 0,
+    }
 
 
-async def get_api_usage(period: str = "month") -> list[dict]:
-    """Return daily API usage aggregated by provider for the given period."""
-    cutoff_sql = {
-        "week": "NOW() - INTERVAL '7 days'",
-        "month": "NOW() - INTERVAL '30 days'",
-        "6months": "NOW() - INTERVAL '180 days'",
-        "year": "NOW() - INTERVAL '365 days'",
-        "all": "'1970-01-01'::timestamptz",
-    }.get(period, "NOW() - INTERVAL '30 days'")
-
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(f"""
-            SELECT
-                DATE(created_at) AS date,
-                provider,
-                SUM(input_tokens)   AS input_tokens,
-                SUM(output_tokens)  AS output_tokens,
-                SUM(estimated_cost) AS cost
-            FROM api_usage_log
-            WHERE created_at >= {cutoff_sql}
-            GROUP BY DATE(created_at), provider
-            ORDER BY date ASC
-        """)
-    return [dict(r) for r in rows]

@@ -62,7 +62,7 @@
   }
   .stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 12px;
     margin-bottom: 16px;
   }
@@ -74,6 +74,19 @@
   }
   .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .stat-value { font-size: 22px; font-weight: 600; color: var(--blue); margin-top: 2px; }
+  /* Per-insurance-type Design 1 vs Design 2 comparison cards. Layout:
+     two flex blocks side-by-side, one per design ordinal. The right
+     block's font-color flips to green/red based on whether the latency
+     is faster/slower than Design 1, so it reads at a glance. */
+  .cmp-row { display: flex; gap: 14px; margin-top: 8px; }
+  .cmp-block { flex: 1; min-width: 0; }
+  .cmp-block + .cmp-block { border-left: 1px solid var(--border); padding-left: 14px; }
+  .cmp-design { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
+  .cmp-latency { font-size: 20px; font-weight: 600; color: var(--blue); margin-top: 2px; line-height: 1.1; }
+  .cmp-latency.better { color: #059669; }
+  .cmp-latency.worse  { color: var(--danger); }
+  .cmp-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .cmp-empty { color: var(--muted); font-style: italic; font-size: 12px; margin-top: 4px; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { background: var(--accent-bg); color: var(--blue); font-weight: 600; }
@@ -118,6 +131,10 @@
 </style>
 </head>
 <body>
+
+<!-- Optional: gitignored local config that pre-fills Backend URL + API key.
+     Loads silently if absent; viewer still works with manual entry. -->
+<script src="local.config.js" onerror="void 0"></script>
 
 <h1>Quotify — Parse Metrics Viewer</h1>
 <div class="sub">
@@ -235,8 +252,11 @@ function getBackend() {
 function getKey() { return document.getElementById("apiKey").value.trim(); }
 
 function loadInputs() {
-  const u = localStorage.getItem("qm.backendUrl") || "";
-  const k = localStorage.getItem("qm.apiKey") || "";
+  // Priority: localStorage (last successful Load) → window.QM_DEFAULTS
+  // (set by the gitignored local.config.js) → empty placeholder.
+  const defaults = (typeof window !== "undefined" && window.QM_DEFAULTS) || {};
+  const u = localStorage.getItem("qm.backendUrl") || defaults.backendUrl || "";
+  const k = localStorage.getItem("qm.apiKey")     || defaults.apiKey     || "";
   if (u) document.getElementById("backendUrl").value = u;
   if (k) document.getElementById("apiKey").value = k;
 }
@@ -324,21 +344,87 @@ function render() {
   renderDesignSections();
 }
 
+/* Per-insurance-type comparison: Design 1 vs Design 2 (and any later
+ * designs once they appear). Replaces the legacy global counters card.
+ *
+ * Design ordinals are assigned by chronological first-seen — same logic
+ * the per-design sections below use, kept consistent so "Design 1" up
+ * here always means the same tag as "Design 1" down there. */
+const COMPARE_TYPES = ["homeowners", "auto", "dwelling", "bundle"];
+
 function renderGlobalStats() {
   const rows = STATE.sessions;
   const el = document.getElementById("globalStats");
-  const designs = new Set(rows.map(r => r.system_design).filter(Boolean));
-  const withLatency = rows.filter(r => typeof r.latency_ms === "number");
-  const avgLatency = withLatency.length
-    ? Math.round(withLatency.reduce((a, b) => a + b.latency_ms, 0) / withLatency.length)
-    : 0;
-  const withQuote = rows.filter(r => typeof r.manual_changes_all_count === "number");
-  el.innerHTML = `
-    <div class="stat"><div class="stat-label">Designs</div><div class="stat-value">${designs.size}</div></div>
-    <div class="stat"><div class="stat-label">Sessions (all)</div><div class="stat-value">${rows.length}</div></div>
-    <div class="stat"><div class="stat-label">With quote</div><div class="stat-value">${withQuote.length}</div></div>
-    <div class="stat"><div class="stat-label">Avg latency (all)</div><div class="stat-value">${avgLatency ? fmtSec(avgLatency) : "—"} s</div></div>
-  `;
+
+  if (!rows.length) {
+    el.innerHTML = "";
+    return;
+  }
+
+  // 1. Determine design ordering (oldest tag = Design 1).
+  const designFirstSeen = new Map();
+  for (const s of rows) {
+    const tag = s.system_design || "(untagged)";
+    const t = s.parse_timestamp || s.quote_timestamp || "";
+    const cur = designFirstSeen.get(tag);
+    if (!cur || (t && t < cur)) designFirstSeen.set(tag, t || cur || "");
+  }
+  const designsByOrdinal = Array.from(designFirstSeen.keys())
+    .sort((a, b) => (designFirstSeen.get(a) || "").localeCompare(designFirstSeen.get(b) || ""));
+
+  // 2. Bucket: stats[type][design] = { sessions, totalLatency, latencyCount }.
+  const stats = {};
+  for (const type of COMPARE_TYPES) {
+    stats[type] = {};
+    for (const d of designsByOrdinal) {
+      stats[type][d] = { sessions: 0, totalLatency: 0, latencyCount: 0 };
+    }
+  }
+  for (const s of rows) {
+    const type = s.insurance_type;
+    const design = s.system_design || "(untagged)";
+    if (!stats[type] || !stats[type][design]) continue;
+    stats[type][design].sessions += 1;
+    if (typeof s.latency_ms === "number") {
+      stats[type][design].totalLatency += s.latency_ms;
+      stats[type][design].latencyCount += 1;
+    }
+  }
+
+  // 3. Build one card per insurance type, with one block per design.
+  el.innerHTML = COMPARE_TYPES.map(type => {
+    const blocks = designsByOrdinal.map((tag, i) => {
+      const c = stats[type][tag];
+      const avg = c.latencyCount ? c.totalLatency / c.latencyCount : null;
+      // Color the latency green if Design >1 is faster than Design 1,
+      // red if slower. Design 1 itself stays neutral blue.
+      let cls = "";
+      if (i > 0 && avg !== null) {
+        const baseline = stats[type][designsByOrdinal[0]];
+        const baseAvg = baseline.latencyCount ? baseline.totalLatency / baseline.latencyCount : null;
+        if (baseAvg !== null) {
+          if (avg < baseAvg) cls = " better";
+          else if (avg > baseAvg) cls = " worse";
+        }
+      }
+      const latencyHtml = avg !== null
+        ? `<div class="cmp-latency${cls}">${fmtSec(avg)} s</div>`
+        : `<div class="cmp-empty">no data</div>`;
+      return `
+        <div class="cmp-block">
+          <div class="cmp-design">Design ${i + 1}</div>
+          ${latencyHtml}
+          <div class="cmp-sub">${c.sessions} session${c.sessions === 1 ? "" : "s"}</div>
+        </div>
+      `;
+    }).join("");
+    return `
+      <div class="stat">
+        <div class="stat-label">${escapeHtml(type)}</div>
+        <div class="cmp-row">${blocks}</div>
+      </div>
+    `;
+  }).join("");
 }
 
 /* Build design sections. Ordinal "Design N" is assigned by first-seen

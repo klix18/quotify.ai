@@ -13,7 +13,6 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
-from services.usage_tracker import track_openai_usage
 from openai import AsyncOpenAI
 
 from core.auth import get_current_user
@@ -655,14 +654,8 @@ async def chat_message(
             )
 
             async for chunk in response:
-                # Final chunk with usage stats (no choices)
+                # Final chunk with usage stats (no choices) — skip
                 if hasattr(chunk, "usage") and chunk.usage:
-                    track_openai_usage(
-                        model="gpt-4o",
-                        input_tokens=chunk.usage.prompt_tokens or 0,
-                        output_tokens=chunk.usage.completion_tokens or 0,
-                        call_type="chat",
-                    )
                     continue
                 delta = chunk.choices[0].delta if chunk.choices else None
                 if delta and delta.content:

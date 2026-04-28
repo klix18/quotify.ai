@@ -1635,6 +1635,8 @@ function PdfStorageTable({ docs, th, td, typeColors, formatSize, handleDownload,
 
 function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
   const [docs, setDocs] = React.useState([]);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const [totalSize, setTotalSize] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
   const [deleteTarget, setDeleteTarget] = React.useState(null);
   const [deleting, setDeleting] = React.useState(false);
@@ -1648,7 +1650,19 @@ function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
     try {
       const token = await getToken();
       const resp = await fetch(`${API_BASE_URL}/api/pdfs?limit=200`, { headers: { Authorization: `Bearer ${token}` } });
-      if (resp.ok) { const d = await resp.json(); setDocs(d.documents || []); }
+      if (resp.ok) {
+        const d = await resp.json();
+        const list = d.documents || [];
+        setDocs(list);
+        // Use backend-provided totals (independent of limit) when present;
+        // fall back to the page length so older deployments still render.
+        setTotalCount(typeof d.total_count === "number" ? d.total_count : list.length);
+        setTotalSize(
+          typeof d.total_size === "number"
+            ? d.total_size
+            : list.reduce((sum, x) => sum + (x.file_size || 0), 0)
+        );
+      }
     } catch {}
     setLoading(false);
   }, [getToken]);
@@ -1713,8 +1727,8 @@ function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
   const td = { padding: "10px 14px", fontSize: 12, fontWeight: 400, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
   const typeColors = INSURANCE_COLORS;
 
-  const totalSize = docs.reduce((sum, d) => sum + (d.file_size || 0), 0);
   const formatSize = (b) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+  const showingPaged = totalCount > docs.length;
 
   return (
     <>
@@ -1722,16 +1736,21 @@ function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
         <ConfirmModal message="Delete this PDF from storage?" onConfirm={handleDeleteOne} onCancel={() => setDeleteTarget(null)} confirming={deleting} />
       )}
       {clearConfirm && (
-        <ConfirmModal message={`Delete ALL ${docs.length} stored PDFs? This cannot be undone.`} onConfirm={handleClearAll} onCancel={() => setClearConfirm(false)} confirming={clearing} confirmLabel="Clear All" confirmingLabel="Clearing..." />
+        <ConfirmModal message={`Delete ALL ${totalCount} stored PDFs? This cannot be undone.`} onConfirm={handleClearAll} onCancel={() => setClearConfirm(false)} confirming={clearing} confirmLabel="Clear All" confirmingLabel="Clearing..." />
       )}
 
       {/* Header row with stats + actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <div style={{ fontSize: 13, color: COLORS.mutedText }}>
-            <strong style={{ color: COLORS.black }}>{docs.length}</strong> PDFs stored
+            <strong style={{ color: COLORS.black }}>{totalCount}</strong> PDFs stored
             <span style={{ margin: "0 6px", color: COLORS.borderGrey }}>·</span>
             {formatSize(totalSize)} total
+            {showingPaged && (
+              <span style={{ marginLeft: 8, fontSize: 11, color: COLORS.mutedText }}>
+                (showing latest {docs.length})
+              </span>
+            )}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1757,8 +1776,8 @@ function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
           </div>
           <HoverButton
             variant="danger"
-            onClick={() => { if (isAdmin && docs.length > 0) setClearConfirm(true); }}
-            disabled={!isAdmin || docs.length === 0}
+            onClick={() => { if (isAdmin && totalCount > 0) setClearConfirm(true); }}
+            disabled={!isAdmin || totalCount === 0}
             style={{ height: 32, padding: "0 14px", fontSize: 11, borderRadius: 10 }}
           >Clear All</HoverButton>
         </div>
@@ -1772,185 +1791,6 @@ function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
         <PdfStorageTable docs={docs} th={th} td={td} typeColors={typeColors} formatSize={formatSize} handleDownload={handleDownload} isAdmin={isAdmin} setDeleteTarget={setDeleteTarget} />
       )}
     </>
-  );
-}
-
-
-/* ── API Usage Line Graph ──────────────────────────────────────── */
-function ApiUsageGraph({ period, getToken }) {
-  const [usage, setUsage] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [metric, setMetric] = React.useState("tokens"); // "tokens" | "cost"
-  const [hovered, setHovered] = React.useState(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const token = await getToken();
-        const resp = await fetch(`${API_BASE_URL}/api/admin/api-usage?period=${period}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (resp.ok && !cancelled) {
-          const d = await resp.json();
-          setUsage(d.usage || []);
-        }
-      } catch {}
-      if (!cancelled) setLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [period, getToken]);
-
-  if (loading) return <div style={{ color: COLORS.mutedText, fontSize: 13, textAlign: "center", padding: 40 }}>Loading API usage...</div>;
-  if (usage.length === 0) return <div style={{ color: COLORS.mutedText, fontSize: 13, textAlign: "center", padding: 40 }}>No API usage data yet. Usage will appear here as quotes are generated.</div>;
-
-  // Group by date, then by provider
-  const dateMap = {};
-  for (const row of usage) {
-    if (!dateMap[row.date]) dateMap[row.date] = {};
-    const entry = dateMap[row.date];
-    if (!entry[row.provider]) entry[row.provider] = { input_tokens: 0, output_tokens: 0, cost: 0 };
-    entry[row.provider].input_tokens += row.input_tokens || 0;
-    entry[row.provider].output_tokens += row.output_tokens || 0;
-    entry[row.provider].cost += row.cost || 0;
-  }
-
-  const dates = Object.keys(dateMap).sort();
-  const providers = [...new Set(usage.map((r) => r.provider))].sort();
-
-  const providerColors = {
-    openai: "#10A37F",   // OpenAI green
-    gemini: "#4285F4",   // Google blue
-  };
-
-  // Get values for the chart
-  const getValue = (date, provider) => {
-    const d = dateMap[date]?.[provider];
-    if (!d) return 0;
-    return metric === "tokens" ? d.input_tokens + d.output_tokens : d.cost;
-  };
-
-  const allValues = dates.flatMap((d) => providers.map((p) => getValue(d, p)));
-  const maxVal = Math.max(...allValues, 1);
-
-  // SVG dimensions
-  const W = 700, H = 220, padL = 60, padR = 20, padT = 16, padB = 40;
-  const chartW = W - padL - padR;
-  const chartH = H - padT - padB;
-
-  const xScale = (i) => padL + (dates.length === 1 ? chartW / 2 : (i / (dates.length - 1)) * chartW);
-  const yScale = (v) => padT + chartH - (v / maxVal) * chartH;
-
-  const buildPath = (provider) => {
-    const points = dates.map((d, i) => ({ x: xScale(i), y: yScale(getValue(d, provider)) }));
-    if (points.length === 0) return "";
-    if (points.length === 1) return "";
-    return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-  };
-
-  // Y-axis ticks
-  const yTicks = 4;
-  const yTickValues = Array.from({ length: yTicks + 1 }, (_, i) => (maxVal / yTicks) * i);
-  const formatYTick = (v) => {
-    if (metric === "cost") return `$${v < 1 ? v.toFixed(3) : v.toFixed(2)}`;
-    if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
-    if (v >= 1000) return `${(v / 1000).toFixed(0)}K`;
-    return v.toFixed(0);
-  };
-
-  // Hover detection
-  const handleSvgMove = (e) => {
-    const svg = e.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    const mx = ((e.clientX - rect.left) / rect.width) * W;
-    if (dates.length === 0) return;
-    let closestIdx = 0;
-    let closestDist = Infinity;
-    dates.forEach((_, i) => {
-      const dist = Math.abs(xScale(i) - mx);
-      if (dist < closestDist) { closestDist = dist; closestIdx = i; }
-    });
-    if (closestDist < 40) setHovered(closestIdx);
-    else setHovered(null);
-  };
-
-  const filterSelect = {
-    padding: "4px 10px", height: 30, borderRadius: 8,
-    border: `1px solid ${COLORS.borderGrey}`, background: "rgba(255,255,255,0.88)",
-    fontSize: 11, fontFamily: "Poppins, sans-serif", fontWeight: 500,
-    color: COLORS.black, cursor: "pointer",
-  };
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          {providers.map((p) => (
-            <div key={p} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: providerColors[p] || COLORS.blue }} />
-              <span style={{ fontSize: 12, fontWeight: 500, color: COLORS.black, textTransform: "capitalize" }}>{p === "openai" ? "OpenAI" : p === "gemini" ? "Google Gemini" : p}</span>
-            </div>
-          ))}
-        </div>
-        <select value={metric} onChange={(e) => setMetric(e.target.value)} style={filterSelect}>
-          <option value="tokens">Tokens</option>
-          <option value="cost">Estimated Cost</option>
-        </select>
-      </div>
-
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }} onMouseMove={handleSvgMove} onMouseLeave={() => setHovered(null)}>
-        {/* Grid lines */}
-        {yTickValues.map((v, i) => (
-          <g key={i}>
-            <line x1={padL} x2={W - padR} y1={yScale(v)} y2={yScale(v)} stroke="rgba(180,200,230,0.25)" strokeWidth={1} />
-            <text x={padL - 8} y={yScale(v) + 4} textAnchor="end" fontSize={10} fill={COLORS.mutedText} fontFamily="Poppins">{formatYTick(v)}</text>
-          </g>
-        ))}
-
-        {/* X-axis labels */}
-        {dates.map((d, i) => {
-          // Show max ~10 labels
-          if (dates.length > 12 && i % Math.ceil(dates.length / 10) !== 0 && i !== dates.length - 1) return null;
-          const label = new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
-          return <text key={d} x={xScale(i)} y={H - 8} textAnchor="middle" fontSize={10} fill={COLORS.mutedText} fontFamily="Poppins">{label}</text>;
-        })}
-
-        {/* Lines */}
-        {providers.map((p) => (
-          <path key={p} d={buildPath(p)} fill="none" stroke={providerColors[p] || COLORS.blue} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-        ))}
-
-        {/* Dots */}
-        {providers.map((p) => dates.map((d, i) => {
-          const v = getValue(d, p);
-          if (v === 0) return null;
-          return <circle key={`${p}-${i}`} cx={xScale(i)} cy={yScale(v)} r={hovered === i ? 5 : 3} fill={providerColors[p] || COLORS.blue} stroke="#fff" strokeWidth={1.5} style={{ transition: "r 150ms ease" }} />;
-        }))}
-
-        {/* Hover line + tooltip */}
-        {hovered !== null && (
-          <>
-            <line x1={xScale(hovered)} x2={xScale(hovered)} y1={padT} y2={padT + chartH} stroke="rgba(23,101,212,0.2)" strokeWidth={1} strokeDasharray="4 3" />
-          </>
-        )}
-      </svg>
-
-      {/* Tooltip below chart */}
-      {hovered !== null && dates[hovered] && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 4 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: COLORS.black }}>
-            {new Date(dates[hovered] + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-          </span>
-          {providers.map((p) => {
-            const v = getValue(dates[hovered], p);
-            return (
-              <span key={p} style={{ fontSize: 11, color: providerColors[p] || COLORS.blue, fontWeight: 500 }}>
-                {p === "openai" ? "OpenAI" : "Gemini"}: {metric === "cost" ? `$${v.toFixed(4)}` : v.toLocaleString() + " tokens"}
-              </span>
-            );
-          })}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -2342,13 +2182,6 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
             <Section title="PDF Storage" expandable>
               {(expanded) => expanded ? <PdfStorageManager getToken={getToken} isAdmin={isAdmin} onRefresh={fetchAnalytics} /> : (
                 <div style={{ color: COLORS.mutedText, fontSize: 13 }}>Expand to manage stored PDFs, set auto-clear schedule, or clear storage.</div>
-              )}
-            </Section>
-
-            {/* API Usage */}
-            <Section title="API Usage" expandable defaultExpanded>
-              {(expanded) => expanded ? <ApiUsageGraph period={period} getToken={getToken} /> : (
-                <div style={{ color: COLORS.mutedText, fontSize: 13 }}>Expand to view OpenAI and Gemini token usage and cost over time.</div>
               )}
             </Section>
           </div>

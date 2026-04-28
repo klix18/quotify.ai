@@ -194,13 +194,6 @@ Respond with ONLY the HTML, no markdown code blocks or explanation.""")]
         ),
     )
 
-    # Track Gemini usage
-    try:
-        from services.usage_tracker import track_gemini_response
-        track_gemini_response(response, "gemini-2.5-flash", call_type="report")
-    except Exception:
-        pass
-
     html = response.text.strip()
     # Strip markdown code blocks if present
     if html.startswith("```"):

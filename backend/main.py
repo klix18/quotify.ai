@@ -22,7 +22,7 @@ from api.clerk_users_api import router as clerk_users_router
 from api.chat_api import router as chat_router
 from services.report_generator import router as report_router
 
-from api.settings_api import router as settings_router, usage_router as api_usage_router
+from api.settings_api import router as settings_router
 from api.dev_metrics_api import router as dev_metrics_router
 from services.auto_clear_task import start_auto_clear_loop
 from core.browser_manager import get_browser, close_browser
@@ -95,9 +95,8 @@ app.include_router(clerk_users_router)
 app.include_router(chat_router)
 app.include_router(report_router)
 
-# Settings & API usage
+# Settings
 app.include_router(settings_router)
-app.include_router(api_usage_router)
 
 # Developer-only parse/accuracy metrics (open POST, key-gated GET)
 app.include_router(dev_metrics_router)

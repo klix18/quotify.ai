@@ -21,12 +21,12 @@ quotify-ai/
 │   │   ├── chat_api.py           Snappy analytics chatbot SSE endpoint + session + memory management
 │   │   ├── clerk_users_api.py    Admin user role management via Clerk API
 │   │   ├── dev_metrics_api.py    Dev-only parse_metrics endpoints
-│   │   ├── pdf_storage_api.py    List / download / delete stored PDFs
-│   │   ├── settings_api.py       Admin auto-clear setting + api-usage endpoints
+│   │   ├── pdf_storage_api.py    List / download / delete stored PDFs (+ /stats for true totals)
+│   │   ├── settings_api.py       Admin auto-clear setting endpoints
 │   │   └── track_api.py          POST /api/track-event — analytics event logger
 │   ├── core/                   Infrastructure / shared concerns
 │   │   ├── auth.py               Clerk JWT → user payload (verify_clerk_token / get_current_user / require_admin)
-│   │   ├── database.py           asyncpg pool, PDFs, analytics, chat_memory, api_usage, settings
+│   │   ├── database.py           asyncpg pool, PDFs, analytics, chat_memory, settings
 │   │   └── browser_manager.py    Playwright Chromium singleton (for PDF rendering)
 │   ├── services/               Business logic / helpers (no routers, except report_generator which mounts under /api/admin)
 │   │   ├── chat_memory.py        3-layer memory (in-mem session / DB session summary / DB long-term)
@@ -34,8 +34,7 @@ quotify-ai/
 │   │   ├── why_selected_generator.py  "Why this plan?" bullets (single refine call, gpt-4o)
 │   │   ├── pdf_storage_helpers.py  store_uploaded_pdf / store_generated_pdf (await store_pdf(...))
 │   │   ├── pdf_optimizer.py      qpdf lossless PDF optimizer (post Chromium render)
-│   │   ├── auto_clear_task.py    Background loop that clears PDFs on schedule
-│   │   └── usage_tracker.py      Fire-and-forget token usage logger (Gemini + OpenAI)
+│   │   └── auto_clear_task.py    Background loop that clears PDFs on schedule
 │   ├── scripts/                One-off / startup scripts
 │   │   └── user_id_backfill.py   run_startup_backfill + backfill_user_ids_from_clerk
 │   ├── parsers/                Parser pipeline (unchanged)
