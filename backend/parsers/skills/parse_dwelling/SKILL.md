@@ -16,6 +16,7 @@ multiple properties in a single document.
 Extract these fields quickly (key: value, one per line). For multi-property
 documents, prefix with property_1_, property_2_, etc.:
   named_insured
+  client_address
   quote_date
   quote_effective_date
   quote_expiration_date
@@ -29,11 +30,15 @@ documents, prefix with property_1_, property_2_, etc.:
   property_1_dwelling_limit
   property_1_aop_deductible
   property_1_wind_hail_deductible
+  property_1_deductible
 
 ## Field Guide
 
 ### Policy & Client
 - `named_insured` — the insured / applicant / named insured / client, NOT the agency or agent.
+- `client_address` — insured's mailing address. Prefer the block directly under the Named Insured.
+  ALIASES: "Mailing Address", "Named Insured/Mailing Address", "Insured Address", "Address:" (when printed under the Named Insured block).
+  FALLBACK: If no separate mailing address is listed anywhere, use the only address shown for the insured, including when labeled "Residence Premises" or "Risk Address" on single-property quotes.
 - `carrier_name` — insurance carrier/company name (e.g., "Tower Hill Prime", "American Modern",
   "Johnson & Johnson / Great Lakes", "SageSure / SafePort", "Markel / Emerald Bay", "NCJUA").
 - `quote_date` — date the quote was generated/printed/prepared (MM/DD/YYYY).
@@ -100,7 +105,7 @@ of a page or on a LATER page. You MUST look there.
 #### Deductibles (fill whichever format applies)
 Format 1 (separate):
 - `aop_deductible` — All Other Perils / AOP deductible.
-  ALIASES: "AOP", "All Other Perils", "AOP Deductible"
+  ALIASES: "AOP", "All Other Perils", "AOP Deductible", "All Perils Deductible", "All Perils", "All Peril"
 - `wind_hail_deductible` — Wind/Hail deductible. May be "1%" or "2% of Coverage A".
 
 Format 2 (combined):
@@ -108,6 +113,9 @@ Format 2 (combined):
 - `wind_hail_included` — MUST output "Yes", "No", or "" if not specified.
   "Yes" if wind/hail is included, "No" if excluded.
   NOTE: If "Windstorm or Hail Exclusion" endorsement exists, set to "No".
+
+Cross-rule:
+- If only one deductible is shown and it is an All Perils/AOP/general deductible (e.g., "Deductible: All Perils $2,500"), populate BOTH `aop_deductible` and the combined `deductible` with the same value.
 
 ### Premium Summary (array — one entry per property, same order)
 - `total_premium` — total policy premium.
@@ -203,7 +211,7 @@ Layout Overrides:
 Layout Overrides:
 - Simple text layout, NOT a table. Coverages listed as plain text lines:
   "A - Dwelling $X", "B - Other Structures $X", etc.
-- Single deductible line: **"Deductible: All Perils $X"** → `aop_deductible`.
+- Single deductible line: **"Deductible: All Perils"** → populate BOTH `aop_deductible` and `deductible` with the same value.
 - Policy form labeled **"Policy Form:"** as plain text.
 - Premium is the total shown at the bottom of the quote, no separate premium breakdown.
 

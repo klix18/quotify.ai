@@ -4,7 +4,7 @@ description: Use this skill when parsing an auto insurance quote PDF
 ---
 
 # Auto Insurance Extraction Skill
-> VERSION: 2.1
+> VERSION: 2.2
 > TYPE: auto
 
 ## Overview
@@ -28,13 +28,18 @@ Extract these fields quickly (key: value, one per line):
 
 ### Policy & Client
 - `client_name` — the insured / applicant / named insured, NOT the agency.
-- `client_address` — single-line mailing address.
+- `client_address` — single-line mailing address. If the address is presented as a
+  block directly beneath the named insured (e.g., name on one line, followed by street
+  and then city/state ZIP on subsequent lines) without an explicit label, capture it
+  and flatten to one line: "street city state ZIP".
 - `client_phone` — insured's phone if shown.
 - `quote_date` — print date, quote date, or proposal date (MM/DD/YYYY).
 - `quote_effective_date` — policy effective date (MM/DD/YYYY).
 - `quote_expiration_date` — policy expiration date (MM/DD/YYYY).
 - `policy_term` — MUST be exactly "6-Month", "12-Month", or "Unknown".
   Determine from effective/expiration span if not stated: ~180-day = "6-Month", ~365-day = "12-Month".
+  ALIASES: look for labels like "Term" with values such as "6 Month" or "12 Month"
+  (e.g., "12 Month Automatic Payments*") and normalize to "6-Month" / "12-Month".
 
 ### Drivers (array — capture ALL listed drivers)
 - `driver_name` — full name.
@@ -46,6 +51,7 @@ Extract these fields quickly (key: value, one per line):
 - `year_make_model_trim` — combine year, make, model, and trim: "2021 Toyota Camry LE".
 - `vin` — full 17-character VIN. "" if not shown.
 - `vehicle_use` — e.g. "Commute", "Pleasure", "Business". "" if absent.
+  If shown as a single-letter code under a "Use" column, normalize "W" → "Work"; otherwise capture the shown term.
 - `garaging_zip_county` — ZIP code and/or county where vehicle is garaged.
 - `coverage_premiums` — object with one key per coverage type for THIS vehicle:
     bi_premium, pd_premium, medpay_premium, um_uim_bi_premium, umpd_premium,
@@ -86,10 +92,23 @@ Extract these fields quickly (key: value, one per line):
 
 ### Payment Options
 - `full_pay_amount` — single full-pay amount for entire policy term.
+
+Full Pay (object under `payment_options.full_pay`):
+- `eft_reduces_fee` — "Yes", "No", or "". Set to "Yes" when the quote shows
+  an AutoPay/Automatic Payments/EFT discount or fee reduction applicable to paying in full.
+
 For each installment plan (semi_annual, quarterly, monthly):
-- `down_payment` — required down payment.
+- `down_payment` — required down payment. ALIASES: "Down Payment".
 - `amount_per_installment` — amount due per installment after down payment.
 - `number_of_installments` — count of installments after down payment (digits only).
+- `eft_reduces_fee` — "Yes", "No", or "". Set to "Yes" when the plan is labeled or
+  paired with AutoPay/Automatic Payments/EFT indicating reduced fees.
+
+Parsing patterns:
+- If shown as "X payments of $Y" (e.g., "11 payments of $211.70"), set
+  `number_of_installments` = X and `amount_per_installment` = $Y for that plan.
+- Phrases like "Automatic Payments", "AutoPay", or "EFT" identify the installment plan
+  and may indicate `eft_reduces_fee` = "Yes".
 
 #### Paid-in-Full Discount (object under `payment_options.paid_in_full_discount`)
 Populate these three fields ONLY if the quote explicitly shows a pay-in-full
@@ -114,6 +133,7 @@ totals.
 ### Premium Summary
 - `vehicle_subtotals` — array of strings, one subtotal per vehicle in order.
 - `total_premium` — grand-total premium for the policy term.
+  ALIASES: "Total policy premium", "Total 12 Month Quoted", "Total Cost".
 - `paid_in_full_discount` — mirror of `payment_options.paid_in_full_discount.discount_amount`
   as a flat string. "" if none.
 - `total_pay_in_full` — mirror of `payment_options.paid_in_full_discount.net_pay_in_full`
