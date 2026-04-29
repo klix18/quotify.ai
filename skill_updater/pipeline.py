@@ -210,6 +210,24 @@ async def approve_and_apply(proposal_id: int, proposed_skill_md: str, was_edited
     return await apply_proposal(proposal_id)
 
 
+async def apply_with_line_decisions(proposal_id: int, decisions: dict[str, dict]) -> bool:
+    """Reconstruct the final SKILL.md from per-line decisions and apply.
+
+    ``decisions`` maps each diff-line key (``m_<n>`` for minus lines,
+    ``p_<n>`` for plus lines) to a dict like
+    ``{"accept": bool, "text": str?}``. The reconstructed text is saved
+    to the proposal as 'modified' before applying so the snapshot
+    history records exactly what was written."""
+    import diff_review  # local import keeps top-level imports tidy
+    p = await db.get_proposal(proposal_id)
+    if p is None:
+        return False
+    diff_lines = diff_review.compute_diff_lines(p.current_skill_md, p.proposed_skill_md)
+    final_content = diff_review.reconstruct(diff_lines, decisions)
+    await db.update_proposal_status(proposal_id, "modified", final_content)
+    return await apply_proposal(proposal_id)
+
+
 async def restore_history(insurance_type: str, skill_md: str) -> None:
     """Write a historical SKILL.md back, then snapshot the restore."""
     skill_io.write_skill(insurance_type, skill_md)
