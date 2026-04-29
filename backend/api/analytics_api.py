@@ -4,6 +4,7 @@ Provides usage stats with time period filtering and reset capability.
 """
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -11,6 +12,11 @@ from pydantic import BaseModel
 from core.auth import get_current_user, require_admin
 from core.database import get_pool
 from scripts.user_id_backfill import backfill_user_ids_from_clerk
+
+# All bucketing/filtering on the dashboard is anchored to Eastern Time —
+# the dashboard text says "today" and that should match the user's local day,
+# not UTC midnight. Sizemore's office is on the East Coast, so ET is correct.
+_DASHBOARD_TZ = ZoneInfo("America/New_York")
 
 router = APIRouter(prefix="/api/admin/analytics", tags=["analytics"])
 self_router = APIRouter(prefix="/api/analytics", tags=["analytics-self"])
@@ -22,6 +28,12 @@ def _period_start(period: str) -> datetime:
     """Convert a period string to a UTC datetime cutoff."""
     now = datetime.now(timezone.utc)
     match period:
+        case "today":
+            # Midnight of today in ET, expressed as a UTC datetime so the
+            # WHERE created_at >= cutoff filter is comparable to other branches.
+            now_et = datetime.now(_DASHBOARD_TZ)
+            midnight_et = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+            return midnight_et.astimezone(timezone.utc)
         case "week":
             return now - timedelta(weeks=1)
         case "month":
@@ -40,7 +52,7 @@ def _period_start(period: str) -> datetime:
 
 @router.get("/summary")
 async def get_analytics_summary(
-    period: str = Query("month", regex="^(week|month|6months|year|all)$"),
+    period: str = Query("month", pattern="^(today|week|month|6months|year|all)$"),
     _user: dict = Depends(get_current_user),
 ):
     """Get aggregated analytics for the given time period."""
@@ -111,7 +123,9 @@ async def get_analytics_summary(
 
         # Timeline — quotes per bucket, broken down by insurance type.
         # Bucket granularity depends on period.
-        if period == "year":
+        if period == "today":
+            bucket_sql = "DATE_TRUNC('hour', created_at AT TIME ZONE 'America/New_York')"
+        elif period == "year":
             bucket_sql = "DATE_TRUNC('month', created_at AT TIME ZONE 'America/New_York')"
         elif period == "all":
             bucket_sql = "DATE_TRUNC('year', created_at AT TIME ZONE 'America/New_York')"
@@ -184,7 +198,7 @@ async def get_analytics_summary(
 
 @router.get("/manual-changes")
 async def get_manual_changes_leaderboard(
-    period: str = Query("month", regex="^(week|month|6months|year|all)$"),
+    period: str = Query("month", pattern="^(today|week|month|6months|year|all)$"),
     _user: dict = Depends(get_current_user),
 ):
     """Get leaderboard of manually changed fields across all events."""
@@ -219,7 +233,7 @@ async def get_manual_changes_leaderboard(
 @router.get("/user/{user_id}")
 async def get_user_detail(
     user_id: str,
-    period: str = Query("month", regex="^(week|month|6months|year|all)$"),
+    period: str = Query("month", pattern="^(today|week|month|6months|year|all)$"),
     _user: dict = Depends(get_current_user),
 ):
     """Get detailed analytics for a specific user (matched by stable user_id, or by user_name for legacy rows)."""
@@ -276,7 +290,9 @@ async def get_user_detail(
         """, cutoff, user_id)
 
         # Timeline — quotes per bucket, broken down by insurance type (user-scoped).
-        if period == "year":
+        if period == "today":
+            bucket_sql = "DATE_TRUNC('hour', created_at AT TIME ZONE 'America/New_York')"
+        elif period == "year":
             bucket_sql = "DATE_TRUNC('month', created_at AT TIME ZONE 'America/New_York')"
         elif period == "all":
             bucket_sql = "DATE_TRUNC('year', created_at AT TIME ZONE 'America/New_York')"
@@ -392,7 +408,7 @@ async def delete_single_event(
 
 @router.delete("/reset")
 async def reset_analytics(
-    period: str = Query("all", regex="^(week|month|6months|year|all)$"),
+    period: str = Query("all", pattern="^(today|week|month|6months|year|all)$"),
     _admin: dict = Depends(require_admin),
 ):
     """Delete analytics events for the given period. Use with caution."""
@@ -413,7 +429,7 @@ async def reset_analytics(
 @self_router.get("/me")
 async def get_my_stats(
     user_name: str = Query(..., description="Display name of the current user (used for legacy fallback only)"),
-    period: str = Query("month", regex="^(week|month|6months|year|all)$"),
+    period: str = Query("month", pattern="^(today|week|month|6months|year|all)$"),
     user: dict = Depends(get_current_user),
 ):
     """Get analytics for the currently authenticated user (no admin required)."""

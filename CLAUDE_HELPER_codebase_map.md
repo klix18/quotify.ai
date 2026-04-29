@@ -52,13 +52,27 @@ quotify-ai/
 │   ├── fonts/                  Custom fonts for PDF rendering
 │   └── requirements.txt
 │
+├── skill_updater/              Self-improving parser tool — separate Streamlit app
+│   ├── app.py                  Streamlit UI (Run analysis | Pending proposals | History)
+│   ├── pipeline.py             Orchestrator: per-event analyzer → per-type synthesizer
+│   ├── analyzer.py             Per-event vision LLM (Gemini 2.5 Flash) — reads generated PDF, locates values in original
+│   ├── synthesizer.py          Per-insurance-type proposal LLM (GPT-5 strict json_schema)
+│   ├── diff_review.py          Line-level diff parsing + reconstruction (compute_diff_lines / reconstruct)
+│   ├── skill_io.py             Read/write backend/parsers/skills/parse_<type>/SKILL.md
+│   ├── db.py                   Async Postgres pool — own connection, no backend imports
+│   ├── models.py               Pydantic shapes (Finding / Proposal / EventRow / ProposalRow)
+│   ├── prompts/                Edit-friendly LLM prompts (.md files)
+│   ├── migrations/001_skill_updater.sql   skill_runs / skill_event_analysis / skill_proposals / skill_history
+│   ├── findings/<event_id>.json (gitignored)  Cached per-event analyzer outputs
+│   └── README.md / requirements.txt / .env.example
+│
 └── frontend/                   Vite + React 19 + Clerk
     └── src/
         ├── main.jsx            (root) Bootstraps ClerkProvider + BrowserRouter + <App/>
         ├── App.jsx             (root) SignInPage, TopNav, AuthenticatedApp, MobileBlocker
         ├── pages/              Route-level page components
         │   ├── QuotifyHome.jsx       Main quote workflow UI
-        │   ├── AdminDashboard.jsx    Admin analytics dashboard
+        │   ├── AdminDashboard.jsx    Admin analytics dashboard (PERIODS includes "today"; ManualChangesCell pills)
         │   └── ChatMemoryPage.jsx    Admin-only memory inspector
         ├── components/         Reusable UI components
         │   └── ChatPanel.jsx         Snappy chat panel (SSE consumer)
@@ -82,6 +96,17 @@ quotify-ai/
   `import Y from "../components/Y"`, `import Z from "../configs/Z"`.
 - Frontend from root (`App.jsx`, `main.jsx`): `import X from "./lib/X"`,
   `import P from "./pages/P"`, `import "./styles/index.css"`.
+- `skill_updater/` is fully isolated — no `from backend` imports. It connects
+  to the same Postgres via its own asyncpg pool (DATABASE_URL from its own
+  .env, falling back to backend/.env).
+
+### Dashboard time-period filter (analytics_api.py + AdminDashboard.PERIODS)
+- Accepted values: `today | week | month | 6months | year | all`
+- `today` cutoff = midnight ET of the current day, expressed as UTC.
+  Bucketing for `today` uses `DATE_TRUNC('hour', ...)` on the backend and
+  `bucketKind="hour"` (24 hourly bars) on the chart.
+- All bucketing is anchored to `America/New_York` so it matches Sizemore's
+  business hours rather than UTC midnight.
 
 ---
 

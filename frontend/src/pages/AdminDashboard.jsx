@@ -7,6 +7,7 @@ import ChatPanel from "../components/ChatPanel";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const PERIODS = [
+  { value: "today", label: "Today" },
   { value: "week", label: "Last Week" },
   { value: "month", label: "Last Month" },
   { value: "6months", label: "Last 6 Months" },
@@ -459,7 +460,8 @@ function QuotesTimeline({ events, period }) {
   const containerRef = React.useRef(null);
 
   // Bucket size depends on period.
-  const bucketKind = period === "year" ? "month"
+  const bucketKind = period === "today" ? "hour"
+    : period === "year" ? "month"
     : period === "all" ? "year"
     : period === "6months" ? "week"
     : "day";
@@ -468,6 +470,7 @@ function QuotesTimeline({ events, period }) {
   // always show a full timeline even on days with zero activity.
   const buckets = React.useMemo(() => {
     const now = new Date();
+    const mkHour = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours());
     const mkDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const mkWeek = (d) => {
       const x = mkDay(d);
@@ -479,7 +482,15 @@ function QuotesTimeline({ events, period }) {
     const mkYear = (d) => new Date(d.getFullYear(), 0, 1);
 
     const list = [];
-    if (bucketKind === "day") {
+    if (bucketKind === "hour") {
+      // 24 hourly buckets from local midnight today to end-of-day.
+      const startOfDay = mkDay(now);
+      for (let i = 0; i < 24; i++) {
+        const d = new Date(startOfDay);
+        d.setHours(i);
+        list.push(d);
+      }
+    } else if (bucketKind === "day") {
       const count = period === "week" ? 7 : 30;
       const end = mkDay(now);
       const start = new Date(end);
@@ -524,6 +535,7 @@ function QuotesTimeline({ events, period }) {
 
   // Key each bucket by its normalized timestamp for quick lookup.
   const bucketKey = React.useCallback((d) => {
+    if (bucketKind === "hour") return `H${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
     if (bucketKind === "day") return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     if (bucketKind === "week") {
       const x = new Date(d);
@@ -564,6 +576,13 @@ function QuotesTimeline({ events, period }) {
 
   // Axis label formatter.
   const fmtLabel = (d) => {
+    if (bucketKind === "hour") {
+      const h = d.getHours();
+      // Compact 12-hour labels: "12a", "3a", "9p", etc.
+      const meridiem = h < 12 ? "a" : "p";
+      const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${display}${meridiem}`;
+    }
     if (bucketKind === "day") {
       if (period === "week") return d.toLocaleDateString("en-US", { weekday: "short" });
       return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
@@ -573,6 +592,9 @@ function QuotesTimeline({ events, period }) {
     return String(d.getFullYear());
   };
   const fmtFullLabel = (d) => {
+    if (bucketKind === "hour") {
+      return d.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric" });
+    }
     if (bucketKind === "day") return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
     if (bucketKind === "week") {
       const end = new Date(d); end.setDate(end.getDate() + 6);
@@ -1321,7 +1343,7 @@ function UserSnapshotHistory({ events, getToken }) {
                     <span onClick={() => handlePdfDownload(e.uploaded_pdf, "uploaded")} style={{ color: COLORS.blue, cursor: "pointer", textDecoration: "underline", textDecorationColor: "rgba(23,101,212,0.3)" }}>{e.uploaded_pdf}</span>
                   ) : "—"}
                 </td>
-                <td style={td} title={e.manually_changed_fields}>{e.manually_changed_fields || "—"}</td>
+                <ManualChangesCell value={e.manually_changed_fields} tdStyle={td} />
                 <td style={{ ...td, textAlign: "center" }}>
                   <span style={{
                     display: "inline-block", padding: "2px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
@@ -1513,7 +1535,7 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
                     );
                   })() : "—"}
                 </td>
-                <td style={td} title={e.manually_changed_fields}>{e.manually_changed_fields || "—"}</td>
+                <ManualChangesCell value={e.manually_changed_fields} tdStyle={td} />
                 <td style={{ ...td, textAlign: "center" }}>
                   <span style={{
                     display: "inline-block", padding: "2px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
@@ -1808,6 +1830,96 @@ function HoverRow({ children }) {
         background: hovered ? "rgba(23,101,212,0.03)" : "transparent",
       }}
     >{children}</tr>
+  );
+}
+
+/* ── Manual-changes cell — pills with click-to-expand ────────── */
+/* Renders a comma-separated `manually_changed_fields` string as small
+   pills. Shows the first INITIAL_VISIBLE pills inline; if more exist,
+   appends a "+N more" pill. Click anywhere in the cell to toggle the
+   expanded state (wraps to multi-line and shows everything).
+
+   `tdStyle` is the shared <td> style object from the parent table — passed
+   through so we don't duplicate the table's spacing/typography rules. */
+function ManualChangesCell({ value, tdStyle }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const INITIAL_VISIBLE = 2;
+
+  // Empty / null guards
+  const fields = React.useMemo(
+    () => (value || "").split(",").map((s) => s.trim()).filter(Boolean),
+    [value]
+  );
+  if (fields.length === 0) {
+    return <td style={tdStyle}>—</td>;
+  }
+
+  // Color a pill by its category (heuristic match against the field name)
+  const pillStyle = (field) => {
+    let bg = `${COLORS.blue}12`, fg = COLORS.blue;
+    if (/_premium$|premium_|policy_term|payment|amount|cost/i.test(field)) {
+      bg = `${COLORS.green}15`; fg = COLORS.green;
+    } else if (/deductible|coverage|limit|liability/i.test(field)) {
+      bg = `${COLORS.purple || "#7B5FE6"}15`; fg = COLORS.purple || "#7B5FE6";
+    } else if (/^client_|^agent_|email|phone|address|name/i.test(field)) {
+      bg = `${COLORS.blue}15`; fg = COLORS.blue;
+    } else if (/date|expiration|effective/i.test(field)) {
+      bg = `${COLORS.orange || "#E08A2B"}15`; fg = COLORS.orange || "#E08A2B";
+    }
+    return {
+      display: "inline-block",
+      padding: "2px 8px",
+      margin: "2px 4px 2px 0",
+      borderRadius: 6,
+      fontSize: 10.5,
+      fontWeight: 500,
+      background: bg,
+      color: fg,
+      whiteSpace: "nowrap",
+      lineHeight: 1.5,
+    };
+  };
+
+  const visible = expanded ? fields : fields.slice(0, INITIAL_VISIBLE);
+  const hiddenCount = fields.length - visible.length;
+
+  // Cell-level style: when expanded we drop the nowrap+ellipsis; when
+  // collapsed the existing td still tries to truncate but pills are
+  // small so they fit within the column.
+  const cellStyle = expanded
+    ? { ...tdStyle, maxWidth: "none", overflow: "visible", whiteSpace: "normal", cursor: "pointer", padding: "8px 14px" }
+    : { ...tdStyle, cursor: "pointer", overflow: "hidden" };
+
+  return (
+    <td
+      style={cellStyle}
+      onClick={() => setExpanded((v) => !v)}
+      title={expanded ? "Click to collapse" : value}
+    >
+      {visible.map((f) => (
+        <span key={f} style={pillStyle(f)}>{f}</span>
+      ))}
+      {hiddenCount > 0 && !expanded && (
+        <span
+          style={{
+            ...pillStyle("more"),
+            background: "rgba(180,200,230,0.25)",
+            color: COLORS.mutedText,
+            fontWeight: 600,
+          }}
+        >+{hiddenCount} more</span>
+      )}
+      {expanded && fields.length > INITIAL_VISIBLE && (
+        <span
+          style={{
+            ...pillStyle("collapse"),
+            background: "rgba(180,200,230,0.25)",
+            color: COLORS.mutedText,
+            fontWeight: 600,
+          }}
+        >collapse</span>
+      )}
+    </td>
   );
 }
 
