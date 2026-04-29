@@ -453,9 +453,12 @@ function ManualChangesLeaderboard({ data, limit = 15 }) {
 }
 
 /* ── Quotes Timeline — stacked bar chart ─────────────────────── */
-/* Derives everything from the same `events` array that powers Snapshot
-   History, so the chart and the table are guaranteed to stay in sync. */
-function QuotesTimeline({ events, period }) {
+/* Consumes the server-aggregated `timeline` array (one row per
+   (bucket, insurance_type) for the entire period — uncapped). Earlier
+   versions iterated `recent_events` to compute buckets in JS, but
+   recent_events is `LIMIT 100`, so periods with >100 events would
+   under-count the chart relative to the totals/leaderboards. */
+function QuotesTimeline({ timeline, period }) {
   const [hoveredIdx, setHoveredIdx] = React.useState(null);
   const containerRef = React.useRef(null);
 
@@ -521,9 +524,9 @@ function QuotesTimeline({ events, period }) {
         list.push(d);
       }
     } else {
-      // year — derive span from events, fallback to current year only
+      // year — derive span from timeline buckets, fallback to current year only
       const years = new Set(
-        (events || []).map((e) => e.created_at ? new Date(e.created_at).getFullYear() : null).filter(Boolean)
+        (timeline || []).map((t) => t.bucket ? new Date(t.bucket).getFullYear() : null).filter(Boolean)
       );
       years.add(now.getFullYear());
       const min = Math.min(...years);
@@ -531,7 +534,7 @@ function QuotesTimeline({ events, period }) {
       for (let y = min; y <= max; y++) list.push(new Date(y, 0, 1));
     }
     return list;
-  }, [bucketKind, period, events]);
+  }, [bucketKind, period, timeline]);
 
   // Key each bucket by its normalized timestamp for quick lookup.
   const bucketKey = React.useCallback((d) => {
@@ -547,21 +550,23 @@ function QuotesTimeline({ events, period }) {
     return `Y${d.getFullYear()}`;
   }, [bucketKind]);
 
-  // Collapse events into { bucketKey: { type: count, ... } }
-  // Uses the exact same `events` array that powers Snapshot History,
-  // filtering for created_quote === true so counts match the leaderboard.
+  // Collapse the server-aggregated `timeline` rows into
+  // { bucketKey: { type: count, ... } }. `timeline` already contains the
+  // total quotes per (bucket, insurance_type) for the entire period —
+  // no client-side LIMIT, so the chart counts match the leaderboard
+  // even when there are more than 100 events.
   const byBucket = React.useMemo(() => {
     const map = {};
-    for (const e of events || []) {
-      if (!e.created_quote || !e.created_at) continue;
-      const d = new Date(e.created_at);
+    for (const t of timeline || []) {
+      if (!t.bucket) continue;
+      const d = new Date(t.bucket);
       const key = bucketKey(d);
       if (!map[key]) map[key] = {};
-      const t = e.insurance_type || "other";
-      map[key][t] = (map[key][t] || 0) + 1;
+      const type = t.insurance_type || "other";
+      map[key][type] = (map[key][type] || 0) + (t.quotes_created || 0);
     }
     return map;
-  }, [events, bucketKey]);
+  }, [timeline, bucketKey]);
 
   // Build the series rendered as stacks.
   const series = buckets.map((d) => {
@@ -1226,7 +1231,7 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
 
       {/* Quotes Timeline — personal stacked bar chart */}
       <Section title="Quotes Generated" allowOverflow tightHeader>
-        <QuotesTimeline events={data.recent_events} period={period} />
+        <QuotesTimeline timeline={data.timeline} period={period} />
       </Section>
 
       {/* User snapshot history */}
@@ -2265,7 +2270,7 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
 
             {/* Quotes Timeline — stacked bar chart by insurance type */}
             <Section title="Quotes Generated" allowOverflow tightHeader>
-              <QuotesTimeline events={data.recent_events} period={period} />
+              <QuotesTimeline timeline={data.timeline} period={period} />
             </Section>
 
             {/* Team Leaderboard + Manual Changes — side by side */}
