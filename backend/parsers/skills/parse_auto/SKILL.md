@@ -4,7 +4,7 @@ description: Use this skill when parsing an auto insurance quote PDF
 ---
 
 # Auto Insurance Extraction Skill
-> VERSION: 2.2
+> VERSION: 2.3
 > TYPE: auto
 
 ## Overview
@@ -28,10 +28,14 @@ Extract these fields quickly (key: value, one per line):
 
 ### Policy & Client
 - `client_name` — the insured / applicant / named insured, NOT the agency.
+  If no explicit insured section exists, use the drivers grid row where the Relationship column
+  is "Named Insured" (or "Primary Named Insured").
 - `client_address` — single-line mailing address. If the address is presented as a
   block directly beneath the named insured (e.g., name on one line, followed by street
   and then city/state ZIP on subsequent lines) without an explicit label, capture it
-  and flatten to one line: "street city state ZIP".
+  and flatten to one line as: "street, city, state ZIP".
+  ALIASES: labels like "Address", "Address:", "Client Address", "Mailing Address", or
+  a label combining the name and the word Address (e.g., "[NAME] Address").
 - `client_phone` — insured's phone if shown.
 - `quote_date` — print date, quote date, or proposal date (MM/DD/YYYY).
 - `quote_effective_date` — policy effective date (MM/DD/YYYY).
@@ -92,21 +96,29 @@ Extract these fields quickly (key: value, one per line):
 
 ### Payment Options
 - `full_pay_amount` — single full-pay amount for entire policy term.
+  ALIASES: labels like "Full Payment", "Total 12 Month Quoted" when presented in a pay plan/payment context.
 
 Full Pay (object under `payment_options.full_pay`):
 - `eft_reduces_fee` — "Yes", "No", or "". Set to "Yes" when the quote shows
   an AutoPay/Automatic Payments/EFT discount or fee reduction applicable to paying in full.
 
 For each installment plan (semi_annual, quarterly, monthly):
-- `down_payment` — required down payment. ALIASES: "Down Payment".
+- `down_payment` — required down payment. ALIASES: "Down Payment". If a dollar amount appears
+  immediately after the plan title and before a "Payments" line (e.g., "12 Month Automatic Payments* $70.69 Payments …"),
+  treat that amount as the down payment for the plan.
 - `amount_per_installment` — amount due per installment after down payment.
 - `number_of_installments` — count of installments after down payment (digits only).
 - `eft_reduces_fee` — "Yes", "No", or "". Set to "Yes" when the plan is labeled or
   paired with AutoPay/Automatic Payments/EFT indicating reduced fees.
 
+Plan identification hints:
+- monthly — terms like "12 Month Automatic Payments" (with or without a trailing *),
+  "Automatic Payments", "AutoPay", or "EFT" typically denote a monthly installment plan.
+
 Parsing patterns:
-- If shown as "X payments of $Y" (e.g., "11 payments of $211.70"), set
-  `number_of_installments` = X and `amount_per_installment` = $Y for that plan.
+- If shown as "X payments of $Y" (e.g., "11 payments of $171.64"), set
+  `number_of_installments` = X (strip words like "payments") and `amount_per_installment` = $Y for that plan.
+  The preceding "Payments" label may be a section header — still parse the pattern.
 - Phrases like "Automatic Payments", "AutoPay", or "EFT" identify the installment plan
   and may indicate `eft_reduces_fee` = "Yes".
 

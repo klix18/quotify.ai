@@ -4,7 +4,7 @@ description: Use this skill when parsing a dwelling (DP1/DP2/DP3) insurance quot
 ---
 
 # Dwelling Insurance Extraction Skill
-> VERSION: 2.0
+> VERSION: 2.1
 > TYPE: dwelling
 
 ## Overview
@@ -38,7 +38,7 @@ documents, prefix with property_1_, property_2_, etc.:
 - `named_insured` — the insured / applicant / named insured / client, NOT the agency or agent.
 - `client_address` — insured's mailing address. Prefer the block directly under the Named Insured.
   ALIASES: "Mailing Address", "Named Insured/Mailing Address", "Insured Address", "Address:" (when printed under the Named Insured block).
-  FALLBACK: If no separate mailing address is listed anywhere, use the only address shown for the insured, including when labeled "Residence Premises" or "Risk Address" on single-property quotes.
+  FALLBACK: If no separate mailing address is listed anywhere, use the only address shown for the insured, including when labeled "Residence Premises", "Risk Address", or "Described Location" on single-property quotes. If an "Applicant Information" block shows the Named Insured followed by street/city/state lines, treat those lines as the client_address (not the agent/producer address).
 - `carrier_name` — insurance carrier/company name (e.g., "Tower Hill Prime", "American Modern",
   "Johnson & Johnson / Great Lakes", "SageSure / SafePort", "Markel / Emerald Bay", "NCJUA").
 - `quote_date` — date the quote was generated/printed/prepared (MM/DD/YYYY).
@@ -54,7 +54,7 @@ documents, prefix with property_1_, property_2_, etc.:
 ### Properties (array — capture ALL listed dwelling properties)
 CRITICAL: Rating characteristics (year built, construction type, roof year, occupancy,
 policy form) are often found ONLY in "Rating Characteristics", "Rating Factors",
-"Rating & Underwriting", or "Location Details" sections — frequently at the BOTTOM
+"Rating & Underwriting", "Location Details", or "Rating Information" sections — frequently at the BOTTOM
 of a page or on a LATER page. You MUST look there.
 
 #### Dwelling Information
@@ -66,8 +66,9 @@ of a page or on a LATER page. You MUST look there.
   MAPPING: "Frame"/"Wood Frame"/"Vinyl Siding"/"Wood" → "Frame"; "Masonry Veneer" → "Masonry Veneer"; "Masonry"/"Brick" → "Masonry"; "Fire Resistive" → "Fire Resistive"; "Superior" → "Superior"
 - `roof_year` — year roof was installed or last replaced.
   ALIASES: "Roof Year", "Year Roof Replaced", "Year of Roofing Updates", "Roof Covering Update Year"
+  FALLBACK: If no explicit roof year/roofing update year appears anywhere, set `roof_year` to `year_built`.
 - `occupancy` — MUST output one of: "Owner Occupied", "Tenant Occupied", "Secondary Home", "Vacant", or "" if not stated.
-  ALIASES: "Occupancy", "Usage Type"
+  ALIASES: "Occupancy", "Usage Type", "Rental Term"
   MAPPING: "Rental"/"Tenant"/"Landlord"/"Renter"/"Landlord (owner non-occupied)" → "Tenant Occupied";
            "Owner"/"Primary"/"Owner Occupied" → "Owner Occupied";
            "Secondary"/"Seasonal"/"Secondary Home" → "Secondary Home";
@@ -150,7 +151,7 @@ three as "".
 
 ## Type-Specific Rules
 - CRITICAL: Read EVERY page. Rating characteristics are often on the LAST page.
-- NEVER fabricate values. If not explicitly printed, return "".
+- NEVER fabricate values. If not explicitly printed, return "". Exception: If `roof_year` is not shown anywhere, set it equal to `year_built` when available.
 - When coverage shows "Included" or "Incl" as premium, it is bundled — do NOT put
   "Included" as a limit value.
 - Each property is a separate array element.
