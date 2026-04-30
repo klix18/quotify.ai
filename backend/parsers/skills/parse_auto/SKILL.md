@@ -4,7 +4,7 @@ description: Use this skill when parsing an auto insurance quote PDF
 ---
 
 # Auto Insurance Extraction Skill
-> VERSION: 2.3
+> VERSION: 2.4
 > TYPE: auto
 
 ## Overview
@@ -30,16 +30,21 @@ Extract these fields quickly (key: value, one per line):
 - `client_name` — the insured / applicant / named insured, NOT the agency.
   If no explicit insured section exists, use the drivers grid row where the Relationship column
   is "Named Insured" (or "Primary Named Insured").
+  ALIASES: headers like "Prepared for" or "Applicant(s)" denote the client name block.
+  If multiple names are stacked on consecutive lines under such a header, join them with " & " in the shown order.
 - `client_address` — single-line mailing address. If the address is presented as a
-  block directly beneath the named insured (e.g., name on one line, followed by street
-  and then city/state ZIP on subsequent lines) without an explicit label, capture it
-  and flatten to one line as: "street, city, state ZIP".
+  block directly beneath the named insured (one or more name lines, then street and city/state ZIP),
+  even without an explicit label, capture it and flatten to one line as: "street, city, state ZIP".
+  Normalize missing punctuation (e.g., convert "WILMINGTON NC 28412" to "WILMINGTON, NC 28412").
   ALIASES: labels like "Address", "Address:", "Client Address", "Mailing Address", or
   a label combining the name and the word Address (e.g., "[NAME] Address").
 - `client_phone` — insured's phone if shown.
-- `quote_date` — print date, quote date, or proposal date (MM/DD/YYYY).
-- `quote_effective_date` — policy effective date (MM/DD/YYYY).
-- `quote_expiration_date` — policy expiration date (MM/DD/YYYY).
+- `quote_date` — print date, quote date, or proposal date. Accept numeric (MM/DD/YYYY)
+  or long-form (Month DD, YYYY) and normalize to MM/DD/YYYY.
+- `quote_effective_date` — policy effective date. Accept numeric (MM/DD/YYYY)
+  or long-form (Month DD, YYYY) and normalize to MM/DD/YYYY.
+- `quote_expiration_date` — policy expiration date. Accept numeric (MM/DD/YYYY)
+  or long-form (Month DD, YYYY) and normalize to MM/DD/YYYY.
 - `policy_term` — MUST be exactly "6-Month", "12-Month", or "Unknown".
   Determine from effective/expiration span if not stated: ~180-day = "6-Month", ~365-day = "12-Month".
   ALIASES: look for labels like "Term" with values such as "6 Month" or "12 Month"
@@ -95,10 +100,10 @@ Extract these fields quickly (key: value, one per line):
 > differ between vehicles on the same policy.
 
 ### Payment Options
-- `full_pay_amount` — single full-pay amount for entire policy term.
-  ALIASES: labels like "Full Payment", "Total 12 Month Quoted" when presented in a pay plan/payment context.
-
 Full Pay (object under `payment_options.full_pay`):
+- `full_pay_amount` — single full-pay amount for entire policy term.
+  ALIASES: labels like "Full Payment", "Policy premium if paid in full",
+  or "Total 12 Month Quoted" when presented in a pay plan/payment context.
 - `eft_reduces_fee` — "Yes", "No", or "". Set to "Yes" when the quote shows
   an AutoPay/Automatic Payments/EFT discount or fee reduction applicable to paying in full.
 
@@ -163,7 +168,7 @@ totals.
   value.
 - Split limits must use the " / " separator: "$X / $Y".
 - Preserve money formatting with a leading $: "$1,250.00", "$500".
-- Format all dates as MM/DD/YYYY.
+- Format all dates as MM/DD/YYYY. Recognize both numeric and long-form inputs (e.g., "April 28, 2026") and normalize.
 - Do NOT invent data. If not in the document, use "".
 - Use "" for strings, [] for arrays when a field cannot be found.
 
@@ -178,6 +183,7 @@ Layout Overrides:
 - Premium may be **"6-Month Premium"** — look for annual equivalent too.
   Do NOT use "Total Due Today" (includes down payment).
 - Per-vehicle premium breakdown on later pages.
+- A standalone long-form date near the "Underwritten by" line on page 1 (e.g., "April 28, 2026") is the policy effective date — capture as `quote_effective_date` and normalize.
 - **"Excluded"** drivers listed separately — still capture with a note.
 
 Label Overrides:

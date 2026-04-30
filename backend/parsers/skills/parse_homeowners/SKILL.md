@@ -4,7 +4,7 @@ description: Use this skill when parsing a homeowners insurance quote PDF
 ---
 
 # Homeowners Insurance Extraction Skill
-> VERSION: 2.1
+> VERSION: 2.2
 > TYPE: homeowners
 
 ## Overview
@@ -37,11 +37,11 @@ Extract these fields as quickly as possible (key: value, one per line):
 ## Field Guide
 
 ### Policy & Client
-- `total_premium` — total annual or policy-term premium.
-- `quote_effective_date` — when the policy/quote becomes effective (MM/DD/YYYY). Also labeled "Proposed Effective Date", "Eff. Date", or "Effective".
-- `quote_expiration_date` — when the quote expires, often 30–60 days after quote date (MM/DD/YYYY). May be labeled "Quote Expires", "Expiration", "EXPIRATION DATE", "Good Thru/Through", or (on some quote forms) "Proposed Effective Date". The label and date may be on separate lines; if a time is shown (e.g., 12:01 AM), ignore it and capture the date only.
-- `client_name` — the insured / prepared-for person, NOT the agency. Format as "First Last", never "Last, First".
-- `client_address` — single-line mailing or insured address string. Also labeled "Property Address", "Location Address", "Insured Location", "Premises Address", "Property Location", "Address:" (in the insured/location section), or appears under headings like "NAMED INSURED/MAILING ADDRESS" or "Applicant Information" directly beneath the client name. Join multi-line addresses into one line as "Street, City, ST ZIP"; if ZIP+4 is present, keep only the 5-digit ZIP.
+- `total_premium` — total annual or policy-term premium. Also labeled "Total Premium", "Annual Premium", "Estimated Annual Premium", or "Total Policy Premium".
+- `quote_effective_date` — when the policy/quote becomes effective (MM/DD/YYYY). Also labeled "Proposed Effective Date", "Eff. Date", or "Effective". If an effective period is shown as a range (e.g., "Policy Effective Date: 06/06/26 - 06/06/27"), capture the first date as quote_effective_date.
+- `quote_expiration_date` — when the quote expires, often 30–60 days after quote date (MM/DD/YYYY). May be labeled "Quote Expires", "Expiration", "EXPIRATION DATE", "Good Thru/Through", or (on some quote forms) "Proposed Effective Date". The label and date may be on separate lines; if a time is shown (e.g., 12:01 AM), ignore it and capture the date only. If an effective period is shown as a range (e.g., "Policy Effective Date: MM/DD/YY - MM/DD/YY" or "Effective Date: MM/DD/YY - MM/DD/YY"), capture the second date as quote_expiration_date.
+- `client_name` — the insured / prepared-for person, NOT the agency. Also labeled "Quote Prepared For", "Prepared For", "Insured Name", or "Named Insured". Format as "First Last", never "Last, First".
+- `client_address` — single-line mailing or insured address string. Also labeled "Property Address", "Location Address"/"LOCATION ADDRESS", "Insured Location", "Premises Address", "Property Location", "Address:" (in the insured/location section), "NAMED INSURED/MAILING ADDRESS", or appears under headings like "Applicant Information" directly beneath the client name. Some forms split the address into separately labeled lines such as "Address:" and "City, State, Zip:" (or "Address / City, State, Zip"). When this occurs, combine them into one line as "Street, City, ST ZIP". Join multi-line addresses into one line as "Street, City, ST ZIP"; if ZIP+4 is present, keep only the 5-digit ZIP.
 - `client_phone` — insured's phone if shown.
 - `client_email` — insured's email if shown.
 
@@ -67,7 +67,8 @@ Extract these fields as quickly as possible (key: value, one per line):
 - Do not infer advisor info unless clearly present.
 - For names, always format as "First Last", never "Last, First".
 - Preserve money formatting with a leading $: "$1,015.00", "$153,814", "$2,500".
-- Format all dates as MM/DD/YYYY. Return partial dates as-is if only partial info is shown. Ignore trailing times (e.g., 12:01 AM) when present with dates.
+- Format all dates as MM/DD/YYYY. If a date is shown with a 2-digit year (YY), normalize to 20YY. Return partial dates as-is if only partial info is shown. Ignore trailing times (e.g., 12:01 AM) when present with dates.
+- When an effective period is shown as a range (e.g., "MM/DD/YY - MM/DD/YY"), set quote_effective_date to the first date and quote_expiration_date to the second date.
 - For deductible fields combining percent and dollars (including "greater of X% or $Y" phrasing), preserve both as "X% - $Y".
 - For addresses shown on multiple lines, join into a single line and normalize as "Street, City, ST ZIP" (use 5-digit ZIP even if ZIP+4 is shown). Prefer the insured/location or named insured mailing address; do not capture agency addresses.
 
@@ -79,8 +80,8 @@ base rules still apply for any field not mentioned in the override section.
 ### SageSure
 Layout Overrides:
 - SageSure places through multiple admitted carriers. Ignore any underlying carrier name in small print — treat the document as SageSure.
-- Premium is in **"Quote Summary"** on the last page. Use **"Annual Premium"**, NOT "Total Policy Cost" (which includes optional fees and installment charges).
-- **"Property Information"** section always shows: construction_type, year_built, protection_class, roof_shape, roof_material.
+- Premium is in "Quote Summary" on the last page. Use "Annual Premium", NOT "Total Policy Cost" (which includes optional fees and installment charges).
+- "Property Information" section always shows: construction_type, year_built, protection_class, roof_shape, roof_material.
 
 Label Overrides:
 - "Sinkhole" deductible may appear in FL policies.
@@ -95,11 +96,11 @@ Common Endorsements:
 ### Tower Hill
 Layout Overrides:
 - Rating characteristics (year_built, construction_type, roof_year, protection_class, BCEG)are in a "Rating Worksheet" on a later page. These override front-page values.
-- **"Program:"** field → policy form (HO-3 is most common).
-- Premium: **"Estimated Annual Premium"** on declarations page. A **"Premium Breakdown"** table on page 2 may show surcharges/credits.
+- "Program:" field → policy form (HO-3 is most common).
+- Premium: "Estimated Annual Premium" on declarations page. A "Premium Breakdown" table on page 2 may show surcharges/credits.
 
 Label Overrides:
-- Hurricane deductible is a **percentage of Coverage A** (common: 2%, 5%).
+- Hurricane deductible is a percentage of Coverage A (common: 2%, 5%).
 - Wind/Hail may be listed separately from Hurricane — capture both.
 
 Common Endorsements:
