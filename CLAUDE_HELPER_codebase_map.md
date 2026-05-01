@@ -110,7 +110,7 @@ quotify-ai/
 
 ---
 
-## 2. Data flow — parsing pipeline (Design 2, `single-pass-cached-2026-04-21`)
+## 2. Data flow — parsing pipeline (Design 3, `fitz-fastpath-2026-04-30`)
 
 1. **Frontend** uploads PDF to `POST /api/parse-quote?insurance_type=<type>`.
 2. **unified_parser_api.stream_unified_quote** yields ndjson events:
@@ -121,20 +121,32 @@ quotify-ai/
      frontend renders `"Extracting..."` while a parse is in flight and
      flips to `"Verified"` on the `result` event. Don't reintroduce
      intermediate phase strings here unless the UX explicitly changes.
+   - **(local pre-pass — no event emitted)** `_fitz_fastpath.extract_pdf_text`
+     runs PyMuPDF on every attached PDF; `is_text_adequate` decides whether
+     the request enters TEXT mode (extracted text inlined in user prompt,
+     no Files-API upload) or VISION mode (existing `upload_with_retry` path).
+     A single `[fitz-fastpath] mode=...` log line goes to stderr per parse.
+     Adequacy thresholds and rationale live in `_fitz_fastpath.py`.
    - `final_patch*` — single strict-JSON streaming extraction on `gemini-2.5-flash`
      via `stream_with_fallback` + `response_schema`. The system instruction
      (`CORE_SYSTEM_PROMPT` + full `SKILL.md` + any wind/hail or bundle-separate
-     supplement) is served from a Gemini explicit context cache, created once per
-     `(insurance_type, supplement_set, skill_version)` tuple with a 1-hour TTL
-     (see `_system_cache_key` / `_get_or_create_system_cache` + the
-     `_SYSTEM_CACHE_REGISTRY` process-local dict in `unified_parser_api.py`).
-     `thinking_config=ThinkingConfig(thinking_budget=512)` is kept non-zero so
-     the model's per-field confidence scores stay well-calibrated.
+     supplement, **plus `TEXT_MODE_CONFIDENCE_RUBRIC` on the fitz fast-path**)
+     is served from a Gemini explicit context cache, created once per
+     `(insurance_type, supplement_set, skill_version, input_mode)` tuple
+     with a 1-hour TTL (see `_system_cache_key` / `_get_or_create_system_cache`
+     + the `_SYSTEM_CACHE_REGISTRY` process-local dict in
+     `unified_parser_api.py`). `thinking_config=ThinkingConfig(thinking_budget=512)`
+     is kept non-zero so the model's per-field confidence scores stay
+     well-calibrated. Note: `input_mode` (text vs vision) is a key dimension
+     because the system_instruction string differs between modes.
    - `result` — final post-processed data + flattened confidence + `skill_version`
 3. Model-chain fallback: primary Gemini only (`DEFAULT_FALLBACKS` is empty),
    then straight to OpenAI (gpt-4o-mini → gpt-4o). The OpenAI path
-   (`_openai_fallback.py`) receives the system instruction inline; it can't
-   share Gemini's cache.
+   (`_openai_fallback.py`) **always** re-uploads the PDF and runs in vision
+   mode, even when the primary Gemini call ran in text mode — so the
+   fallback closure passes the `system_with_skill_vision` instruction
+   (without the text rubric) so the rubric matches the actual input. It
+   can't share Gemini's cache either way.
 4. `post_process.post_process(...)` fills defaults from JSON schema (generic — no
    per-type normalizers) and flattens the confidence dict for the UI.
 5. Finally, `why_selected_generator.generate_why_selected(data, why_type)`
@@ -146,6 +158,11 @@ vision call), Pass 1 (quick key:value `draft_patch` stream), Pass 3 (self-healin
 `healing_patch` retry on low-confidence fields), and the draft stage of
 why-selected. Confidence thresholds still drive the frontend "Double Check"
 pill — they just no longer trigger a second LLM call.
+
+**Added vs `single-pass-cached-2026-04-21`:** local fitz pre-pass with TEXT
+vs VISION input mode branching, `TEXT_MODE_CONFIDENCE_RUBRIC` swapped into
+the system instruction on the text path, and an `input_mode` segment added
+to the cache key. See §11 for the full delta.
 
 ## 3. Data flow — quote PDF generation
 
@@ -1449,5 +1466,139 @@ confidence object.
   providers. Only the Gemini hot path benefits from caching; the fallback
   costs full prefill tokens on OpenAI. That's acceptable because the
   fallback only fires when every Gemini model has already errored.
+
+### Parser Design 3 — fitz fast-path (2026-04-30)
+
+**Config id in `parse_metrics`:** `fitz-fastpath-2026-04-30`
+(bumped from `single-pass-cached-2026-04-21` in
+`frontend/src/lib/devMetrics.js`).
+
+**Context.** Design 2 always sent the PDF to Gemini with vision and
+let the model OCR + extract in one shot. That works on every input
+shape but burns image tokens (~10× the input cost of a text-only
+call) on the ~80% of insurance quotes whose PDFs have a clean text
+layer. The eval against the Quotify prototype showed fitz alone gets
+~92% accuracy on text-layer homeowners PDFs in <7s — vs Gemini-vision
+which costs more per parse and is no more accurate on those inputs.
+
+**What changed in `backend/parsers/`:**
+
+- **New module: `_fitz_fastpath.py`.** Pure helpers — text extraction
+  via PyMuPDF, an adequacy check (`≥200 chars stripped + alphanumeric
+  ratio ≥ 0.30`), and a multi-PDF text-payload formatter that reuses
+  the same boundary labels (`── PDF #1 of 2 (HOMEOWNERS QUOTE) ──`,
+  etc.) the vision path uses. No network calls, no side effects.
+  Adequacy thresholds were tuned against the Quotify eval corpus
+  (13 homeowners + 5 auto PDFs). Constants live at the top of the
+  module — raise either threshold cautiously since false positives
+  (junk text passed to LLM) are worse than false negatives (vision
+  tokens burned needlessly).
+
+- **`unified_parser_api.py` branches on `input_mode`.**
+  - Right after `skill_loaded` is yielded, fitz runs locally on every
+    attached PDF. If ALL of them pass `is_text_adequate`, the parse
+    enters TEXT mode; otherwise VISION mode (existing behavior).
+  - In TEXT mode the Files-API uploads are skipped entirely —
+    `_build_contents` returns `[user_prompt + "\n\n" + payload]`
+    where `payload` is the formatted extracted text. In VISION mode
+    `_build_contents` returns the previous `[prompt, file_part_1,
+    label, file_part_2, ...]` shape unchanged.
+  - The cleanup `finally` block already guarded each `uploaded_*`
+    delete with `is not None`, so skipping uploads needs no
+    extra cleanup logic.
+
+- **`TEXT_MODE_CONFIDENCE_RUBRIC` constant.** `CORE_SYSTEM_PROMPT`
+  defines a vision-grounded confidence rubric using cues like
+  "blurry" and "partially visible" that don't exist in text input.
+  The text-mode rubric (~50 lines, defined right after
+  `CORE_SYSTEM_PROMPT`) rewrites the rubric in terms of textual
+  signals (label-adjacency, table-flattening). It's appended to
+  `system_with_skill` only when `input_mode == "text"`.
+  - The rubric is intentionally short — long mode-specific prompts
+    would bloat the cache key permutation space.
+
+- **Cache key now includes `input_mode`.** `_system_cache_key()` got
+  a new `input_mode: str = "vision"` parameter that adds a `text`
+  segment to the key when set. Worst case 2× the cache entries per
+  `(insurance_type, supplement_set, skill_version)` tuple.
+
+- **OpenAI fallback always uses vision rubric.** Two new locals in
+  `stream_unified_quote`: `system_with_skill_vision` (no text rubric,
+  always built) and `system_with_skill` (vision OR vision+text
+  depending on `input_mode`). Gemini gets the latter; the OpenAI
+  fallback closure passes the former because the fallback always
+  re-uploads the PDF and runs in vision mode regardless of which
+  input mode the primary call used.
+
+- **`requirements.txt`** adds `pymupdf==1.27.2.3`.
+
+**Frontend (`frontend/src/lib/devMetrics.js`).**
+`SYSTEM_DESIGN_VERSION` bumped from `single-pass-cached-2026-04-21`
+to `fitz-fastpath-2026-04-30`. Old `parse_metrics` rows keep their
+prior tag — the viewer will show two distinct sections so latency
+and manual-edit counts are comparable across the design boundary.
+
+No frontend handler changes were needed: the `final_patch` and
+`result` event shapes are identical to Design 2.
+
+**Docs updated alongside the code:**
+
+- `dev_metrics/SYSTEM_DESIGN.md` — new banner showing all three
+  designs, expanded §2 comparison table to three columns, new
+  §6a section with the full fast-path walkthrough, and a new
+  §8a documenting the now-previous `single-pass-cached-2026-04-21`
+  design (legacy `baseline-2026-04-20` retained as §8).
+- `dev_metrics/viewer.html` — `DEFAULT_DESCRIPTIONS` got a new
+  `fitz-fastpath-2026-04-30` entry above the previous one.
+- `backend/parsers/ARCHITECTURE.mermaid` — new `FASTPATH` subgraph
+  upstream of `EXTRACT`, `EXTRACT` shows an `input_mode` switch,
+  cache subgraph mentions the additional key dimension, FUTURE
+  subgraph adds "vision-grade local OCR" as a follow-up that would
+  let the fast-path also cover scanned PDFs.
+
+**What to know when touching this next:**
+
+- The fitz path is decided BEFORE the file uploads, so a
+  `pdf_count`/`pdf_labels` change must use `wind_pdf_path` /
+  `secondary_pdf_path` (always reflects what was attached) rather
+  than the `uploaded_*_file` references (which are None on the text
+  path). The current code already does this correctly.
+- If you add a new SKILL.md or supplement, no fast-path changes are
+  needed — the multi-PDF text payload reuses whatever labels the
+  existing vision code generates.
+- If a particular carrier regresses on the text path because fitz
+  flattens its tables badly, the right fix is in that
+  `parse_<type>/SKILL.md` (worked-example layout hints) — same
+  pattern that fixed Auto-Owners billing tables in the Quotify
+  prototype. Don't reach for input-mode-specific carrier overrides;
+  the cache key would then need yet another dimension.
+- The `[fitz-fastpath]` log line on stderr is the first thing to
+  grep when an unexpected mode decision shows up in production.
+- If the OCR fallback for image PDFs becomes a bottleneck, the
+  cleanest follow-up is to plug a local OCR engine (e.g. surya,
+  doctr) into `_fitz_fastpath.py` so even scanned PDFs hit the
+  text path. The vision path becomes a backstop for the genuinely
+  hard cases.
+
+**Tested before ship.** Three end-to-end runs against
+`stream_unified_quote` covering: (1) a text-layer auto PDF (NatGen) →
+`mode=text`, ~9s, 12/13 fields populated; (2) an image-only auto PDF
+(PRG/Progressive) → `mode=vision`, behavior identical to Design 2;
+(3) a multi-PDF bundle separate-mode pair → `mode=text`, both PDFs'
+text correctly inlined with boundary labels. Across three repeats
+the mode decision was deterministic and the result events were
+stable. No bugs surfaced.
+
+### Open issues / known limits
+
+- Bundle confidence emits `{}` (an empty object) in BOTH text and
+  vision modes — verified during fast-path testing. This is a
+  pre-existing schema/post-process behavior, NOT introduced by the
+  fast-path. Safe to investigate separately if/when bundle quality
+  needs the "Double Check" pill to fire.
+- Pre-existing bug at `unified_parser_api.py` (was line 647, now
+  shifted): `await store_uploaded_pdf` — already fixed (E1 in §7).
+  Mentioned here only because it lives in the same file as the new
+  changes and shouldn't be confused with anything fast-path-related.
 
 

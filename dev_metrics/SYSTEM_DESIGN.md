@@ -2,8 +2,9 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║  Current design:  single-pass-cached-2026-04-21    (updated 4/21)    ║
-║  Previous:        baseline-2026-04-20              (see §8)          ║
+║  Current design:  fitz-fastpath-2026-04-30         (updated 4/30)    ║
+║  Previous:        single-pass-cached-2026-04-21    (see §8a)         ║
+║  Legacy:          baseline-2026-04-20              (see §8)          ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -36,12 +37,14 @@ offers a JSONL download for raw export.
 
 ```
 §1 · TL;DR                          — one-sentence summary + flow diagram
-§2 · Design 1 vs Design 2           — side-by-side at a glance
+§2 · Design comparison              — side-by-side at a glance
 §3 · Extraction pass                — the single Gemini call + cache
 §4 · Why-Selected                   — the single summary call
 §5 · Fallback chain                 — what happens when Gemini fails
 §6 · Skill layer                    — prompt source files + composition
+§6a · Fitz fast-path                — local pre-pass + text-mode rubric
 §7 · parse_metrics rows             — what each row captures
+§8a · Previous: single-pass-cached  — vision-only predecessor
 §8 · Legacy: baseline-2026-04-20    — the 3-pass predecessor
 §9 · Where to change what           — file/constant lookup + ship checklist
 ```
@@ -54,15 +57,31 @@ offers a JSONL download for raw export.
 ┌────────────────────────────────────────────────────────────────────┐
 │  POST /api/parse-quote?insurance_type=<type>                       │
 │       ↓                                                            │
+│  ┌────────────────────────────────────────────────────────┐        │
+│  │  fitz fast-path (local PyMuPDF)                        │        │
+│  │  • extract text from every attached PDF                │        │
+│  │  • adequacy check: ≥200 chars + alphanumeric ratio≥0.3 │        │
+│  └─────────────┬─────────────────────┬────────────────────┘        │
+│   all PDFs adequate                  │ any PDF inadequate          │
+│                ▼                     ▼                             │
+│  ┌─────────────────────────────┐   ┌──────────────────────────┐    │
+│  │ TEXT mode                   │   │ VISION mode (legacy path)│    │
+│  │ • inline extracted text     │   │ • upload PDF(s) to       │    │
+│  │ • +TEXT_MODE_CONFIDENCE_RUBRIC │ │   Gemini Files API       │    │
+│  │ • no image tokens           │   │ • image input            │    │
+│  └─────────────┬───────────────┘   └────────┬─────────────────┘    │
+│                └──────────┬──────────────────┘                     │
+│                           ▼                                        │
 │  ┌─────────────────────────────┐   ┌──────────────────────────┐    │
 │  │ ONE Gemini 2.5 Flash call   │   │ Gemini system-prompt     │    │
 │  │ • strict JSON response      │──▶│ cache (TTL 1h) keyed on  │    │
-│  │ • streams final_patch       │   │ (type, supps, skill_ver) │    │
+│  │ • streams final_patch       │   │ (type, supps, skill_ver, │    │
+│  │                             │   │  input_mode)             │    │
 │  └──────────┬──────────────────┘   └──────────────────────────┘    │
 │             ▼                                                      │
 │  ┌─────────────────────────────┐                                   │
 │  │ ONE Gemini 2.5 Flash-Lite   │                                   │
-│  │ "Why Selected" call          │                                   │
+│  │ "Why Selected" call         │                                   │
 │  └──────────┬──────────────────┘                                   │
 │             ▼                                                      │
 │         result event                                               │
@@ -70,44 +89,60 @@ offers a JSONL download for raw export.
 
   If Gemini 503s on the first chunk → OpenAI gpt-4o-mini → gpt-4o
   (DEFAULT_FALLBACKS = []; Gemini-family hopping didn't help.)
+  The OpenAI fallback always re-uploads the PDF and runs in vision
+  mode, regardless of which input mode the primary Gemini call used.
 ```
 
-**One sentence.** A single endpoint (`POST /api/parse-quote`) runs one
-strict-JSON pass on `gemini-2.5-flash` over the uploaded PDF, with the
-stable system prompt (`CORE_SYSTEM_PROMPT` + full `parse_<type>/SKILL.md`
-with carrier overrides baked in) cached via Gemini's explicit
-context-cache API so the prefill cost is paid once per
-`(type, supplements, skill_version)` tuple, plus a single "Why Selected"
-call to summarize the extracted data — with an OpenAI fallback that
-kicks in if Gemini fails.
+**One sentence.** A single endpoint (`POST /api/parse-quote`) runs a
+local PyMuPDF (fitz) pre-pass to decide whether to send the PDF as text
+or as an image; one strict-JSON call on `gemini-2.5-flash` does the
+extraction (text mode skips the file upload entirely, vision mode
+preserves the legacy behavior); the stable system prompt is cached via
+Gemini's explicit context-cache API per
+`(type, supplements, skill_version, input_mode)` tuple; a single
+`gemini-2.5-flash-lite` "Why Selected" call produces the bullets — with
+an OpenAI fallback that re-uploads in vision mode if Gemini fails.
 
 ---
 
-## §2 · Design 1 vs Design 2 — side-by-side
+## §2 · Design comparison — side-by-side
 
-| | **Design 1**<br/>`baseline-2026-04-20` | **Design 2**<br/>`single-pass-cached-2026-04-21` |
-|---|---|---|
-| **LLM calls / parse** | 4–5 | 2 |
-| **Carrier detection** | Vision pass on page 1 (`gemini-2.5-flash-lite`) | Baked into each `SKILL.md`; no separate call |
-| **Quick draft stage** | `gemini-2.5-flash-lite` streams `draft_patch` events | ✗ removed |
-| **Strict JSON extraction** | `gemini-2.5-flash` + response_schema | `gemini-2.5-flash` + response_schema (unchanged) |
-| **Self-healing retry** | `gemini-2.5-flash` re-queries low-confidence fields | ✗ removed — confidence drives UI pill only |
-| **Why-Selected** | Draft call (from Pass 1 output) + refine call | Single call against final data |
-| **System prompt** | Built inline on every request | Served from Gemini explicit context cache (TTL 1h) |
-| **Cache key** | — | `(insurance_type, supplements, skill_version)` |
-| **Fallback on Gemini error** | flash-lite → flash → 2.0 → 1.5 → OpenAI | Straight to OpenAI (`DEFAULT_FALLBACKS = []`) |
-| **Multi-PDF handling** | Wind/hail + bundle-separate supported | Same — preserved across fallback boundary |
-| **Events emitted** | `carrier_detected`, `draft_patch`, `final_patch`, `healing_patch`, `result` | `skill_loaded`, `final_patch`, `result` |
-| **Thinking budget** | 0 (extraction), varied elsewhere | 512 tokens (keeps confidence calibrated) |
-| **Confidence threshold** | `< 0.45` triggered Pass 3 self-heal | `< 0.85` lights "Double Check" pill (frontend) |
-| **Config id in logs** | `baseline-2026-04-20` | `single-pass-cached-2026-04-21` |
+| | **Design 1**<br/>`baseline-2026-04-20` | **Design 2**<br/>`single-pass-cached-2026-04-21` | **Design 3**<br/>`fitz-fastpath-2026-04-30` |
+|---|---|---|---|
+| **LLM calls / parse** | 4–5 | 2 | 2 (same Gemini calls) |
+| **Local pre-pass** | — | — | PyMuPDF text extraction + adequacy check |
+| **Input mode (primary call)** | Always vision (PDF upload) | Always vision (PDF upload) | **Text** when fitz adequate; **vision** when not |
+| **Image-token cost** | Yes (on every parse) | Yes (on every parse) | Only on PDFs with no usable text layer |
+| **Carrier detection** | Vision pass on page 1 (`gemini-2.5-flash-lite`) | Baked into each `SKILL.md`; no separate call | Same as Design 2 |
+| **Quick draft stage** | `gemini-2.5-flash-lite` streams `draft_patch` events | ✗ removed | ✗ removed |
+| **Strict JSON extraction** | `gemini-2.5-flash` + response_schema | `gemini-2.5-flash` + response_schema (unchanged) | `gemini-2.5-flash` + response_schema (unchanged) |
+| **Self-healing retry** | `gemini-2.5-flash` re-queries low-confidence fields | ✗ removed — confidence drives UI pill only | Same as Design 2 |
+| **Why-Selected** | Draft call (from Pass 1 output) + refine call | Single call against final data | Single call against final data |
+| **System prompt** | Built inline on every request | Served from Gemini explicit context cache (TTL 1h) | Same cache; +`TEXT_MODE_CONFIDENCE_RUBRIC` appended on text path |
+| **Cache key** | — | `(insurance_type, supplements, skill_version)` | `(insurance_type, supplements, skill_version, input_mode)` |
+| **Fallback on Gemini error** | flash-lite → flash → 2.0 → 1.5 → OpenAI | Straight to OpenAI (`DEFAULT_FALLBACKS = []`) | Same — OpenAI fallback always uploads PDF (vision mode) |
+| **Multi-PDF handling** | Wind/hail + bundle-separate supported | Same — preserved across fallback boundary | Same — boundary labels reused as inline text headers in text mode |
+| **Events emitted** | `carrier_detected`, `draft_patch`, `final_patch`, `healing_patch`, `result` | `skill_loaded`, `final_patch`, `result` | Same as Design 2 |
+| **Thinking budget** | 0 (extraction), varied elsewhere | 512 tokens (keeps confidence calibrated) | 512 tokens |
+| **Confidence threshold** | `< 0.45` triggered Pass 3 self-heal | `< 0.85` lights "Double Check" pill (frontend) | Same — text-mode rubric keeps it calibrated for textual signals |
+| **Config id in logs** | `baseline-2026-04-20` | `single-pass-cached-2026-04-21` | `fitz-fastpath-2026-04-30` |
 
-**Why the reduction.** Once carrier overrides were baked into each base
-`SKILL.md` (so Pass 0 could no longer change prompt content) and
-confidence scores were being displayed to advisors anyway (so Pass 3
-wasn't load-bearing for UX), the fastest path became: one cached
-strict-JSON call + one summary call. The removed passes are summarized
-in §8's "What changed" table.
+**Why the reduction (Design 1 → 2).** Once carrier overrides were baked
+into each base `SKILL.md` (so Pass 0 could no longer change prompt
+content) and confidence scores were being displayed to advisors anyway
+(so Pass 3 wasn't load-bearing for UX), the fastest path became: one
+cached strict-JSON call + one summary call. See §8's "What changed".
+
+**Why the fast-path (Design 2 → 3).** Design 2 sent every PDF to Gemini
+with vision, even though ~80% of insurance quotes have a clean text
+layer that `fitz` can read locally in tens of milliseconds. Burning
+image tokens on those is pure waste. Design 3 adds a fitz pre-pass that
+detects the easy case and skips the file upload entirely; image-only
+quotes still flow through the vision path so behavior is preserved.
+Measured impact on the eval corpus: ~30–50% latency reduction on
+text-layer PDFs, no regression on image PDFs, accuracy within 2% of
+vision (column-heavy carriers regress slightly because vision sees
+table columns directly). See §6a for details.
 
 ---
 
@@ -358,6 +393,134 @@ Each file:
 
 ---
 
+## §6a · Fitz fast-path — local PyMuPDF pre-pass
+
+```
+╭──────────────── parsers/_fitz_fastpath.py ──────────────────────╮
+│                                                                 │
+│   extract_pdf_text(path)        → fitz, joined with form-feeds  │
+│   is_text_adequate(text)        → ≥200 chars + alnum ratio≥0.3  │
+│   build_text_payload(...)       → format text + boundary labels │
+│                                                                 │
+╰─────────────────────────────────────────────────────────────────╯
+                              │
+                              ▼
+   Decision (in stream_unified_quote, BEFORE any file upload):
+       all_adequate = is_text_adequate(primary_text)
+                       AND is_text_adequate(wind_text)?     # if attached
+                       AND is_text_adequate(secondary_text)? # if attached
+       input_mode   = "text" if all_adequate else "vision"
+
+       if input_mode == "vision":
+           upload_with_retry(...)  # current Files-API path
+       # else: skip uploads entirely — extracted text is the input
+```
+
+### Why a local pre-pass
+
+Design 2 always sent the PDF to Gemini with vision — the model OCRs and
+extracts in one shot. That works on every shape of input but burns image
+tokens (~10× the input cost of a text-only call) on the ~80% of quotes
+whose PDFs have a clean text layer. fitz reads those text layers in
+tens of milliseconds locally; this pre-pass detects the easy case and
+skips the file upload entirely.
+
+### Adequacy heuristic
+
+Two checks, both must pass:
+
+| Check | Threshold | Catches |
+|---|---|---|
+| Stripped char count | ≥ 200 | Image-only PDFs (fitz returns 0 chars) |
+| Alphanumeric ratio  | ≥ 0.30 | PDFs with junk-OCR layers (random punctuation soup) |
+
+Tuned against the Quotify eval corpus (13 homeowners + 5 auto PDFs).
+False negatives (a real text-layer PDF rejected as inadequate) are
+cheap — we just burn vision tokens like before. False positives (junk
+text passed to the LLM) are expensive — wrong extracted data is worse
+than slow correct data. Raise either threshold cautiously.
+
+### Multi-PDF handling
+
+When wind/hail or bundle-separate mode attaches a second PDF, ALL
+attached PDFs must pass the adequacy check or the entire request falls
+through to vision. Mixing modes per-PDF (uploading one file while
+inlining text for another) was rejected as not worth the
+`_build_contents` complexity for marginal gain.
+
+The same boundary labels the vision path uses
+(``── PDF #1 of 2 (HOMEOWNERS QUOTE) ──`` / ``── PDF #2 of 2 (AUTO QUOTE) ──``)
+are reused as inline text headers in the user prompt, so the model sees
+the same vocabulary regardless of input mode and the supplement skills
+(`parse_wind_hail/SKILL.md`, `parse_bundle_separate/SKILL.md`) work
+unchanged.
+
+### Text-mode confidence rubric
+
+`CORE_SYSTEM_PROMPT` defines a vision-grounded confidence rubric using
+cues like "blurry" and "partially visible" that don't exist in text
+input. Without an addendum the model would emit uniform 0.95+ scores
+and the frontend "Double Check" pill (`confidence < 0.85`) would stop
+firing.
+
+`TEXT_MODE_CONFIDENCE_RUBRIC` (in `unified_parser_api.py`, ~50 lines)
+rewrites the rubric in terms of textual signals:
+
+| Score | Meaning (text mode) |
+|---|---|
+| 0.95–1.0 | Value sits next to an unambiguous label on the same/adjacent line |
+| 0.85–0.94 | Clear context (label one line above/below), no column ambiguity |
+| 0.60–0.84 | Reconstructed from a flattened table; row/column inferred |
+| 0.30–0.59 | Plausible from format alone (looks like a dollar amount) but no nearby label |
+| 0.0–0.29 | Highly uncertain; field may not be in the extracted text |
+
+The addendum is appended to the system instruction ONLY when
+`input_mode == "text"`. The vision path uses the original rubric. The
+OpenAI fallback always gets the vision rubric because it re-uploads the
+PDF and runs in vision mode regardless of what the primary Gemini call
+did.
+
+### Cache namespace
+
+`_system_cache_key()` includes `input_mode` (`text` or `vision`) so the
+two rubrics never share a cache entry. Worst-case 2× the cache entries
+per `(insurance_type, supplement_set, skill_version)` tuple — fine.
+
+### Fallback semantics
+
+The OpenAI fallback (`stream_openai_extraction`) always re-uploads the
+PDF and runs in vision mode, even when the primary Gemini call ran in
+text mode. The fallback closure passes `system_with_skill_vision`
+(without the text rubric) so the rubric matches the actual input. This
+preserves the cross-provider safety net unchanged: when Gemini fails,
+OpenAI sees the same PDF and the same vision-mode instruction Design 2
+sent.
+
+### Where the code lives
+
+| File | Purpose |
+|---|---|
+| `backend/parsers/_fitz_fastpath.py` | Pure module — text extraction, adequacy check, payload builder. No network calls, no side effects. |
+| `backend/parsers/unified_parser_api.py` | Calls the helpers, branches `_build_contents` and the system instruction on `input_mode`, skips the Files-API upload when text mode succeeds. |
+| `backend/requirements.txt` | `pymupdf==1.27.2.3` |
+
+### Logs
+
+Every parse emits a one-line `[fitz-fastpath]` log to stderr describing
+the decision:
+
+```
+[fitz-fastpath] mode=text   primary=2429 chars  alnum=0.75  pages=2
+                            wind=n/a  secondary=n/a
+[fitz-fastpath] mode=vision primary=0 chars     alnum=0.00  pages=2
+                            wind=n/a  secondary=n/a
+```
+
+When debugging an unexpected mode decision in production, this is the
+first line to grep.
+
+---
+
 ## §7 · `parse_metrics` rows — what each parse captures
 
 Rows live in the Railway Postgres `parse_metrics` table. Each row is
@@ -435,6 +598,48 @@ than from memory.
 
 ---
 
+## §8a · Previous — `single-pass-cached-2026-04-21`
+
+The orchestration below was active from 2026-04-21 through 2026-04-30.
+Rows tagged `single-pass-cached-2026-04-21` in `parse_metrics` follow
+this pipeline.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  EXTRACTION (vision, single call)                                │
+│  gemini-2.5-flash · CORE_SYSTEM_PROMPT + full SKILL.md (cached)  │
+│    every PDF uploaded to the Gemini Files API                    │
+│    response_schema with confidence{} → final_patch event         │
+└──────────────────────────┬───────────────────────────────────────┘
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  WHY-SELECTED  (single call)                                     │
+│  gemini-2.5-flash-lite against final extraction data             │
+└──────────────────────────────────────────────────────────────────┘
+
+  Cache key: (insurance_type, supplements, skill_version).
+  Fallback: empty Gemini chain → OpenAI gpt-4o-mini → gpt-4o.
+```
+
+### What changed moving to `fitz-fastpath-2026-04-30`
+
+| Change | Reason |
+|---|---|
+| Local PyMuPDF (fitz) pre-pass before any file upload | ~80% of insurance quotes have a clean text layer; image-token cost on those was pure waste |
+| Two input modes: text (inline extracted text) vs vision (PDF upload) | Text mode skips the Files-API upload entirely; vision preserved as fallback for image-only PDFs |
+| `TEXT_MODE_CONFIDENCE_RUBRIC` appended to system instruction on text path | Vision-mode rubric ("blurry", "partially visible") doesn't apply to text input — model would emit uniform 0.95+ scores otherwise |
+| Cache key gains `input_mode` field | Two rubrics → two cache entries per `(type, supplements, skill_version)` |
+| OpenAI fallback always uses vision-mode rubric | Fallback re-uploads the PDF; mismatching rubric to actual input would mis-calibrate confidence on the rare fallback path |
+| `pymupdf==1.27.2.3` added to `requirements.txt` | New dependency for the fast-path |
+| New module: `backend/parsers/_fitz_fastpath.py` | Pure helpers (no network calls, no side effects). 175 lines incl. docstring. |
+
+Everything else — the single-call extraction, the cached system prompt
+(now per-`input_mode`), the why-selected call, the multi-PDF boundary
+labels, the streaming `final_patch` events — is unchanged from
+`single-pass-cached-2026-04-21`.
+
+---
+
 ## §8 · Legacy — `baseline-2026-04-20`
 
 The orchestration below was active before 2026-04-21. Rows tagged
@@ -507,10 +712,13 @@ The orchestration below was active before 2026-04-21. Rows tagged
 | Thinking budget | `THINKING_BUDGET` (same file) | Default 512. Zero it for fastest response; loses confidence calibration. |
 | Cache TTL | `SYSTEM_CACHE_TTL_SECONDS` (same file) | Default 3600 (1h) |
 | System prompt body | `CORE_SYSTEM_PROMPT` (same file) | Cache entries keyed on `skill_version`, not prompt text — bump an affected `SKILL.md` VERSION to force invalidation |
+| Text-mode confidence rubric | `TEXT_MODE_CONFIDENCE_RUBRIC` (same file) | Appended on the fitz fast-path only |
+| Fitz adequacy thresholds | `MIN_ADEQUATE_CHARS` / `MIN_ALPHANUM_RATIO` in `backend/parsers/_fitz_fastpath.py` | Defaults 200 / 0.30. Raise cautiously — false positives (junk text passed to LLM) are worse than false negatives (vision tokens burned needlessly). |
+| Force a request through vision | (no env knob) | Monkey-patch `is_text_adequate` in tests / dev. Production flips automatically based on the heuristic. |
 | A skill's content | `backend/parsers/skills/parse_<type>/SKILL.md` | Bump `> VERSION:` to invalidate that type's cache entry |
 | Carrier-specific rules | `## Carrier-Specific Overrides` section in the base `SKILL.md` | Same bump-VERSION rule applies |
 | Gemini fallback chain | `DEFAULT_FALLBACKS` in `backend/parsers/_model_fallback.py` | Currently `[]`. Add names to hop within Gemini before jumping to OpenAI. |
-| OpenAI fallback chain | `backend/parsers/_openai_fallback.py` | Current: `gpt-4o-mini → gpt-4o` |
+| OpenAI fallback chain | `backend/parsers/_openai_fallback.py` | Current: `gpt-4o-mini → gpt-4o`. Always vision (re-uploads the PDF). |
 | Frontend "Double Check" threshold | `CONFIDENCE_THRESHOLD` in `frontend/src/pages/QuotifyHome.jsx` | Default 0.85 |
 | Design tag in `parse_metrics` | `SYSTEM_DESIGN_VERSION` in `frontend/src/lib/devMetrics.js` | **Bump this** whenever you change any of the above so old rows stay interpretable |
 

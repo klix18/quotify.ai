@@ -27,7 +27,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000
  * the latency or accuracy needle. The corresponding entry in
  * dev_metrics/SYSTEM_DESIGN.md documents what the tag represents.
  */
-export const SYSTEM_DESIGN_VERSION = "single-pass-cached-2026-04-21";
+export const SYSTEM_DESIGN_VERSION = "fitz-fastpath-2026-04-30";
 
 /**
  * Client-identity field keys across all insurance types. These are

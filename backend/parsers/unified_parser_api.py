@@ -81,6 +81,12 @@ from fastapi.responses import StreamingResponse
 from google import genai
 from google.genai import types
 
+from parsers._fitz_fastpath import (
+    build_text_payload,
+    describe_text,
+    extract_pdf_text,
+    is_text_adequate,
+)
 from parsers._model_fallback import (
     DEFAULT_FALLBACKS,
     stream_with_fallback,
@@ -173,6 +179,67 @@ genuinely ABSENT:
 ═══ ACTIVE SKILL ═══════════════════════════════════════════════════════
 The user message contains the active skill for this extraction.
 Follow its field definitions, aliases, carrier hints, and rules exactly.
+"""
+
+
+# ── Text-mode confidence rubric (fitz fast-path) ───────────────────
+#
+# When the fitz fast-path succeeds we send extracted text instead of the
+# PDF itself. The default rubric in CORE_SYSTEM_PROMPT references vision
+# cues ("blurry", "partially visible") that don't exist in text input,
+# so the model would otherwise emit uniform 0.95+ scores and the
+# frontend "Double Check" pill would silently stop firing.
+#
+# This addendum is appended to CORE_SYSTEM_PROMPT only on the fitz
+# fast-path and rewrites the rubric in terms of textual signals so the
+# model has something to ground a non-1.0 score on. Carrier overrides
+# in SKILL.md are unaffected — they describe WHAT to extract, not how
+# to score confidence.
+#
+# Key idea: a fitz-extracted text layer can still be ambiguous when the
+# original PDF used a 4-column table that fitz flattened into a stream
+# of unlabeled numbers. The model should rate those rows lower than
+# values found next to an unambiguous label.
+#
+# The addendum is intentionally short — long mode-specific prompts
+# bloat the cache key permutation space. Two cache entries per
+# (type, supplements, skill_version) tuple is the maximum cost: one
+# for vision input, one for text input. See _system_cache_key().
+TEXT_MODE_CONFIDENCE_RUBRIC = """\
+
+═══ INPUT MODE: TEXT (fitz pre-pass) ═════════════════════════════════
+The user message contains TEXT extracted locally from the PDF(s) via
+PyMuPDF. There is no image attachment. The text preserves reading order
+where the PDF has a real text layer, but column-heavy tables may be
+flattened into a stream of values without visible row/column boundaries.
+
+Rewrite the confidence rubric for textual signals (replaces the rubric
+in the section above for THIS request only):
+
+  0.95–1.0  = value sits next to an unambiguous label on the same or
+              adjacent line ("Total Premium: $1,825.28").
+  0.85–0.94 = value found via clear context (label one line above /
+              below the value), no column-alignment ambiguity.
+  0.60–0.84 = value reconstructed from a flattened table where you had
+              to infer which row/column it belongs to. Common with
+              billing-plan grids and per-vehicle premium breakdowns.
+  0.30–0.59 = value plausible from format alone (looks like a dollar
+              amount in the right region) but no nearby label.
+  0.0–0.29  = highly uncertain; field may not be in the extracted text
+              at all. Prefer empty over guessing.
+
+For fields set to "" (not found) on the text path, rate certainty that
+the field is genuinely ABSENT from the text:
+  0.90+      = label/synonym does not appear anywhere in the extracted
+               text.
+  0.50–0.89  = label appears but no value could be associated with it
+               (e.g., a stripped row in a flattened table).
+  <0.50      = uncertain; the original PDF may carry this field in an
+               image region that the text extraction didn't capture.
+
+If the text looks truncated, garbled, or otherwise unusable, return
+"" for affected fields with confidence 0.30–0.59 — the caller's
+adequacy check should have caught this case, but be defensive.
 """
 
 
@@ -272,6 +339,7 @@ def _system_cache_key(
     skill_version: str,
     has_wind: bool,
     has_separate: bool,
+    input_mode: str = "vision",
 ) -> str:
     """Build a stable key for the system-prompt cache registry.
 
@@ -281,12 +349,18 @@ def _system_cache_key(
       - skill version (edits to a SKILL.md invalidate the cache)
       - whether the wind/hail supplement is appended
       - whether the bundle-separate supplement is appended
+      - input mode: ``"vision"`` (PDF attached) vs ``"text"`` (fitz
+        fast-path, text-mode confidence rubric appended). The two
+        rubrics live in the same cache namespace, but each tuple gets
+        its own entry because the system_instruction string differs.
     """
     parts = [insurance_type, f"v{skill_version or 'unknown'}"]
     if has_wind:
         parts.append("wind")
     if has_separate:
         parts.append("separate")
+    if input_mode == "text":
+        parts.append("text")
     return "|".join(parts)
 
 
@@ -462,89 +536,145 @@ def stream_unified_quote(
             "version": skill_version,
         }) + "\n"
 
-        # ── Upload PDF ──────────────────────────────────────────
-        # Single consolidated "Extracting..." status across the whole parse.
-        # Per UX request, the frontend only shows two states: "Extracting"
-        # while a parse is in flight, and "Verified" when the result event
-        # arrives. Don't reintroduce intermediate phase strings here.
+        # ── Extracting status (single consolidated phase) ──────
+        # Per UX request the frontend only shows two states: "Extracting"
+        # while a parse is in flight, and "Verified" when the result
+        # event arrives. Don't reintroduce intermediate phase strings.
         yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
 
-        uploaded_file = upload_with_retry(
-            client,
-            file=str(pdf_path),
-            config={"mime_type": "application/pdf"},
+        # ── fitz fast-path pre-pass ────────────────────────────
+        # Run PyMuPDF locally on every attached PDF FIRST. If every PDF
+        # has a usable text layer we skip the Gemini Files API upload
+        # entirely and send the extracted text inline — same model, same
+        # cached system instruction, same response_schema, no image
+        # tokens. If any PDF fails the adequacy check we fall through
+        # to the existing vision path, so behavior is preserved on
+        # image-only quotes (e.g. Progressive auto, scanned faxes).
+        primary_text = extract_pdf_text(pdf_path)
+        wind_text = (
+            extract_pdf_text(wind_pdf_path) if wind_pdf_path is not None else ""
+        )
+        secondary_text = (
+            extract_pdf_text(secondary_pdf_path)
+            if secondary_pdf_path is not None
+            else ""
         )
 
-        # ── Upload optional wind/hail PDF (separate-mode only) ──
+        all_adequate = is_text_adequate(primary_text)
         if wind_pdf_path is not None:
-            yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
-            uploaded_wind_file = upload_with_retry(
-                client,
-                file=str(wind_pdf_path),
-                config={"mime_type": "application/pdf"},
-            )
-
-        # ── Upload optional generic second PDF (bundle separate mode) ──
+            all_adequate = all_adequate and is_text_adequate(wind_text)
         if secondary_pdf_path is not None:
-            yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
-            uploaded_secondary_file = upload_with_retry(
-                client,
-                file=str(secondary_pdf_path),
-                config={"mime_type": "application/pdf"},
-            )
+            all_adequate = all_adequate and is_text_adequate(secondary_text)
+        input_mode = "text" if all_adequate else "vision"
 
-        # Count of PDFs actually attached so the prompt can say "TWO PDFs"
-        # instead of "this PDF" when we're in wind/hail or bundle-separate
-        # mode. Singular wording demonstrably leads Gemini to ignore the
-        # second attachment.
-        pdf_count = 1 + (1 if uploaded_wind_file is not None else 0) + (1 if uploaded_secondary_file is not None else 0)
+        print(
+            f"[fitz-fastpath] mode={input_mode} "
+            f"primary={describe_text(primary_text)} "
+            f"wind={describe_text(wind_text) if wind_pdf_path else 'n/a'} "
+            f"secondary={describe_text(secondary_text) if secondary_pdf_path else 'n/a'}",
+            flush=True,
+        )
+
+        # Count of PDFs attached so the prompt can say "TWO PDFs"
+        # instead of "this PDF" when we're in wind/hail or bundle-
+        # separate mode. Path-based (not upload-based) so the value is
+        # the same in both input modes.
+        pdf_count = (
+            1
+            + (1 if wind_pdf_path is not None else 0)
+            + (1 if secondary_pdf_path is not None else 0)
+        )
         pdf_phrase = "this PDF" if pdf_count == 1 else f"these {pdf_count} PDFs"
 
-        # Shared PDF label list — identifies which policy each attached PDF
-        # represents. Used by both the Gemini ``_build_contents`` helper
-        # (below) and the OpenAI fallback lambda (``pdf_labels=`` kw-arg).
-        # Keep these in sync so the model sees the SAME boundary markers
-        # regardless of which provider handles the pass.
+        # Shared PDF label list — identifies which policy each PDF
+        # represents. Used by the Gemini ``_build_contents`` helper
+        # below (vision OR text mode) AND by the OpenAI fallback lambda
+        # (``pdf_labels=`` kw-arg). Keep these in sync so the model
+        # sees the SAME boundary markers regardless of which provider
+        # OR which input mode handles the pass.
         pdf_labels: list[str] = []
         if pdf_count == 1:
             pdf_labels = []  # single-PDF case: no markers
         else:
-            if insurance_type == "bundle" and uploaded_secondary_file is not None:
+            if insurance_type == "bundle" and secondary_pdf_path is not None:
                 pdf_labels.append("── PDF #1 of 2 (HOMEOWNERS QUOTE) ──")
-            elif uploaded_wind_file is not None:
+            elif wind_pdf_path is not None:
                 pdf_labels.append(f"── PDF #1 of 2 ({insurance_type.upper()} QUOTE) ──")
             else:
                 pdf_labels.append("── PDF #1 ──")
-            if uploaded_wind_file is not None:
+            if wind_pdf_path is not None:
                 pdf_labels.append("── PDF #2 of 2 (WIND / HAIL QUOTE) ──")
-            if uploaded_secondary_file is not None:
+            if secondary_pdf_path is not None:
                 pdf_labels.append(
                     "── PDF #2 of 2 (AUTO QUOTE) ──"
                     if insurance_type == "bundle"
                     else "── PDF #2 of 2 ──"
                 )
 
-        # Matching extra-PDFs list for the OpenAI fallback: primary is always
-        # ``pdf_path``, and anything else we attached on the Gemini side we
-        # also need to attach on the OpenAI side or the fallback will silently
-        # drop the secondary PDF and regress to only-PDF-#1 extraction.
+        # ── Vision-mode uploads (skipped on the fitz fast-path) ──
+        if input_mode == "vision":
+            uploaded_file = upload_with_retry(
+                client,
+                file=str(pdf_path),
+                config={"mime_type": "application/pdf"},
+            )
+
+            if wind_pdf_path is not None:
+                uploaded_wind_file = upload_with_retry(
+                    client,
+                    file=str(wind_pdf_path),
+                    config={"mime_type": "application/pdf"},
+                )
+
+            if secondary_pdf_path is not None:
+                uploaded_secondary_file = upload_with_retry(
+                    client,
+                    file=str(secondary_pdf_path),
+                    config={"mime_type": "application/pdf"},
+                )
+
+        # Matching extra-PDFs list for the OpenAI fallback. The fallback
+        # always runs in vision mode (it re-uploads PDFs to OpenAI),
+        # even when the primary Gemini call ran in text mode — the
+        # cross-provider safety net is "everything Gemini failed on,
+        # try via OpenAI vision". Path-based and unchanged from before.
         extra_pdf_paths: list[Path] = []
         if wind_pdf_path is not None:
             extra_pdf_paths.append(wind_pdf_path)
         if secondary_pdf_path is not None:
             extra_pdf_paths.append(secondary_pdf_path)
 
-        # Build a contents-list builder that interleaves text markers
-        # between the file parts so the Gemini model has unambiguous
-        # boundaries. Without these markers, Gemini frequently treats both
-        # PDFs as one document and under-extracts from the second attachment.
+        # Build a contents-list builder. On the vision path it
+        # interleaves boundary labels between the uploaded file parts;
+        # on the text path it inlines the same labels around the
+        # extracted text so Gemini sees the same vocabulary.
         def _build_contents(prompt: str) -> list:
+            if input_mode == "text":
+                if pdf_count == 1:
+                    payload = build_text_payload(primary_text)
+                else:
+                    extras: list[tuple[str, str]] = []
+                    if wind_pdf_path is not None:
+                        # pdf_labels[0]=primary, pdf_labels[1]=wind
+                        extras.append((pdf_labels[1], wind_text))
+                    if secondary_pdf_path is not None:
+                        # pdf_labels[0]=primary, [1]=wind?, then secondary
+                        extras.append((pdf_labels[-1], secondary_text))
+                    payload = build_text_payload(
+                        primary_text,
+                        primary_label=pdf_labels[0],
+                        extras=extras,
+                    )
+                # build_text_payload only returns None if a PDF is
+                # inadequate — but we've already gated on all_adequate
+                # above, so payload is guaranteed to be a string here.
+                return [f"{prompt}\n\n{payload}"]
+
+            # Vision mode (existing behavior).
             parts: list = [prompt]
             if pdf_count == 1:
                 parts.append(uploaded_file)
                 return parts
-            # Interleave labels with files. pdf_labels order matches the
-            # file attachment order: [primary, wind?, secondary?].
             files_in_order: list = [uploaded_file]
             if uploaded_wind_file is not None:
                 files_in_order.append(uploaded_wind_file)
@@ -573,22 +703,43 @@ def stream_unified_quote(
         # so the UI shows one phase, not five.
         yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
 
-        system_with_skill = (
+        # The vision-mode system instruction (CORE_SYSTEM_PROMPT +
+        # SKILL.md). This is what Gemini gets in vision mode AND what
+        # the OpenAI fallback always gets, since the fallback re-uploads
+        # the PDF and runs in vision mode regardless of which input mode
+        # the primary Gemini call used.
+        system_with_skill_vision = (
             CORE_SYSTEM_PROMPT
             + "\n\n═══ ACTIVE SKILL: "
             + insurance_type.upper()
             + " ═══════════════════════\n\n"
             + skill_content
         )
+        # On the fitz fast-path Gemini receives extracted text instead of
+        # an image, so the vision-grounded confidence rubric in
+        # CORE_SYSTEM_PROMPT doesn't apply. Append a text-mode rubric so
+        # confidence scores stay well-calibrated and the frontend
+        # "Double Check" pill keeps firing on ambiguous extractions.
+        # Note: only Gemini sees this — the OpenAI fallback uses the
+        # vision instruction (it re-uploads the PDF when it runs).
+        if input_mode == "text":
+            system_with_skill = (
+                system_with_skill_vision + "\n\n" + TEXT_MODE_CONFIDENCE_RUBRIC
+            )
+        else:
+            system_with_skill = system_with_skill_vision
 
         # Try to reuse (or build) the explicit system-prompt cache for
-        # this (type, supplements, skill_version) tuple. Never blocks the
-        # parse — a None return falls through to inline system_instruction.
+        # this (type, supplements, skill_version, input_mode) tuple.
+        # Never blocks the parse — a None return falls through to inline
+        # system_instruction. Vision and text modes get separate cache
+        # entries because their system_instruction strings differ.
         cache_key = _system_cache_key(
             insurance_type=insurance_type,
             skill_version=skill_version,
-            has_wind=uploaded_wind_file is not None,
-            has_separate=uploaded_secondary_file is not None,
+            has_wind=wind_pdf_path is not None,
+            has_separate=secondary_pdf_path is not None,
+            input_mode=input_mode,
         )
         cached_name = _get_or_create_system_cache(
             client, cache_key, model_extract, system_with_skill
@@ -644,7 +795,13 @@ def stream_unified_quote(
             # Gemini model in the chain has already failed.
             openai_fallback=lambda: stream_openai_extraction(
                 pdf_path,
-                system_instruction=system_with_skill,
+                # OpenAI fallback re-uploads the PDF and runs in vision
+                # mode, so always send the vision-mode system instruction
+                # — even when the primary Gemini call was on the fitz
+                # fast-path. Mismatching the rubric to the actual input
+                # would produce poorly-calibrated confidence scores on
+                # the rare fallback path.
+                system_instruction=system_with_skill_vision,
                 user_prompt=(
                     final_user_prompt
                     + " Return ONLY a valid JSON object matching the schema "
