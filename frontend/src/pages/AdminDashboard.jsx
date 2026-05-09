@@ -801,6 +801,113 @@ function RoleBadge({ role }) {
   );
 }
 
+/* ── Team Admins pill row ────────────────────────────────────────
+ * Renders directly above the Team Leaderboard so anyone (admin or
+ * advisor) can see who the admins are at a glance. The leaderboard
+ * itself is sorted by activity and truncated to top-N, so an admin
+ * with few quotes wouldn't appear there — this row solves that.
+ *
+ * Defensive: if the canonical Clerk user list is empty (e.g. the
+ * /api/admin/users call failed or hasn't returned yet), the row
+ * renders nothing rather than misleading the viewer.
+ */
+function TeamAdminsRow({ clerkUsersList, onSelectUser }) {
+  const admins = (clerkUsersList || []).filter((u) => u.role === "admin");
+  if (admins.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 8,
+        padding: "10px 14px",
+        background: "rgba(23,101,212,0.04)",
+        border: `1px solid rgba(180,200,230,0.3)`,
+        borderRadius: 10,
+        marginBottom: 14,
+        fontFamily: "Poppins, sans-serif",
+      }}
+    >
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: COLORS.mutedText,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          marginRight: 4,
+        }}
+      >
+        Team Admins
+      </span>
+      {admins.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          onClick={() => onSelectUser?.(a.id)}
+          title={a.email}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "4px 10px",
+            background: COLORS.white,
+            border: `1px solid rgba(23,101,212,0.2)`,
+            borderRadius: 14,
+            cursor: onSelectUser ? "pointer" : "default",
+            fontSize: 12,
+            fontWeight: 600,
+            color: COLORS.black,
+            fontFamily: "Poppins, sans-serif",
+          }}
+        >
+          {a.image_url ? (
+            <img
+              src={a.image_url}
+              alt=""
+              style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }}
+            />
+          ) : (
+            <span
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: "50%",
+                background: `linear-gradient(135deg, ${COLORS.blue}, #0B91E6)`,
+                color: COLORS.white,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 10,
+                fontWeight: 700,
+              }}
+            >
+              {(a.displayName || "?").charAt(0).toUpperCase()}
+            </span>
+          )}
+          <span>{a.displayName}</span>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              padding: "1px 6px",
+              borderRadius: 4,
+              background: COLORS.blue,
+              color: COLORS.white,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            Admin
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // Brushed-metal gradients: diagonal 135deg with alternating highlight and
 // midtone stops to mimic the banding you get on polished metal.
 const RANK_COLORS = {
@@ -1116,9 +1223,13 @@ function UserDetailView({ userName, period, getToken, onBack, clerkUsers, onRefr
   // for display and for the clerkUsers lookup keyed by display name.
   const displayName = data?.user_name || userName;
 
-  // Look the user up by exact key first, then a case-insensitive fallback
-  // so single-name users (e.g. "jj") still get a Clerk record + role toggle.
+  // Look the user up by stable Clerk id FIRST (most reliable — names can
+  // collide and casing varies), then fall back to display-name aliases for
+  // any pre-backfill row whose user_id is still blank. Without the id-first
+  // lookup, an admin whose display name doesn't exactly match a Clerk
+  // alias would render as the default role ("advisor") in the header.
   const clerkUser =
+    clerkUsers[userName] ||
     clerkUsers[displayName] ||
     clerkUsers[(displayName || "").toLowerCase()] ||
     null;
@@ -1659,6 +1770,238 @@ function PdfStorageTable({ docs, th, td, typeColors, formatSize, handleDownload,
     </>
   );
 }
+
+/* ── Migrate User Data (dev-Clerk → prod-Clerk consolidation) ────
+ * Lets an admin re-point analytics_events + pdf_documents rows from
+ * an orphaned (dev-era) user_id onto a new (prod-era) Clerk user.
+ *
+ * Use case: after switching the Clerk environment from development to
+ * production, every previously-known user gets a brand-new user_id.
+ * Their historical analytics rows still carry the OLD id and would
+ * otherwise appear as "Unknown" orphans on the leaderboard. Pointing
+ * them at the new prod user merges the history under their re-created
+ * profile so leaderboards, snapshot history, and chatbot answers all
+ * pick up the legacy data.
+ *
+ * What an "orphan" is here: any row in analytics_events whose
+ * resolved user_id starts with ``user_`` but doesn't match any
+ * current Clerk user in ``clerkUsersList``. Empty user_id rows are
+ * NOT shown — those are handled by the existing
+ * /api/admin/analytics/backfill-clerk-ids flow.
+ */
+function UserMigrationManager({ analyticsRows, clerkUsersList, getToken, isAdmin, onRefresh }) {
+  const [picks, setPicks] = React.useState({});       // { fromUserId: toUserId }
+  const [confirmFor, setConfirmFor] = React.useState(null);
+  const [migrating, setMigrating] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [lastResult, setLastResult] = React.useState(null);
+
+  // Aggregate orphans by their stable user_id so we don't list the
+  // same dev user twice if their analytics rows came in fragments.
+  const clerkIdSet = React.useMemo(
+    () => new Set((clerkUsersList || []).map((c) => c.id).filter(Boolean)),
+    [clerkUsersList],
+  );
+  const orphans = React.useMemo(() => {
+    const byId = {};
+    for (const row of analyticsRows || []) {
+      const uid = row.user_id || row.user_key || "";
+      if (!uid || !uid.startsWith("user_")) continue;
+      if (clerkIdSet.has(uid)) continue;
+      if (!byId[uid]) {
+        byId[uid] = { user_id: uid, user_name: row.user_name || "Unknown", total: 0 };
+      }
+      byId[uid].total += row.total || 0;
+    }
+    return Object.values(byId).sort((a, b) => b.total - a.total);
+  }, [analyticsRows, clerkIdSet]);
+
+  const targetForOrphan = (uid) => picks[uid] || "";
+
+  const setTargetForOrphan = (uid, value) => {
+    setPicks((prev) => ({ ...prev, [uid]: value }));
+  };
+
+  const beginMigrate = (orphan) => {
+    const target = targetForOrphan(orphan.user_id);
+    if (!target) {
+      setError("Pick a target user first.");
+      return;
+    }
+    setError("");
+    setConfirmFor({ orphan, target });
+  };
+
+  const confirmMigrate = async () => {
+    if (!confirmFor) return;
+    setMigrating(true);
+    setError("");
+    try {
+      const token = await getToken();
+      const resp = await fetch(
+        `${API_BASE_URL}/api/admin/analytics/migrate-user-id`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            from_user_id: confirmFor.orphan.user_id,
+            to_user_id: confirmFor.target,
+          }),
+        },
+      );
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail?.detail || `HTTP ${resp.status}`);
+      }
+      const json = await resp.json();
+      setLastResult({
+        from: confirmFor.orphan.user_name,
+        to: (clerkUsersList || []).find((c) => c.id === confirmFor.target)?.displayName || confirmFor.target,
+        events: json.events_updated,
+        pdfs: json.pdfs_updated,
+      });
+      setConfirmFor(null);
+      // Clear the dropdown for the migrated orphan so the row collapses
+      // out on the next render once analytics refreshes.
+      setPicks((prev) => {
+        const next = { ...prev };
+        delete next[confirmFor.orphan.user_id];
+        return next;
+      });
+      onRefresh?.();
+    } catch (e) {
+      setError(e.message || "Migration failed");
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  if (!isAdmin) {
+    return (
+      <div style={{ padding: 14, color: COLORS.mutedText, fontSize: 13 }}>
+        Only admins can migrate user data.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, fontFamily: "Poppins, sans-serif" }}>
+      <div style={{ fontSize: 12, color: COLORS.mutedText, lineHeight: 1.5 }}>
+        After switching Clerk dev → prod, old user_ids no longer match any Clerk user.
+        Pick a current Clerk user to merge each orphan's history into. The migration
+        re-points every <code>analytics_events</code> + <code>pdf_documents</code> row
+        from the old id to the new id in a single transaction.
+      </div>
+
+      {orphans.length === 0 ? (
+        <div style={{ padding: 14, fontSize: 13, color: COLORS.mutedText }}>
+          No orphan user_ids in the current period. 🎉
+        </div>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)` }}>
+              <th style={{ padding: "10px 14px", textAlign: "left", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>Orphan user</th>
+              <th style={{ padding: "10px 14px", textAlign: "right", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>Events</th>
+              <th style={{ padding: "10px 14px", textAlign: "left", color: COLORS.mutedText, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>Migrate to</th>
+              <th style={{ padding: "10px 14px", width: 110 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {orphans.map((o) => (
+              <tr key={o.user_id} style={{ borderBottom: `1px solid rgba(180,200,230,0.2)` }}>
+                <td style={{ padding: "12px 14px" }}>
+                  <div style={{ fontWeight: 600, color: COLORS.black }}>{o.user_name}</div>
+                  <div style={{ fontSize: 11, color: COLORS.mutedText, fontFamily: "monospace" }}>
+                    {o.user_id}
+                  </div>
+                </td>
+                <td style={{ padding: "12px 14px", textAlign: "right", fontWeight: 700 }}>{o.total}</td>
+                <td style={{ padding: "12px 14px" }}>
+                  <select
+                    value={targetForOrphan(o.user_id)}
+                    onChange={(e) => setTargetForOrphan(o.user_id, e.target.value)}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      border: `1px solid rgba(180,200,230,0.4)`,
+                      fontFamily: "Poppins, sans-serif",
+                      fontSize: 12,
+                      background: COLORS.white,
+                      color: COLORS.black,
+                      minWidth: 240,
+                    }}
+                  >
+                    <option value="">— pick a current Clerk user —</option>
+                    {(clerkUsersList || []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.displayName} ({c.email}) — {c.role}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td style={{ padding: "12px 14px" }}>
+                  <button
+                    type="button"
+                    onClick={() => beginMigrate(o)}
+                    disabled={!targetForOrphan(o.user_id) || migrating}
+                    style={{
+                      background: targetForOrphan(o.user_id) ? COLORS.blue : "rgba(23,101,212,0.3)",
+                      color: COLORS.white,
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "6px 14px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      fontFamily: "Poppins, sans-serif",
+                      cursor: targetForOrphan(o.user_id) ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    Migrate
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {error && (
+        <div style={{ padding: 10, color: "#a32424", fontSize: 12, background: "#fce8e6", borderRadius: 8 }}>
+          {error}
+        </div>
+      )}
+      {lastResult && (
+        <div style={{ padding: 10, color: "#0a7d2e", fontSize: 12, background: "#e8f5e8", borderRadius: 8 }}>
+          ✓ Migrated <strong>{lastResult.events}</strong> analytics row(s) and{" "}
+          <strong>{lastResult.pdfs}</strong> PDF row(s) from{" "}
+          <strong>{lastResult.from}</strong> → <strong>{lastResult.to}</strong>.
+        </div>
+      )}
+
+      {confirmFor && (
+        <ConfirmModal
+          message={
+            `Migrate all rows from "${confirmFor.orphan.user_name}" ` +
+            `(${confirmFor.orphan.user_id}) onto ` +
+            `"${(clerkUsersList || []).find((c) => c.id === confirmFor.target)?.displayName || confirmFor.target}"? ` +
+            `This rewrites ${confirmFor.orphan.total} analytics rows AND any matching pdf_documents rows in one transaction. Cannot be undone via the UI.`
+          }
+          onConfirm={confirmMigrate}
+          onCancel={() => setConfirmFor(null)}
+          confirming={migrating}
+          confirmLabel="Migrate"
+          confirmingLabel="Migrating..."
+          confirmVariant="primary"
+        />
+      )}
+    </div>
+  );
+}
+
 
 function PdfStorageManager({ getToken, isAdmin, onRefresh }) {
   const [docs, setDocs] = React.useState([]);
@@ -2278,7 +2621,25 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
               <Section title="Team Leaderboard" expandable action={
                 <div style={{ fontSize: 12, color: COLORS.mutedText }}>Click a user for details</div>
               }>
-                {(expanded) => <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} clerkUsersList={clerkUsersList} onSelectUser={setSelectedUser} limit={expanded ? 15 : 5} />}
+                {(expanded) => (
+                  <>
+                    {/* Admins pinned at top so non-admins can always see
+                        who has admin access — independent of the activity
+                        ranking below (which would otherwise hide an admin
+                        with few quotes). */}
+                    <TeamAdminsRow
+                      clerkUsersList={clerkUsersList}
+                      onSelectUser={setSelectedUser}
+                    />
+                    <UserTable
+                      users={data.usage_by_user}
+                      clerkUsers={clerkUsers}
+                      clerkUsersList={clerkUsersList}
+                      onSelectUser={setSelectedUser}
+                      limit={expanded ? 15 : 5}
+                    />
+                  </>
+                )}
               </Section>
               <Section title="Manual Changes Leaderboard" expandable>
                 {/* Closed-state limit is 9 (not 5) because the sibling Team
@@ -2299,6 +2660,23 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
             <Section title="PDF Storage" expandable defaultExpanded>
               {() => <PdfStorageManager getToken={getToken} isAdmin={isAdmin} onRefresh={fetchAnalytics} />}
             </Section>
+
+            {/* Migrate User Data — admin only, collapsed by default.
+                Used after a Clerk dev → prod cutover to merge the same
+                human's old (orphan) data onto their new prod user_id. */}
+            {isAdmin && (
+              <Section title="Migrate User Data" expandable>
+                {() => (
+                  <UserMigrationManager
+                    analyticsRows={data.usage_by_user}
+                    clerkUsersList={clerkUsersList}
+                    getToken={getToken}
+                    isAdmin={isAdmin}
+                    onRefresh={fetchAnalytics}
+                  />
+                )}
+              </Section>
+            )}
           </div>
         )}
 

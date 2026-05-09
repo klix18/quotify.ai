@@ -6,11 +6,11 @@ Provides usage stats with time period filtering and reset capability.
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from core.auth import get_current_user, require_admin
-from core.database import get_pool
+from core.auth import get_current_user, require_admin, user_name_for_attribution
+from core.database import get_pool, log_event, migrate_user_id
 from scripts.user_id_backfill import backfill_user_ids_from_clerk
 
 # All bucketing/filtering on the dashboard is anchored to Eastern Time —
@@ -386,6 +386,72 @@ async def backfill_clerk_ids(_admin: dict = Depends(require_admin)):
     an existing attribution. Returns the full per-user reconciliation report."""
     report = await backfill_user_ids_from_clerk()
     return report
+
+
+class MigrateUserIdRequest(BaseModel):
+    from_user_id: str
+    to_user_id: str
+
+
+@router.post("/migrate-user-id")
+async def migrate_user_id_endpoint(
+    payload: MigrateUserIdRequest,
+    admin: dict = Depends(require_admin),
+):
+    """Re-point analytics_events + pdf_documents rows from one user_id to
+    another. Used to merge dev-Clerk user data into a new prod-Clerk user
+    after a Clerk environment migration.
+
+    Unlike ``/backfill-user-id`` and ``/backfill-clerk-ids`` (which only
+    fill blank user_ids and can never OVERWRITE), this endpoint
+    DELIBERATELY rewrites rows whose user_id matches ``from_user_id``.
+    Wrapped in a single transaction so analytics + pdf rows can't half-
+    apply. Logs a ``migrate`` audit event so the action is traceable.
+
+    Validation:
+      - from_user_id and to_user_id both non-empty
+      - from != to (no-op safety)
+    The endpoint does NOT validate that ``to_user_id`` exists in the
+    current Clerk user list — admins occasionally need to migrate to a
+    newly-created user before refreshing the Clerk cache. Garbage-in
+    rewrite is gated behind require_admin already.
+    """
+    from_id = (payload.from_user_id or "").strip()
+    to_id = (payload.to_user_id or "").strip()
+
+    if not from_id:
+        raise HTTPException(status_code=422, detail="from_user_id is required")
+    if not to_id:
+        raise HTTPException(status_code=422, detail="to_user_id is required")
+    if from_id == to_id:
+        raise HTTPException(
+            status_code=422,
+            detail="from_user_id and to_user_id must differ",
+        )
+
+    counts = await migrate_user_id(from_id, to_id)
+
+    # Audit row — best-effort, never block the response.
+    try:
+        await log_event(
+            user_id=admin.get("user_id", ""),
+            user_name=user_name_for_attribution(admin),
+            insurance_type="",
+            action="migrate",
+            generated_pdf=(
+                f"from={from_id} to={to_id} "
+                f"events={counts['events_updated']} pdfs={counts['pdfs_updated']}"
+            ),
+        )
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "from_user_id": from_id,
+        "to_user_id": to_id,
+        **counts,
+    }
 
 
 @router.delete("/event/{event_id}")

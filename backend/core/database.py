@@ -300,6 +300,9 @@ async def log_event(
       - ``delete_all``  — all stored PDFs were bulk-deleted
       - ``login``       — a user signed in
       - ``logout``      — a user signed out
+      - ``migrate``     — admin re-pointed rows from one user_id to another
+                          (e.g. dev-Clerk → prod-Clerk migration). Backend-
+                          only; not accepted from /api/track-event.
 
     ``system_design`` records the parser orchestration version that
     produced this event (e.g. ``"fitz-fastpath-2026-04-30"``). Set by
@@ -372,6 +375,53 @@ async def delete_all_pdfs() -> int:
         result = await conn.execute("DELETE FROM pdf_documents")
     # result looks like "DELETE 42"
     return int(result.split()[-1])
+
+
+# ── User-id migration ────────────────────────────────────────────
+#
+# Used after a Clerk dev → prod cutover where the same human now has a
+# new prod user_id. Re-points every analytics_events + pdf_documents row
+# from the old (dev) user_id to the new (prod) user_id atomically.
+#
+# Intended for admin-driven one-shot migrations via the admin endpoint
+# in analytics_api.py — NOT for general-purpose attribution edits.
+# `user_id_backfill.py` already handles the "fill empty user_id" case;
+# this is the orthogonal "rewrite an existing user_id" case which the
+# backfill script is intentionally guarded against (its WHERE clause
+# only touches blank user_ids so it can never overwrite attribution).
+
+
+async def migrate_user_id(from_user_id: str, to_user_id: str) -> dict:
+    """Re-point analytics_events + pdf_documents rows from one user_id
+    to another. Wrapped in a single transaction so the two updates can't
+    half-apply.
+
+    Args:
+        from_user_id: stable identifier currently attached to the rows
+            (typically an old dev-Clerk ``user_…`` id).
+        to_user_id: stable identifier to rewrite the rows to (typically
+            a new prod-Clerk ``user_…`` id).
+
+    Returns dict with ``events_updated`` and ``pdfs_updated`` counts.
+    Empty / equal IDs are rejected at the API layer; this function does
+    not re-validate, so callers MUST ensure non-empty distinct values.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            ae_result = await conn.execute(
+                "UPDATE analytics_events SET user_id = $1 WHERE user_id = $2",
+                to_user_id, from_user_id,
+            )
+            pdf_result = await conn.execute(
+                "UPDATE pdf_documents SET user_id = $1 WHERE user_id = $2",
+                to_user_id, from_user_id,
+            )
+    # asyncpg returns "UPDATE N" — same fragile pattern as elsewhere
+    # in this module; collected here to keep the change localized.
+    events_updated = int(ae_result.split()[-1]) if ae_result else 0
+    pdfs_updated = int(pdf_result.split()[-1]) if pdf_result else 0
+    return {"events_updated": events_updated, "pdfs_updated": pdfs_updated}
 
 
 async def get_pdf_filenames() -> set[str]:
