@@ -931,8 +931,15 @@ function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15
         byClerkId[clerkId] = {
           user_id: clerkId,
           user_name: canonical?.displayName || row.user_name,
+          // Role priority: server-resolved role on the analytics row >
+          // canonical Clerk directory role > "advisor" default. The server
+          // path always works for advisors (CLERK_SECRET_KEY based), so this
+          // is the field UserRow ultimately reads.
+          role: row.role || canonical?.role || "advisor",
           total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0,
         };
+      } else if (row.role && !byClerkId[clerkId].role) {
+        byClerkId[clerkId].role = row.role;
       }
       addToAgg(byClerkId[clerkId], row);
     } else {
@@ -946,6 +953,7 @@ function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15
         unmatchedByUserKey[key] = {
           user_id: row.user_id || row.user_name,
           user_name: row.user_name,
+          role: row.role || "advisor",
           total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0,
         };
       }
@@ -960,6 +968,7 @@ function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15
       byClerkId[cu.id] = {
         user_id: cu.id,
         user_name: cu.displayName || "Unknown",
+        role: cu.role || "advisor",
         total: 0, quotes_created: 0, pdfs_uploaded: 0, days_active: 0,
       };
     }
@@ -983,19 +992,24 @@ function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15
         </thead>
         <tbody>
           {allUsers.slice(0, limit).map((u, idx) => {
-            // Look up Clerk metadata (role, avatar) by the stable Clerk id
-            // whenever possible. Fall back to name-based alias lookup for
-            // orphan rows so roles still render.
+            // Look up Clerk metadata (avatar) by the stable Clerk id whenever
+            // possible. Fall back to name-based alias lookup for orphan rows.
             const cu =
               clerkUsers[u.user_id] ||
               clerkUsers[u.user_name] ||
               clerkUsers[(u.user_name || "").toLowerCase()] ||
               null;
+            // Role comes from the analytics summary response (server-side
+            // resolved against Clerk via CLERK_SECRET_KEY) so advisors
+            // reliably see admin badges. Fall back to the clerkUsers map
+            // (when the directory call did succeed) and finally to
+            // "advisor" only when we truly know nothing.
+            const role = u.role || cu?.role || "advisor";
             return (
               <UserRow
                 key={u.user_id}
                 user={u}
-                role={cu?.role || "advisor"}
+                role={role}
                 onClick={() => onSelectUser(u.user_id)}
                 rank={idx + 1}
                 imageUrl={cu?.image_url}

@@ -13,6 +13,13 @@ from core.auth import get_current_user, require_admin
 from core.database import get_pool
 from scripts.user_id_backfill import backfill_user_ids_from_clerk
 
+# Imported lazily inside the handler so a Clerk outage can't take down the
+# analytics endpoint — the role enrichment is best-effort.
+try:
+    from api.clerk_users_api import _fetch_clerk_users  # type: ignore
+except Exception:  # pragma: no cover
+    _fetch_clerk_users = None  # type: ignore
+
 # All bucketing/filtering on the dashboard is anchored to Eastern Time —
 # the dashboard text says "today" and that should match the user's local day,
 # not UTC midnight. Sizemore's office is on the East Coast, so ET is correct.
@@ -50,6 +57,46 @@ def _period_start(period: str) -> datetime:
 
 # ── Endpoints ────────────────────────────────────────────────────────
 
+async def _build_role_lookup() -> dict[str, str]:
+    """Fetch every Clerk user via CLERK_SECRET_KEY (works for any caller —
+    server-side, not user-token gated) and return a lookup map of every
+    plausible analytics_events.user_id / user_name alias → role.
+
+    Used by get_analytics_summary so the dashboard's role badges work for
+    advisors without needing a separate /api/users/directory round-trip from
+    the frontend. The Clerk side is the single source of truth for role
+    metadata; we just denormalize it onto the response.
+    """
+    if _fetch_clerk_users is None:
+        return {}
+    try:
+        users = await _fetch_clerk_users()
+    except Exception:
+        return {}
+    lookup: dict[str, str] = {}
+    for u in users:
+        role = u.get("role") or "advisor"
+        first = (u.get("first_name") or "").strip()
+        last = (u.get("last_name") or "").strip()
+        full = f"{first} {last}".strip()
+        email = u.get("email") or ""
+        for key in [u.get("id"), full, first, last, email, email.split("@")[0] if email else ""]:
+            if not key:
+                continue
+            lookup[key] = role
+            lookup[key.lower()] = role
+    return lookup
+
+
+def _resolve_role(lookup: dict[str, str], user_key: str | None, user_name: str | None) -> str:
+    """Resolve a (user_id, user_name) pair against the Clerk role lookup.
+    Defaults to 'advisor' when nothing matches."""
+    for k in (user_key, user_name, (user_name or "").lower(), (user_key or "").lower()):
+        if k and k in lookup:
+            return lookup[k]
+    return "advisor"
+
+
 @router.get("/summary")
 async def get_analytics_summary(
     period: str = Query("month", pattern="^(today|week|month|6months|year|all)$"),
@@ -58,6 +105,7 @@ async def get_analytics_summary(
     """Get aggregated analytics for the given time period."""
     pool = await get_pool()
     cutoff = _period_start(period)
+    role_lookup = await _build_role_lookup()
 
     async with pool.acquire() as conn:
         # Total counts
@@ -159,6 +207,7 @@ async def get_analytics_summary(
             {
                 "user_id": row["user_key"],
                 "user_name": row["user_name"],
+                "role": _resolve_role(role_lookup, row["user_key"], row["user_name"]),
                 "total": row["total"],
                 "quotes_created": row["quotes_created"],
                 "pdfs_uploaded": row["pdfs_uploaded"],
