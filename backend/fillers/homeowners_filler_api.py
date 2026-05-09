@@ -1,11 +1,12 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from jinja2 import Environment, FileSystemLoader
+from core.auth import get_current_user, user_name_for_attribution
 from core.browser_manager import get_browser
-from services.pdf_optimizer import optimize_pdf
+from services.pdf_optimizer import optimize_pdf_bytes
 from services.pdf_storage_helpers import store_generated_pdf
 from fillers._filename import build_pdf_filename
 
@@ -14,15 +15,13 @@ router = APIRouter()
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_ROOT = BASE_DIR / "templates"
 TEMPLATE_DIR = TEMPLATES_ROOT / "homeowners"
-GENERATED_DIR = BASE_DIR / "generated_quotes"
-GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 # Jinja2 env points at templates/ root so base.html inheritance resolves
 jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_ROOT)))
 
 
-async def render_homeowners_pdf(output_path: Path, data: dict):
-    """Render the homeowners HTML template with data and convert to PDF."""
+async def render_homeowners_pdf(data: dict) -> bytes:
+    """Render the homeowners HTML template with data and return PDF bytes."""
     template = jinja_env.get_template("homeowners/homeowners_quote.html")
 
     context = {
@@ -57,7 +56,7 @@ async def render_homeowners_pdf(output_path: Path, data: dict):
 
     # Write rendered HTML to a temp file in the template directory so
     # Chromium can resolve all relative paths (assets/, fonts/) natively.
-    # Using set_content() loaded from about:blank which blocks file:// URIs.
+    # set_content() loads from about:blank which blocks file:// URIs.
     tmp_html = TEMPLATE_DIR / f"_tmp_render_{uuid4().hex}.html"
     tmp_html.write_text(html_string, encoding="utf-8")
 
@@ -68,27 +67,25 @@ async def render_homeowners_pdf(output_path: Path, data: dict):
         # Wait for all @font-face fonts to finish loading before PDF
         # generation — file:// font loads don't trigger networkidle.
         await page.evaluate("() => document.fonts.ready")
-        await page.pdf(
-            path=str(output_path),
+        pdf_bytes = await page.pdf(
             prefer_css_page_size=True,
             print_background=True,
             margin={"top": "0", "right": "0", "bottom": "0", "left": "0"},
         )
     finally:
         await page.close()
-        # Clean up the temp HTML file
         tmp_html.unlink(missing_ok=True)
 
-    # Re-distill through Ghostscript to flatten Chromium's internal layers
-    optimize_pdf(output_path)
+    return optimize_pdf_bytes(pdf_bytes)
 
 
 @router.post("/api/generate-homeowners-quote")
-async def generate_homeowners_quote(payload: dict):
+async def generate_homeowners_quote(
+    payload: dict,
+    user: dict = Depends(get_current_user),
+):
     try:
-        output_path = GENERATED_DIR / f"homeowners_quote_{uuid4().hex}.pdf"
-
-        await render_homeowners_pdf(output_path=output_path, data=payload)
+        pdf_bytes = await render_homeowners_pdf(payload)
 
         client_name = str(payload.get("client_name", "")).strip()
         download_name = build_pdf_filename(
@@ -97,21 +94,24 @@ async def generate_homeowners_quote(payload: dict):
             total_premium=payload.get("total_premium", ""),
         )
 
-        # Store generated PDF in database
         try:
             await store_generated_pdf(
-                pdf_path=output_path,
+                pdf_path=pdf_bytes,
                 file_name=download_name,
                 insurance_type="homeowners",
                 client_name=client_name,
+                user_id=user.get("user_id", ""),
+                user_name=user_name_for_attribution(user),
             )
         except Exception:
             pass
 
-        return FileResponse(
-            path=output_path,
+        return Response(
+            content=pdf_bytes,
             media_type="application/pdf",
-            filename=download_name,
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_name}"',
+            },
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

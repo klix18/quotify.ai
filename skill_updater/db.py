@@ -100,12 +100,20 @@ async def close_pool() -> None:
 
 
 async def init_schema() -> None:
-    """Apply migrations/001_skill_updater.sql. Idempotent."""
+    """Apply every ``migrations/*.sql`` file in lexicographic order.
+
+    All migrations are idempotent (``CREATE TABLE IF NOT EXISTS`` /
+    ``ADD COLUMN IF NOT EXISTS``), so the user can re-click the
+    "Initialize / migrate DB schema" button safely. Adding a new
+    migration is just a matter of dropping a new file in the folder
+    with a higher numeric prefix (``003_*.sql``, ``004_*.sql``, …).
+    """
     pool = await get_pool()
-    sql_path = Path(__file__).resolve().parent / "migrations" / "001_skill_updater.sql"
-    sql = sql_path.read_text()
+    migrations_dir = Path(__file__).resolve().parent / "migrations"
+    files = sorted(p for p in migrations_dir.glob("*.sql") if p.is_file())
     async with pool.acquire() as conn:
-        await conn.execute(sql)
+        for sql_path in files:
+            await conn.execute(sql_path.read_text())
 
 
 # ── Read: events to analyze ───────────────────────────────────────────
@@ -132,7 +140,8 @@ async def list_unanalyzed_events(
     params.append(limit)
     query = f"""
         SELECT e.id, e.created_at, e.insurance_type, e.manually_changed_fields,
-               e.uploaded_pdf, e.generated_pdf, e.client_name, e.skill_version
+               e.uploaded_pdf, e.generated_pdf, e.client_name, e.skill_version,
+               COALESCE(e.system_design, '') AS system_design
         FROM analytics_events e
         LEFT JOIN skill_event_analysis sea ON sea.event_id = e.id
         WHERE {where_sql}
@@ -160,6 +169,37 @@ async def count_unanalyzed_events(insurance_types: Optional[list[str]] = None) -
     """
     async with pool.acquire() as conn:
         return await conn.fetchval(query, *params)
+
+
+async def count_unanalyzed_by_design(
+    insurance_types: Optional[list[str]] = None,
+) -> dict[str, int]:
+    """Return ``{system_design: count}`` for unanalyzed events.
+
+    The empty string ``""`` key represents events whose
+    ``system_design`` was not recorded (pre-migration rows or stale
+    frontend writes). The skill_updater UI uses this to surface a
+    "skipped" banner to the user.
+    """
+    pool = await get_pool()
+    where = ["e.manually_changed_fields <> ''", "e.created_quote = TRUE"]
+    params: list[Any] = []
+    if insurance_types:
+        where.append(f"e.insurance_type = ANY(${len(params) + 1})")
+        params.append(insurance_types)
+    where_sql = " AND ".join(where)
+    query = f"""
+        SELECT COALESCE(e.system_design, '') AS system_design,
+               COUNT(*) AS n
+        FROM analytics_events e
+        LEFT JOIN skill_event_analysis sea ON sea.event_id = e.id
+        WHERE {where_sql} AND sea.event_id IS NULL
+        GROUP BY COALESCE(e.system_design, '')
+        ORDER BY n DESC
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, *params)
+    return {r["system_design"]: int(r["n"]) for r in rows}
 
 
 # ── Read: PDFs by filename ────────────────────────────────────────────

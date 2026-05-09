@@ -4,3 +4,7 @@ google-genai==1.68.0
 openai>=1.50.0
 python-dotenv>=1.0.0
 pydantic>=2.6.0
+# Pinned to the same version the backend uses (backend/requirements.txt).
+# Used by skill_updater/_fitz_fastpath.py to extract original-PDF text on
+# the Design 3 analyzer path.
+pymupdf==1.27.2.3

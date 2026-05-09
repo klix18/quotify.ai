@@ -15,7 +15,7 @@ router = APIRouter(tags=["tracking"])
 
 class TrackEventRequest(BaseModel):
     user_name: str
-    insurance_type: str
+    insurance_type: str = ""
     advisor: str = ""
     uploaded_pdf: str = ""
     manually_changed_fields: str = ""  # comma-separated field names
@@ -23,6 +23,20 @@ class TrackEventRequest(BaseModel):
     generated_pdf: str = ""
     client_name: str = ""
     skill_version: str = ""            # from parse result, e.g. "1.2"
+    # See `core.database.log_event` for the canonical set of actions.
+    # Defaults to "parse" so existing trackEvent callers don't change behavior.
+    action: str = "parse"
+    # Parser orchestration version that produced this event. Mirrors
+    # `SYSTEM_DESIGN_VERSION` in frontend/src/lib/devMetrics.js. The
+    # skill_updater reads this to pick which analyzer to run.
+    system_design: str = ""
+
+
+_ALLOWED_ACTIONS = {
+    "parse", "generate", "download",
+    "delete", "delete_all",
+    "login", "logout",
+}
 
 
 @router.post("/api/track-event")
@@ -46,6 +60,13 @@ async def track_event(
             detail="JWT missing sub claim — cannot attribute event to a user",
         )
 
+    action = (payload.action or "parse").strip()
+    if action not in _ALLOWED_ACTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown action '{action}'. Allowed: {sorted(_ALLOWED_ACTIONS)}",
+        )
+
     await log_event(
         user_id=user_id,
         user_name=payload.user_name,
@@ -57,5 +78,7 @@ async def track_event(
         generated_pdf=payload.generated_pdf,
         client_name=payload.client_name,
         skill_version=payload.skill_version,
+        action=action,
+        system_design=payload.system_design,
     )
     return {"status": "ok", "user_id": user_id}

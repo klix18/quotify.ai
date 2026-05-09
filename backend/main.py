@@ -21,6 +21,7 @@ from api.pdf_storage_api import router as pdf_storage_router
 from api.clerk_users_api import router as clerk_users_router
 from api.chat_api import router as chat_router
 from services.report_generator import router as report_router
+from services.why_selected_generator import router as why_selected_router
 
 from api.settings_api import router as settings_router
 from api.dev_metrics_api import router as dev_metrics_router
@@ -64,8 +65,16 @@ app.add_middleware(
         "https://www.sizemoresnapshot.ai",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Explicit method + header lists. Wildcards combined with credentials
+    # widen the CSRF surface unnecessarily — list only what we use.
+    # If a new endpoint needs an additional verb or custom header, add it
+    # here rather than reverting to "*".
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Dev-Metrics-Key",
+    ],
     expose_headers=["Content-Disposition"],
 )
 
@@ -94,6 +103,7 @@ app.include_router(clerk_users_router)
 # Chat & reports
 app.include_router(chat_router)
 app.include_router(report_router)
+app.include_router(why_selected_router)
 
 # Settings
 app.include_router(settings_router)
