@@ -76,12 +76,11 @@ from pathlib import Path
 from typing import Iterator
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from google import genai
 from google.genai import types
 
-from core.auth import get_current_user, user_name_for_attribution
 from parsers._fitz_fastpath import (
     build_text_payload,
     describe_text,
@@ -907,7 +906,6 @@ async def parse_quote(
     file: UploadFile = File(...),
     wind_file: UploadFile | None = File(None),
     secondary_file: UploadFile | None = File(None),
-    user: dict = Depends(get_current_user),
 ):
     """
     Unified insurance quote parser.
@@ -943,11 +941,6 @@ async def parse_quote(
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Resolve attribution from the verified JWT — never trust client-supplied
-    # names. The /api/track-event endpoint enforces the same invariant.
-    attr_user_id = user.get("user_id") or ""
-    attr_user_name = user_name_for_attribution(user)
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         content = await file.read()
         tmp.write(content)
@@ -961,8 +954,6 @@ async def parse_quote(
             file_data=content,
             file_name=file.filename or "upload.pdf",
             insurance_type=insurance_type,
-            user_id=attr_user_id,
-            user_name=attr_user_name,
         )
     except Exception:
         pass
@@ -984,8 +975,6 @@ async def parse_quote(
                 file_data=wind_content,
                 file_name=wind_file.filename or "wind.pdf",
                 insurance_type=insurance_type,
-                user_id=attr_user_id,
-                user_name=attr_user_name,
             )
         except Exception:
             pass
@@ -1005,8 +994,6 @@ async def parse_quote(
                 file_data=secondary_content,
                 file_name=secondary_file.filename or "secondary.pdf",
                 insurance_type=insurance_type,
-                user_id=attr_user_id,
-                user_name=attr_user_name,
             )
         except Exception:
             pass

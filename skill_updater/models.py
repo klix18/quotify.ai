@@ -72,10 +72,6 @@ class EventRow(BaseModel):
     generated_pdf: str
     client_name: str
     skill_version: str = ""
-    # Parser orchestration version that produced this event. Empty for
-    # rows written before the column existed (skill_updater treats those
-    # as "design unknown" and skips them).
-    system_design: str = ""
 
     @property
     def changed_code_names(self) -> list[str]:

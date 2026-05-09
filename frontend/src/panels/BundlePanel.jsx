@@ -35,7 +35,6 @@ export default function BundlePanel({
   SmallGhostButton,
   EmptyHint,
   COLORS,
-  whySelectedActions = null,
 }) {
   /* ── helpers ───────────────────────────────────────────────────── */
   const fp = (path) => ({
@@ -116,7 +115,6 @@ export default function BundlePanel({
             rows={4}
             {...fp("why_selected")}
           />
-          {whySelectedActions}
         </div>
       </div>
     </SectionCard>
