@@ -32,6 +32,7 @@ export default function AutoPanel({
   SmallGhostButton,
   EmptyHint,
   COLORS,
+  whySelectedActions = null,
 }) {
   /* ── helpers for field status props ─────────────────────────── */
   const fp = (path) => ({
@@ -81,6 +82,7 @@ export default function AutoPanel({
             rows={4}
             {...fp("why_selected")}
           />
+          {whySelectedActions}
         </div>
       </div>
     </SectionCard>
