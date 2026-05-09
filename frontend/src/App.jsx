@@ -4,7 +4,6 @@ import {
   SignedOut,
   SignInButton,
   UserButton,
-  useAuth,
   useUser,
 } from "@clerk/clerk-react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
@@ -12,7 +11,6 @@ import COLORS from "./lib/colors";
 import QuotifyHome from "./pages/QuotifyHome";
 import AdminDashboard from "./pages/AdminDashboard";
 import ChatMemoryPage from "./pages/ChatMemoryPage";
-import { trackLogin } from "./lib/trackEvent";
 
 function SignInPage() {
   const mainRef = React.useRef(null);
@@ -346,25 +344,11 @@ function TopNav({ isAdmin }) {
 
 function AuthenticatedApp() {
   const { user } = useUser();
-  const { getToken } = useAuth();
   const navigate = useNavigate();
   const isAdmin = user?.publicMetadata?.role === "admin";
   const userName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "";
   const userEmail = user?.primaryEmailAddress?.emailAddress || "";
   const userImageUrl = user?.imageUrl || "";
-
-  // Audit: emit a "login" event once per page-load when the user is signed
-  // in. The Clerk session may persist across reloads, so this fires per
-  // app-mount, not per Clerk-sign-in event — close enough for an audit
-  // trail of who's been in the tool today. Guard with a ref so React
-  // strict-mode double-invokes don't double-log.
-  const loginLoggedRef = React.useRef(false);
-  React.useEffect(() => {
-    if (loginLoggedRef.current) return;
-    if (!user || !userName) return;
-    loginLoggedRef.current = true;
-    trackLogin({ userName, getToken }).catch(() => {});
-  }, [user, userName, getToken]);
 
   return (
     <>

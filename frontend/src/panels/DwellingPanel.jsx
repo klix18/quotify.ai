@@ -32,7 +32,6 @@ export default function DwellingPanel({
   SmallGhostButton,
   EmptyHint,
   COLORS,
-  whySelectedActions = null,
 }) {
   /* ── helpers ─────────────────────────────────────────────────── */
   const fp = (path) => ({
@@ -75,7 +74,6 @@ export default function DwellingPanel({
             rows={4}
             {...fp("why_selected")}
           />
-          {whySelectedActions}
         </div>
       </div>
     </SectionCard>

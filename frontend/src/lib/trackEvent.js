@@ -23,7 +23,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000
  */
 export async function trackEvent({
   userName,
-  insuranceType = "",
+  insuranceType,
   advisor = "",
   uploadedPdf = "",
   manuallyChangedFields = "",
@@ -31,12 +31,6 @@ export async function trackEvent({
   generatedPdf = "",
   clientName = "",
   skillVersion = "",
-  action = "parse",
-  // Parser orchestration version this event was produced under. Mirrors
-  // SYSTEM_DESIGN_VERSION in lib/devMetrics.js. Skill_updater reads this
-  // to pick the correct analyzer (vision vs fitz text-vs-text). Pass "" if
-  // the event isn't tied to a parse (login/logout/download/delete).
-  systemDesign = "",
   getToken,
 }) {
   try {
@@ -44,7 +38,7 @@ export async function trackEvent({
     if (!token) {
       console.error("[trackEvent] no Clerk token — event NOT recorded", {
         userName,
-        action,
+        insuranceType,
       });
       return false;
     }
@@ -69,8 +63,6 @@ export async function trackEvent({
         generated_pdf: generatedPdf,
         client_name: clientName,
         skill_version: skillVersion,
-        action,
-        system_design: systemDesign,
       }),
     });
 
@@ -93,21 +85,6 @@ export async function trackEvent({
     });
     return false;
   }
-}
-
-/**
- * Convenience wrapper — fire a "login" audit event.
- * Used by App.jsx once when the authenticated app mounts.
- */
-export async function trackLogin({ userName, getToken }) {
-  return trackEvent({ userName, action: "login", getToken });
-}
-
-/**
- * Convenience wrapper — fire a "logout" audit event.
- */
-export async function trackLogout({ userName, getToken }) {
-  return trackEvent({ userName, action: "logout", getToken });
 }
 
 /**

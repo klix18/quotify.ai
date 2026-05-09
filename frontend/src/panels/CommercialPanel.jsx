@@ -34,7 +34,6 @@ export default function CommercialPanel({
   windParsing,
   windParseStatus,
   windFileName,
-  whySelectedActions = null,
 }) {
   /* ── helpers ─────────────────────────────────────────────────── */
   const fp = (path) => ({
@@ -109,7 +108,6 @@ export default function CommercialPanel({
             rows={4}
             {...fp("why_selected")}
           />
-          {whySelectedActions}
         </div>
       </div>
     </SectionCard>

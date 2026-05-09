@@ -6,7 +6,6 @@ import {
   startParseTimer,
   logParseComplete,
   logQuoteGenerated,
-  SYSTEM_DESIGN_VERSION,
 } from "../lib/devMetrics";
 import { INSURANCE_OPTIONS } from "../configs/insuranceOptions";
 import {
@@ -107,14 +106,6 @@ export default function QuotifyHome({ isAdmin }) {
   const generateBtnRef = React.useRef(null);
   const [errorMessage, setErrorMessage] = React.useState("");
   const [parseStatus, setParseStatus] = React.useState("");
-
-  // Why-selected regeneration state. Tracks pending-state and last error
-  // per insurance type so each panel's button can show its own spinner /
-  // error without bleeding across types.
-  const [whySelectedRegen, setWhySelectedRegen] = React.useState({
-    isPending: false,
-    error: "",
-  });
 
   // Track viewport width so we can shrink the left sidebar on smaller
   // screens (non-MacBook-Pro laptops), giving the right panel more room
@@ -556,11 +547,9 @@ export default function QuotifyHome({ isAdmin }) {
       body.append("file", file);
       if (windFile) body.append("wind_file", windFile);
 
-      const token = await getToken();
       const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=homeowners`, {
         method: "POST",
         body,
-        headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
 
@@ -786,11 +775,9 @@ export default function QuotifyHome({ isAdmin }) {
       const body = new FormData();
       body.append("file", file);
 
-      const token = await getToken();
       const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=auto`, {
         method: "POST",
         body,
-        headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
 
@@ -1034,11 +1021,9 @@ export default function QuotifyHome({ isAdmin }) {
       body.append("file", file);
       if (windFile) body.append("wind_file", windFile);
 
-      const token = await getToken();
       const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=dwelling`, {
         method: "POST",
         body,
-        headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
 
@@ -1316,11 +1301,9 @@ export default function QuotifyHome({ isAdmin }) {
       if (fileArr[0]) body.append("file", fileArr[0]);
       if (fileArr[1]) body.append("secondary_file", fileArr[1]);
 
-      const token = await getToken();
       const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=bundle`, {
         method: "POST",
         body,
-        headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
 
@@ -1471,11 +1454,9 @@ export default function QuotifyHome({ isAdmin }) {
       const body = new FormData();
       body.append("file", file);
 
-      const token = await getToken();
       const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=commercial`, {
         method: "POST",
         body,
-        headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
 
@@ -1585,11 +1566,9 @@ export default function QuotifyHome({ isAdmin }) {
       const body = new FormData();
       body.append("file", file);
 
-      const token = await getToken();
       const response = await fetch(`${API_BASE_URL}/api/parse-quote?insurance_type=wind`, {
         method: "POST",
         body,
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!response.ok) {
@@ -1661,70 +1640,6 @@ export default function QuotifyHome({ isAdmin }) {
     }
   };
 
-  /**
-   * Regenerate the "Why this plan was selected" bullets for the current
-   * form without re-uploading the PDF. Used as a recovery path when the
-   * initial generation fails silently (transient Gemini hiccup, malformed
-   * JSON, etc.) — see backend/services/why_selected_generator.py.
-   *
-   * Posts the current form payload to /api/regenerate-why-selected, then
-   * splices the returned bullets into the matching form's `why_selected`
-   * field on success. On failure, surfaces the error to errorMessage so
-   * the advisor sees something rather than wondering why nothing happened.
-   */
-  const regenerateWhySelected = async () => {
-    if (whySelectedRegen.isPending) return;
-    setWhySelectedRegen({ isPending: true, error: "" });
-    setErrorMessage("");
-
-    const formMap = {
-      homeowners: { form: homeownersForm, set: setHomeownersForm },
-      auto: { form: autoForm, set: setAutoForm },
-      dwelling: { form: dwellingForm, set: setDwellingForm },
-      bundle: { form: bundleForm, set: setBundleForm },
-      commercial: { form: commercialForm, set: setCommercialForm },
-    };
-    const target = formMap[selectedInsurance];
-    if (!target) {
-      setWhySelectedRegen({ isPending: false, error: "Unsupported insurance type." });
-      return;
-    }
-
-    try {
-      const token = await getToken();
-      const resp = await fetch(`${API_BASE_URL}/api/regenerate-why-selected`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          insurance_type: selectedInsurance,
-          data: target.form,
-        }),
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text().catch(() => "");
-        throw new Error(`Server error (${resp.status}): ${errText.slice(0, 200)}`);
-      }
-
-      const json = await resp.json();
-      if (json.why_selected) {
-        target.set((prev) => ({ ...prev, why_selected: json.why_selected }));
-        setWhySelectedRegen({ isPending: false, error: "" });
-      } else {
-        const reason = json.error || "AI returned no bullets. Please try again.";
-        setWhySelectedRegen({ isPending: false, error: reason });
-      }
-    } catch (err) {
-      setWhySelectedRegen({
-        isPending: false,
-        error: err?.message || "Regeneration failed — please try again.",
-      });
-    }
-  };
-
   const generateAndDownloadQuote = async () => {
     setErrorMessage("");
     setIsGenerating(true);
@@ -1751,12 +1666,10 @@ export default function QuotifyHome({ isAdmin }) {
       };
       const payload = payloadMap[selectedInsurance] || homeownersForm;
 
-      const token = await getToken();
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -1826,11 +1739,6 @@ export default function QuotifyHome({ isAdmin }) {
         generatedPdf: outFileName,
         clientName,
         skillVersion: lastSkillVersion,
-        action: "generate",
-        // Tag the row with the parser orchestration version so the
-        // skill_updater can dispatch to the correct analyzer (vision vs
-        // fitz text-vs-text) when this event is later analyzed.
-        systemDesign: SYSTEM_DESIGN_VERSION,
         getToken,
       });
 
@@ -3193,14 +3101,6 @@ export default function QuotifyHome({ isAdmin }) {
                 confidenceMap={homeownersConfidence}
                 FieldControl={FieldControl}
                 SectionCard={SectionCard}
-                whySelectedActions={
-                  <WhySelectedActions
-                    onRegenerate={regenerateWhySelected}
-                    isPending={whySelectedRegen.isPending}
-                    error={whySelectedRegen.error}
-                    isEmpty={!homeownersForm.why_selected}
-                  />
-                }
               />
             ) : selectedInsurance === "auto" ? (
               <AutoPanel
@@ -3224,14 +3124,6 @@ export default function QuotifyHome({ isAdmin }) {
                 SmallGhostButton={SmallGhostButton}
                 EmptyHint={EmptyHint}
                 COLORS={COLORS}
-                whySelectedActions={
-                  <WhySelectedActions
-                    onRegenerate={regenerateWhySelected}
-                    isPending={whySelectedRegen.isPending}
-                    error={whySelectedRegen.error}
-                    isEmpty={!autoForm.why_selected}
-                  />
-                }
               />
             ) : selectedInsurance === "dwelling" ? (
               <DwellingPanel
@@ -3253,14 +3145,6 @@ export default function QuotifyHome({ isAdmin }) {
                 SmallGhostButton={SmallGhostButton}
                 EmptyHint={EmptyHint}
                 COLORS={COLORS}
-                whySelectedActions={
-                  <WhySelectedActions
-                    onRegenerate={regenerateWhySelected}
-                    isPending={whySelectedRegen.isPending}
-                    error={whySelectedRegen.error}
-                    isEmpty={!dwellingForm.why_selected}
-                  />
-                }
               />
             ) : selectedInsurance === "commercial" ? (
               <CommercialPanel
@@ -3284,14 +3168,6 @@ export default function QuotifyHome({ isAdmin }) {
                 windParsing={windParsing}
                 windParseStatus={windParseStatus}
                 windFileName={windFileName}
-                whySelectedActions={
-                  <WhySelectedActions
-                    onRegenerate={regenerateWhySelected}
-                    isPending={whySelectedRegen.isPending}
-                    error={whySelectedRegen.error}
-                    isEmpty={!commercialForm.why_selected}
-                  />
-                }
               />
             ) : selectedInsurance === "bundle" ? (
               <BundlePanel
@@ -3315,14 +3191,6 @@ export default function QuotifyHome({ isAdmin }) {
                 SmallGhostButton={SmallGhostButton}
                 EmptyHint={EmptyHint}
                 COLORS={COLORS}
-                whySelectedActions={
-                  <WhySelectedActions
-                    onRegenerate={regenerateWhySelected}
-                    isPending={whySelectedRegen.isPending}
-                    error={whySelectedRegen.error}
-                    isEmpty={!bundleForm.why_selected}
-                  />
-                }
               />
             ) : (
               <UnavailablePanel label={selectedInsurance} />
@@ -3330,69 +3198,6 @@ export default function QuotifyHome({ isAdmin }) {
           </div>
         </main>
       </div>
-    </div>
-  );
-}
-
-/**
- * Inline action row rendered just under the "Why This Plan Was Selected"
- * field on every per-type panel. Lets the advisor regenerate the bullets
- * if the AI returned nothing (transient Gemini failure, schema parse
- * error, etc.) without re-uploading the PDF.
- *
- * Empty state is the most common need — the button is always visible but
- * gets a slightly different label when the field is empty so the user
- * knows it's a recovery action.
- */
-function WhySelectedActions({ onRegenerate, isPending, error, isEmpty }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        marginTop: 6,
-        flexWrap: "wrap",
-      }}
-    >
-      <button
-        type="button"
-        onClick={onRegenerate}
-        disabled={isPending}
-        style={{
-          background: "none",
-          border: `1px solid ${COLORS.blueBorder}`,
-          color: COLORS.blue,
-          borderRadius: 8,
-          height: 28,
-          padding: "0 12px",
-          fontSize: 12,
-          fontWeight: 500,
-          fontFamily: "Poppins, sans-serif",
-          cursor: isPending ? "wait" : "pointer",
-          opacity: isPending ? 0.6 : 1,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-        }}
-      >
-        {isPending
-          ? "Regenerating…"
-          : isEmpty
-          ? "✨ Generate"
-          : "🔄 Regenerate"}
-      </button>
-      {error && (
-        <span
-          style={{
-            fontSize: 11,
-            color: "#a32424",
-            fontFamily: "Poppins, sans-serif",
-          }}
-        >
-          {error}
-        </span>
-      )}
     </div>
   );
 }

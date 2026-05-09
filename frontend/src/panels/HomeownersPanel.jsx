@@ -15,7 +15,6 @@ export default function HomeownersPanel({
   confidenceMap,
   FieldControl,
   SectionCard,
-  whySelectedActions = null,
 }) {
   /* ── helpers ───────────────────────────────────────────────────── */
   const renderRow = (row) => (
@@ -86,7 +85,6 @@ export default function HomeownersPanel({
             isManuallyEdited={manuallyEditedFields["why_selected"]}
             confidence={confidenceMap?.["why_selected"] ?? null}
           />
-          {whySelectedActions}
         </div>
       </SectionCard>
 

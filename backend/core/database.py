@@ -52,30 +52,21 @@ async def init_db():
                 created_quote           BOOLEAN NOT NULL DEFAULT FALSE,
                 generated_pdf           TEXT NOT NULL DEFAULT '',
                 client_name             TEXT NOT NULL DEFAULT '',
-                skill_version           TEXT NOT NULL DEFAULT '',
-                action                  TEXT NOT NULL DEFAULT 'parse',
-                system_design           TEXT NOT NULL DEFAULT ''
+                skill_version           TEXT NOT NULL DEFAULT ''
             );
 
-            -- Ensure client_name, user_id, skill_version, action, and system_design
-            -- exist on pre-existing databases.
+            -- Ensure client_name, user_id, and skill_version exist on pre-existing databases
             ALTER TABLE analytics_events
                 ADD COLUMN IF NOT EXISTS client_name TEXT NOT NULL DEFAULT '';
             ALTER TABLE analytics_events
                 ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
             ALTER TABLE analytics_events
                 ADD COLUMN IF NOT EXISTS skill_version TEXT NOT NULL DEFAULT '';
-            ALTER TABLE analytics_events
-                ADD COLUMN IF NOT EXISTS action TEXT NOT NULL DEFAULT 'parse';
-            ALTER TABLE analytics_events
-                ADD COLUMN IF NOT EXISTS system_design TEXT NOT NULL DEFAULT '';
 
             CREATE INDEX IF NOT EXISTS idx_events_created_at ON analytics_events (created_at);
             CREATE INDEX IF NOT EXISTS idx_events_user_name ON analytics_events (user_name);
             CREATE INDEX IF NOT EXISTS idx_events_user_id ON analytics_events (user_id);
             CREATE INDEX IF NOT EXISTS idx_events_insurance_type ON analytics_events (insurance_type);
-            CREATE INDEX IF NOT EXISTS idx_events_action ON analytics_events (action);
-            CREATE INDEX IF NOT EXISTS idx_events_system_design ON analytics_events (system_design);
 
             -- PDF document storage
             CREATE TABLE IF NOT EXISTS pdf_documents (
@@ -287,30 +278,8 @@ async def log_event(
     generated_pdf: str = "",
     client_name: str = "",
     skill_version: str = "",
-    action: str = "parse",
-    system_design: str = "",
 ):
-    """Insert an analytics event row.
-
-    ``action`` describes what kind of event this row represents:
-      - ``parse``       — a PDF was extracted (default; matches legacy semantics)
-      - ``generate``    — a quote PDF was generated and downloaded
-      - ``download``    — an existing stored PDF was downloaded
-      - ``delete``      — a single stored PDF was deleted
-      - ``delete_all``  — all stored PDFs were bulk-deleted
-      - ``login``       — a user signed in
-      - ``logout``      — a user signed out
-
-    ``system_design`` records the parser orchestration version that
-    produced this event (e.g. ``"fitz-fastpath-2026-04-30"``). Set by
-    the frontend via ``SYSTEM_DESIGN_VERSION`` in
-    ``frontend/src/lib/devMetrics.js``. Skill-updater uses it to
-    dispatch to the correct analyzer (vision-based for older designs,
-    text-vs-text for the fitz fast-path).
-
-    Older callers that don't pass ``action`` / ``system_design`` get
-    sensible defaults so pre-existing analytics queries keep working.
-    """
+    """Insert an analytics event row."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
@@ -318,8 +287,8 @@ async def log_event(
             INSERT INTO analytics_events
                 (user_id, user_name, insurance_type, advisor, uploaded_pdf,
                  manually_changed_fields, created_quote, generated_pdf,
-                 client_name, skill_version, action, system_design)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 client_name, skill_version)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             """,
             user_id,
             user_name,
@@ -331,8 +300,6 @@ async def log_event(
             generated_pdf,
             client_name,
             skill_version,
-            action,
-            system_design,
         )
 
 

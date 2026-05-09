@@ -64,7 +64,6 @@ def section_run() -> None:
     # Quick stats
     try:
         total_unanalyzed = run_async(db.count_unanalyzed_events())
-        by_design = run_async(db.count_unanalyzed_by_design())
     except Exception as e:
         st.error(f"Could not connect to Postgres: {e}")
         st.info("Set DATABASE_URL in skill_updater/.env or copy backend/.env in.")
@@ -80,32 +79,6 @@ def section_run() -> None:
             options=available_types,
             default=[],
         )
-
-    # Design breakdown — shows which analyzer path each event will take.
-    # Events with empty `system_design` are SKIPPED (they're old rows
-    # written before the column existed; we can't safely guess the
-    # analyzer path).
-    if by_design:
-        design_lines: list[str] = []
-        skipped_unknown = 0
-        for design, n in by_design.items():
-            if not design:
-                skipped_unknown = n
-                continue
-            if design == pipeline.DESIGN_3_FITZ:
-                label = f"Design 3 (fitz text-vs-text) — {design}"
-            else:
-                label = f"Design 2 (vision) — {design}"
-            design_lines.append(f"  · {n} × {label}")
-        if design_lines:
-            st.caption("**Will analyze:**\n" + "\n".join(design_lines))
-        if skipped_unknown:
-            st.warning(
-                f"⚠️ {skipped_unknown} event(s) have no `system_design` recorded "
-                "(pre-migration rows or stale frontend writes). They will be "
-                "**skipped** with `outcome='design_unknown'` so the run doesn't "
-                "guess the analyzer path. Re-analyze them manually later if needed."
-            )
 
     limit = st.slider("Max events this run", 1, 200, 50)
 
@@ -335,96 +308,7 @@ def section_proposals() -> None:
                         st.exception(e)
 
 
-# ── Section 3 — compare two skill versions ────────────────────────────
-
-
-def _extract_version(skill_md: str) -> str:
-    """Pull the ``> VERSION: X.Y`` value out of a SKILL.md body."""
-    import re as _re
-    m = _re.search(r"(?m)^>\s*VERSION:\s*(\S+)", skill_md or "")
-    return m.group(1) if m else "?"
-
-
-def section_compare() -> None:
-    """Side-by-side comparison of two SKILL.md versions for an insurance
-    type. Use this to see what changed between two history snapshots, or
-    between a snapshot and the current on-disk SKILL.md."""
-    st.header("Compare versions")
-    available_types = skill_io.available_insurance_types()
-    if not available_types:
-        st.caption("No SKILL.md files found.")
-        return
-
-    itype = st.selectbox(
-        "Insurance type",
-        options=available_types,
-        key="compare_itype",
-    )
-
-    try:
-        type_history = run_async(db.list_history(insurance_type=itype, limit=50))
-    except Exception as e:
-        st.error(f"Failed to load history for {itype}: {e}")
-        return
-
-    # Build the list of pickable versions: current on-disk + every snapshot.
-    try:
-        current_text = skill_io.read_skill(itype)
-    except FileNotFoundError:
-        current_text = ""
-
-    # Each option: a label string + the underlying body. Order: current first,
-    # then snapshots newest-first.
-    options: list[dict] = []
-    if current_text:
-        options.append({
-            "label": f"current on-disk · v{_extract_version(current_text)}",
-            "text": current_text,
-        })
-    for h in type_history:
-        options.append({
-            "label": (
-                f"{h['captured_at']:%Y-%m-%d %H:%M} · v{_extract_version(h['skill_md'])} · "
-                f"{h['reason']} · #{h['id']}"
-            ),
-            "text": h["skill_md"] or "",
-        })
-
-    if len(options) < 2:
-        st.caption("Need at least two versions to compare. Apply a proposal to start building history.")
-        return
-
-    labels = [o["label"] for o in options]
-    col_a, col_b = st.columns(2)
-    with col_a:
-        a_idx = st.selectbox(
-            "Version A (older / baseline)",
-            options=list(range(len(labels))),
-            format_func=lambda i: labels[i],
-            index=min(1, len(labels) - 1),
-            key="compare_a",
-        )
-    with col_b:
-        b_idx = st.selectbox(
-            "Version B (newer / candidate)",
-            options=list(range(len(labels))),
-            format_func=lambda i: labels[i],
-            index=0,
-            key="compare_b",
-        )
-
-    if a_idx == b_idx:
-        st.info("Pick two different versions to see a diff.")
-        return
-
-    a_text = options[a_idx]["text"]
-    b_text = options[b_idx]["text"]
-
-    st.caption(f"Showing **{labels[a_idx]}** → **{labels[b_idx]}**")
-    _render_diff(a_text, b_text, label="version-compare")
-
-
-# ── Section 4 — history ───────────────────────────────────────────────
+# ── Section 3 — history ───────────────────────────────────────────────
 
 
 def section_history() -> None:
@@ -440,25 +324,17 @@ def section_history() -> None:
         return
 
     for h in hist:
-        version_str = _extract_version(h["skill_md"])
         with st.expander(
             f"{h['captured_at']:%Y-%m-%d %H:%M}  ·  {h['insurance_type']}  ·  "
-            f"v{version_str}  ·  reason={h['reason']}  ·  proposal_id={h['proposal_id']}"
+            f"reason={h['reason']}  ·  proposal_id={h['proposal_id']}"
         ):
             st.code(h["skill_md"], language="markdown")
-            # Rollback writes the historical content back with a freshly
-            # bumped VERSION (see pipeline.restore_history) so the cache
-            # invalidates and history stays monotonic.
-            if st.button(f"Rollback to this version", key=f"restore_{h['id']}"):
+            if st.button(f"Restore this version", key=f"restore_{h['id']}"):
                 try:
                     run_async(
                         pipeline.restore_history(h["insurance_type"], h["skill_md"])
                     )
-                    st.success(
-                        f"Restored parse_{h['insurance_type']}/SKILL.md to this content "
-                        f"(VERSION auto-bumped from current)."
-                    )
-                    st.rerun()
+                    st.success(f"Restored parse_{h['insurance_type']}/SKILL.md to this version.")
                 except Exception as e:
                     st.exception(e)
 
@@ -480,7 +356,5 @@ with st.sidebar:
 section_run()
 st.divider()
 section_proposals()
-st.divider()
-section_compare()
 st.divider()
 section_history()

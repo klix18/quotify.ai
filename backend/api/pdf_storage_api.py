@@ -1,16 +1,12 @@
 """
 API endpoints for listing, downloading, and deleting stored PDF documents.
 Requires authentication via Clerk JWT.
-
-All download / delete actions are logged to ``analytics_events`` with the
-appropriate ``action`` value so the admin dashboard has an audit trail
-of who pulled or removed which PDF.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
-from core.auth import get_current_user, require_admin, user_name_for_attribution
+from core.auth import get_current_user, require_admin
 from core.database import (
     get_pdf,
     list_pdfs,
@@ -18,7 +14,6 @@ from core.database import (
     delete_all_pdfs,
     get_pdf_filenames,
     get_pdf_stats,
-    log_event,
 )
 
 router = APIRouter(prefix="/api/pdfs", tags=["pdf-storage"])
@@ -89,21 +84,10 @@ async def list_filenames(
 
 @router.delete("/all")
 async def clear_all_documents(
-    admin: dict = Depends(require_admin),
+    _admin: dict = Depends(require_admin),
 ):
     """Delete ALL stored PDFs (admin only)."""
     count = await delete_all_pdfs()
-    # Audit row — best-effort, never block the response.
-    try:
-        await log_event(
-            user_id=admin.get("user_id", ""),
-            user_name=user_name_for_attribution(admin),
-            insurance_type="",
-            action="delete_all",
-            generated_pdf=f"count={count}",
-        )
-    except Exception:
-        pass
     return {"status": "deleted", "count": count}
 
 
@@ -113,25 +97,10 @@ async def download_document(
     user: dict = Depends(get_current_user),
 ):
     """Download a stored PDF by its ID. Both admins and advisors can download
-    any PDF (needed for advisor access to the snapshot history). Each
-    download is recorded in ``analytics_events`` so admins can see who
-    pulled which PDF and when."""
+    any PDF (needed for advisor access to the snapshot history)."""
     doc = await get_pdf(doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
-
-    # Audit row — best-effort, never block the download.
-    try:
-        await log_event(
-            user_id=user.get("user_id", ""),
-            user_name=user_name_for_attribution(user),
-            insurance_type=doc.get("insurance_type", ""),
-            client_name=doc.get("client_name", ""),
-            generated_pdf=doc.get("file_name", ""),
-            action="download",
-        )
-    except Exception:
-        pass
 
     return Response(
         content=doc["file_data"],
@@ -145,24 +114,10 @@ async def download_document(
 @router.delete("/{doc_id}")
 async def delete_document(
     doc_id: str,
-    admin: dict = Depends(require_admin),
+    _admin: dict = Depends(require_admin),
 ):
     """Delete a stored PDF (admin only)."""
-    # Capture metadata BEFORE the delete so the audit row carries the
-    # client_name / file_name / insurance_type of what was removed.
-    doc = await get_pdf(doc_id)
     deleted = await delete_pdf(doc_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
-    try:
-        await log_event(
-            user_id=admin.get("user_id", ""),
-            user_name=user_name_for_attribution(admin),
-            insurance_type=(doc or {}).get("insurance_type", ""),
-            client_name=(doc or {}).get("client_name", ""),
-            generated_pdf=(doc or {}).get("file_name", ""),
-            action="delete",
-        )
-    except Exception:
-        pass
     return {"status": "deleted"}
