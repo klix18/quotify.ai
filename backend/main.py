@@ -18,7 +18,7 @@ from fillers.commercial_filler_api import router as commercial_filler_router
 from api.analytics_api import router as analytics_router, self_router as analytics_self_router
 from api.track_api import router as track_router
 from api.pdf_storage_api import router as pdf_storage_router
-from api.clerk_users_api import router as clerk_users_router
+from api.clerk_users_api import router as clerk_users_router, directory_router as clerk_users_directory_router
 from api.chat_api import router as chat_router
 from services.report_generator import router as report_router
 
@@ -59,7 +59,6 @@ app.add_middleware(
         # from the dev_metrics/ folder → http://localhost:8080/viewer.html
         "http://localhost:8080",
         "http://127.0.0.1:8080",
-        "https://the-sizemore-snapshot.vercel.app",
         "https://sizemoresnapshot.ai",
         "https://www.sizemoresnapshot.ai",
     ],
@@ -90,6 +89,10 @@ app.include_router(pdf_storage_router)
 
 # Clerk user management router
 app.include_router(clerk_users_router)
+# Read-only user directory at /api/users/directory — used by the dashboard's
+# Team Leaderboard role lookup so non-admins reliably see admin badges even if
+# anything in the deploy chain restricts /api/admin/*.
+app.include_router(clerk_users_directory_router)
 
 # Chat & reports
 app.include_router(chat_router)

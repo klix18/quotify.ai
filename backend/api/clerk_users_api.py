@@ -14,7 +14,15 @@ from core.auth import get_current_user, require_admin
 
 load_dotenv()
 
+# `router` keeps the historical /api/admin/users path. `directory_router` is a
+# parallel, non-admin path (/api/users/directory) that the dashboard uses for
+# the *read-only* user list. Both share the same handler. The split exists so
+# advisors can reliably load the user-with-roles directory used to identify
+# admins in the Team Leaderboard — any path-based "/api/admin/*" gating in the
+# deploy chain (proxies, edge auth, future middleware) cannot accidentally
+# strip role data for non-admins on this read path.
 router = APIRouter(prefix="/api/admin/users", tags=["clerk-users"])
+directory_router = APIRouter(prefix="/api/users", tags=["clerk-users-directory"])
 
 CLERK_API_BASE = "https://api.clerk.com/v1"
 
@@ -26,13 +34,14 @@ def _clerk_headers() -> dict:
     return {"Authorization": f"Bearer {secret}", "Content-Type": "application/json"}
 
 
-@router.get("")
-async def list_clerk_users(
-    _user: dict = Depends(get_current_user),
-):
-    """List all Clerk users with their roles."""
+async def _fetch_clerk_users() -> list[dict]:
+    """Page through Clerk and return a flat list of users with role info.
+
+    Shared by the admin-pathed and directory-pathed routes so role data stays
+    identical regardless of which endpoint the caller uses.
+    """
     headers = _clerk_headers()
-    users = []
+    users: list[dict] = []
     offset = 0
     limit = 100
 
@@ -62,7 +71,24 @@ async def list_clerk_users(
                 break
             offset += limit
 
-    return {"users": users}
+    return users
+
+
+@router.get("")
+async def list_clerk_users(
+    _user: dict = Depends(get_current_user),
+):
+    """List all Clerk users with their roles (admin-pathed)."""
+    return {"users": await _fetch_clerk_users()}
+
+
+@directory_router.get("/directory")
+async def list_user_directory(
+    _user: dict = Depends(get_current_user),
+):
+    """Read-only user directory with roles. Available to any authenticated user
+    so non-admins can render an Admin badge next to admins in the dashboard."""
+    return {"users": await _fetch_clerk_users()}
 
 
 class UpdateRoleRequest(BaseModel):

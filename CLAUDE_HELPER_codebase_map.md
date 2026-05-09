@@ -19,7 +19,7 @@ quotify-ai/
 │   │   ├── advisor_info_api.py   Reads advisor Excel sheet → /api/advisors
 │   │   ├── analytics_api.py      Admin analytics endpoints (totals, leaderboards, timeline, per-user)
 │   │   ├── chat_api.py           Snappy analytics chatbot SSE endpoint + session + memory management
-│   │   ├── clerk_users_api.py    Admin user role management via Clerk API
+│   │   ├── clerk_users_api.py    Admin user role management via Clerk API; also exposes /api/users/directory (read-only role lookup, advisor-accessible)
 │   │   ├── dev_metrics_api.py    Dev-only parse_metrics endpoints
 │   │   ├── pdf_storage_api.py    List / download / delete stored PDFs (+ /stats for true totals)
 │   │   ├── settings_api.py       Admin auto-clear setting endpoints
@@ -1244,9 +1244,16 @@ trade-offs (latency vs. manual-edit count across different designs).
 - **Viewer** — `dev_metrics/viewer.html` (standalone HTML)
   - Asks for the Railway backend URL + `DEV_METRICS_API_KEY` (persisted
     to localStorage).
-  - Joins parse + quote rows by `parse_id`, renders stats cards,
-    filterable session table, pure-canvas latency chart, and a "Download
-    JSONL" button.
+  - Joins parse + quote rows by `parse_id`. Top of the page shows two
+    side-by-side comparison grids — average parse latency and average
+    non-client manual edits — each laid out as one card per insurance
+    type with one block per design ordinal. Lower is better in both;
+    the row's winner gets the green class. Below that, one section
+    per `system_design` tag with a description textarea, summary
+    table, and raw session table. "Download JSONL" exports raw rows.
+  - Design ordinals are assigned by chronological first-seen and are
+    shared between the comparison grids and the per-design sections,
+    so "Design 1" means the same tag in both places.
 
 - **System design doc** — `dev_metrics/SYSTEM_DESIGN.md`
   - Describes the current LLM orchestration in plain terms. Every

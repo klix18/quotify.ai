@@ -109,16 +109,21 @@ async def get_analytics_summary(
             ORDER BY user_key, count DESC
         """, cutoff)
 
-        # Recent events (detailed log)
+        # Recent events (detailed log).
+        # Bumped from LIMIT 100 to LIMIT 1000 because the dashboard now lets
+        # users scroll the full Snapshot History inside an expanded section
+        # (no more hard 30-row UI cap). Including user_id so the role-badge
+        # lookup in SnapshotHistory can resolve admins via the stable Clerk
+        # id even when display names alias.
         recent_rows = await conn.fetch("""
             SELECT
-                id, created_at, user_name, insurance_type, advisor,
+                id, created_at, user_id, user_name, insurance_type, advisor,
                 uploaded_pdf, manually_changed_fields, created_quote, generated_pdf,
                 client_name
             FROM analytics_events
             WHERE created_at >= $1
             ORDER BY created_at DESC
-            LIMIT 100
+            LIMIT 1000
         """, cutoff)
 
         # Timeline — quotes per bucket, broken down by insurance type.
@@ -174,6 +179,7 @@ async def get_analytics_summary(
             {
                 "id": row["id"],
                 "created_at": row["created_at"].isoformat(),
+                "user_id": row["user_id"] or "",
                 "user_name": row["user_name"],
                 "insurance_type": row["insurance_type"],
                 "advisor": row["advisor"],

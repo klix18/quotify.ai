@@ -1,4 +1,5 @@
 import React from "react";
+import ReactDOM from "react-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 import COLORS, { INSURANCE_COLORS } from "../lib/colors";
@@ -124,11 +125,19 @@ function HoverButton({ children, onClick, disabled, variant = "primary", style: 
 
 /* ── Confirmation Modal ──────────────────────────────────────── */
 function ConfirmModal({ message, onConfirm, onCancel, confirming, confirmLabel = "Delete", confirmingLabel = "Deleting...", confirmVariant = "dangerConfirm" }) {
-  return (
+  // Render via portal to document.body so the fixed-position overlay can't be
+  // trapped inside a parent's stacking context. Several ancestors (GlassPanel
+  // backdrops, the sticky dashboard header, animated orbs, etc.) create their
+  // own stacking contexts via backdrop-filter / will-change / fixed-position
+  // siblings — that meant a zIndex of 9999 only applied within the parent
+  // section, leaving the modal painting BEHIND the top nav and the Snapshot
+  // table header. Portaling escapes all of that in one move.
+  const overlay = (
     <div style={{
-      position: "fixed", inset: 0, zIndex: 9999,
+      position: "fixed", inset: 0, zIndex: 2147483647,
       display: "flex", alignItems: "center", justifyContent: "center",
       background: "rgba(0,0,0,0.25)", backdropFilter: "blur(6px)",
+      WebkitBackdropFilter: "blur(6px)",
     }}>
       <GlassPanel borderRadius={20} style={{ maxWidth: 400, width: "90%" }}>
         <div style={{ padding: "28px 32px", textAlign: "center" }}>
@@ -145,6 +154,8 @@ function ConfirmModal({ message, onConfirm, onCancel, confirming, confirmLabel =
       </GlassPanel>
     </div>
   );
+  if (typeof document === "undefined") return overlay;
+  return ReactDOM.createPortal(overlay, document.body);
 }
 
 /* ── Stat Card ───────────────────────────────────────────────── */
@@ -1372,7 +1383,7 @@ function UserSnapshotHistory({ events, getToken }) {
 }
 
 /* ── Snapshot History (Event Log with delete) ────────────────── */
-function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = false, pdfFilenames = new Set() }) {
+function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = false, pdfFilenames = new Set(), sectionExpanded = false }) {
   const [deleteTarget, setDeleteTarget] = React.useState(null);
   const [deleting, setDeleting] = React.useState(false);
   const [filterUser, setFilterUser] = React.useState("");
@@ -1495,10 +1506,25 @@ function SnapshotHistory({ events, getToken, onRefresh, limit = 30, isAdmin = fa
         </select>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
+      <div style={{
+        overflowX: "auto",
+        // When the user expands the Snapshot History section we let the table
+        // grow to fill a fixed-height scroll container instead of capping the
+        // number of rows. Mirrors the PDF Storage pattern so the user can
+        // scroll all the way to the oldest event without hitting an arbitrary
+        // 30-row ceiling. In the collapsed state we keep the natural flow so
+        // the closed section stays compact.
+        maxHeight: sectionExpanded ? 480 : undefined,
+        overflowY: sectionExpanded ? "auto" : undefined,
+      }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "Poppins, sans-serif" }}>
           <thead>
-            <tr style={{ borderBottom: `2px solid rgba(180,200,230,0.3)` }}>
+            <tr style={{
+              borderBottom: `2px solid rgba(180,200,230,0.3)`,
+              ...(sectionExpanded
+                ? { position: "sticky", top: 0, background: "rgba(255,255,255,0.95)", zIndex: 1 }
+                : {}),
+            }}>
               <th style={th}>Date</th>
               <th style={th}>User</th>
               <th style={th}>Client</th>
@@ -2032,11 +2058,18 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
     try {
       const token = await getToken();
 
-      // Both admins and advisors fetch the same dashboard data
+      // Both admins and advisors fetch the same dashboard data.
+      // Users directory is fetched from /api/users/directory (a non-admin
+      // path) so non-admins reliably get role data — without this, admins
+      // were rendering as "Advisor" badges on the Team Leaderboard whenever
+      // anything blocked /api/admin/* for advisors. The fetch falls back to
+      // the legacy /api/admin/users path if the new one isn't deployed yet.
       const [summaryResp, changesResp, usersResp, fnResp] = await Promise.all([
         fetch(`${API_BASE_URL}/api/admin/analytics/summary?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE_URL}/api/admin/analytics/manual-changes?period=${period}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/api/users/directory`, { headers: { Authorization: `Bearer ${token}` } })
+          .then(async (r) => (r.ok ? r : fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } })))
+          .catch(() => fetch(`${API_BASE_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } })),
         fetch(`${API_BASE_URL}/api/pdfs/filenames`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (!summaryResp.ok) {
@@ -2292,7 +2325,7 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
 
             {/* Snapshot History */}
             <Section title="Snapshot History" expandable>
-              {(expanded) => <SnapshotHistory events={data.recent_events} getToken={getToken} onRefresh={fetchAnalytics} limit={expanded ? 30 : 5} isAdmin={isAdmin} pdfFilenames={pdfFilenames} />}
+              {(expanded) => <SnapshotHistory events={data.recent_events} getToken={getToken} onRefresh={fetchAnalytics} limit={expanded ? Infinity : 5} isAdmin={isAdmin} pdfFilenames={pdfFilenames} sectionExpanded={expanded} />}
             </Section>
 
             {/* PDF Storage Management */}
