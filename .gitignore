@@ -182,3 +182,4 @@ backend/generated_quotes/
 
 # Dev-metrics viewer local config (contains DEV_METRICS_API_KEY)
 dev_metrics/local.config.js
+.claude/
