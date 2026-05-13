@@ -33,6 +33,16 @@ the patterns in `findings` going forward.
 6. **Skip findings where `found_in_original` is false.** Those represent
    advisor-added data the parser had no way to extract. Mention this
    only in your `rationale` if relevant.
+7. **Use placement signal when present.** Findings from the Design 3
+   analyzer prefix `surrounding_text` with a structured header:
+   `page=<N>  region=<top|middle|bottom>-<left|center|right>  bbox=[…]`.
+   When several misses for the same field consistently land in the
+   same region (e.g. `bottom-right` of page 2), encode that as a
+   layout hint in SKILL.md (e.g. "premium totals are usually in the
+   bottom-right of the last page"). Don't overfit — only generalize
+   when 2+ findings agree on the region. Findings without the
+   placement header come from the Design 2 analyzer and should be
+   treated as label/value evidence only.
 
 ## Output (strict JSON)
 

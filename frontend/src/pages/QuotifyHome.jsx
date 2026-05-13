@@ -6,6 +6,7 @@ import {
   startParseTimer,
   logParseComplete,
   logQuoteGenerated,
+  SYSTEM_DESIGN_VERSION,
 } from "../lib/devMetrics";
 import { INSURANCE_OPTIONS } from "../configs/insuranceOptions";
 import {
@@ -1739,6 +1740,7 @@ export default function QuotifyHome({ isAdmin }) {
         generatedPdf: outFileName,
         clientName,
         skillVersion: lastSkillVersion,
+        systemDesign: SYSTEM_DESIGN_VERSION,
         getToken,
       });
 

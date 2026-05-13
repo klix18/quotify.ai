@@ -100,26 +100,55 @@ async def close_pool() -> None:
 
 
 async def init_schema() -> None:
-    """Apply migrations/001_skill_updater.sql. Idempotent."""
+    """Apply every file in ``migrations/*.sql`` in lexical order.
+
+    Each migration is idempotent (``CREATE … IF NOT EXISTS`` /
+    ``ADD COLUMN IF NOT EXISTS``) so re-running is safe — the
+    Initialize button in the UI is wired to this function and can be
+    pressed any time without breaking existing state.
+    """
     pool = await get_pool()
-    sql_path = Path(__file__).resolve().parent / "migrations" / "001_skill_updater.sql"
-    sql = sql_path.read_text()
+    migrations_dir = Path(__file__).resolve().parent / "migrations"
+    files = sorted(migrations_dir.glob("*.sql"))
+    if not files:
+        return
     async with pool.acquire() as conn:
-        await conn.execute(sql)
+        for sql_path in files:
+            sql = sql_path.read_text()
+            await conn.execute(sql)
 
 
 # ── Read: events to analyze ───────────────────────────────────────────
 
 
+def _system_design_predicate(system_design: Optional[str], param_index: int) -> tuple[str, list[Any]]:
+    """Build the ``WHERE`` fragment for the design filter.
+
+    - ``system_design = 'fitz-fastpath-2026-04-30'`` (Design 3) returns
+      rows tagged with exactly that value.
+    - ``system_design = ''`` (Design 2 / pre-migration) returns rows
+      with no tag — the orchestration in place when those events were
+      captured was the legacy vision parser.
+    - ``None`` returns no filter, matching every row.
+    """
+    if system_design is None:
+        return "", []
+    return f"COALESCE(e.system_design, '') = ${param_index}", [system_design]
+
+
 async def list_unanalyzed_events(
     insurance_types: Optional[list[str]] = None,
     limit: int = 200,
+    system_design: Optional[str] = None,
 ) -> list[EventRow]:
     """Return analytics_events rows that:
        - have manually_changed_fields set
        - resulted in a created quote
        - are NOT yet in skill_event_analysis (the cursor)
        - optionally filtered by insurance_type
+       - optionally filtered by parser orchestration version
+         (``system_design`` — pass ``''`` for Design 2 / pre-migration
+         rows, the Design-3 tag for fitz events, or ``None`` for any).
 
     Ordered oldest-first so processing is reproducible."""
     pool = await get_pool()
@@ -128,11 +157,16 @@ async def list_unanalyzed_events(
     if insurance_types:
         where.append(f"e.insurance_type = ANY(${len(params) + 1})")
         params.append(insurance_types)
+    sd_pred, sd_params = _system_design_predicate(system_design, len(params) + 1)
+    if sd_pred:
+        where.append(sd_pred)
+        params.extend(sd_params)
     where_sql = " AND ".join(where)
     params.append(limit)
     query = f"""
         SELECT e.id, e.created_at, e.insurance_type, e.manually_changed_fields,
-               e.uploaded_pdf, e.generated_pdf, e.client_name, e.skill_version
+               e.uploaded_pdf, e.generated_pdf, e.client_name, e.skill_version,
+               COALESCE(e.system_design, '') AS system_design
         FROM analytics_events e
         LEFT JOIN skill_event_analysis sea ON sea.event_id = e.id
         WHERE {where_sql}
@@ -145,13 +179,21 @@ async def list_unanalyzed_events(
     return [EventRow(**dict(r)) for r in rows]
 
 
-async def count_unanalyzed_events(insurance_types: Optional[list[str]] = None) -> int:
+async def count_unanalyzed_events(
+    insurance_types: Optional[list[str]] = None,
+    system_design: Optional[str] = None,
+) -> int:
+    """Count unanalyzed events. Same design filter as :func:`list_unanalyzed_events`."""
     pool = await get_pool()
     where = ["e.manually_changed_fields <> ''", "e.created_quote = TRUE"]
     params: list[Any] = []
     if insurance_types:
         where.append(f"e.insurance_type = ANY(${len(params) + 1})")
         params.append(insurance_types)
+    sd_pred, sd_params = _system_design_predicate(system_design, len(params) + 1)
+    if sd_pred:
+        where.append(sd_pred)
+        params.extend(sd_params)
     where_sql = " AND ".join(where)
     query = f"""
         SELECT COUNT(*) FROM analytics_events e

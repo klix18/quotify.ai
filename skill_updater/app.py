@@ -61,9 +61,45 @@ st.caption(
 def section_run() -> None:
     st.header("Run analysis")
 
-    # Quick stats
+    # ── Analyzer design selector ──────────────────────────────────────
+    # The backend stamps every event with a system_design tag at parse
+    # time (frontend/src/lib/devMetrics.js → /api/track-event). The
+    # operator picks which design's events to analyze here, and the
+    # pipeline runs the matching analyzer:
+    #
+    #   Design 3 — Gemini vision on the generated PDF, fitz placement
+    #              (page + bbox + text) on the original. Mirrors the
+    #              fitz fast-path parser.
+    #   Design 2 — Gemini vision on both PDFs. Mirrors the legacy
+    #              vision-only parser.
+    #
+    # Events whose tag doesn't match are NOT picked up — a Design 3 run
+    # filters to system_design='fitz-fastpath-2026-04-30' only.
+    design_label = st.radio(
+        "Analyzer design",
+        options=[
+            "Design 3 — vision + fitz placement (current parser)",
+            "Design 2 — vision-only (legacy)",
+        ],
+        index=0,
+        help=(
+            "Design 3 analyzes events the fitz fast-path parser produced. "
+            "Design 2 analyzes events the pre-fitz vision parser produced. "
+            "Picking the wrong design for an event would muddy 'parser miss' "
+            "attribution, so the two are filtered apart."
+        ),
+        horizontal=False,
+    )
+    design: pipeline.DesignChoice = (
+        "design3" if design_label.startswith("Design 3") else "design2"
+    )
+
+    # Quick stats — count is design-aware so it matches what the run
+    # will actually process.
     try:
-        total_unanalyzed = run_async(db.count_unanalyzed_events())
+        total_unanalyzed = run_async(
+            db.count_unanalyzed_events(system_design=pipeline._design_tag(design))
+        )
     except Exception as e:
         st.error(f"Could not connect to Postgres: {e}")
         st.info("Set DATABASE_URL in skill_updater/.env or copy backend/.env in.")
@@ -72,7 +108,10 @@ def section_run() -> None:
     available_types = skill_io.available_insurance_types()
     col1, col2 = st.columns([2, 1])
     with col1:
-        st.metric("Unanalyzed events", total_unanalyzed)
+        st.metric(
+            f"Unanalyzed {('Design 3' if design == 'design3' else 'Design 2')} events",
+            total_unanalyzed,
+        )
     with col2:
         selected_types = st.multiselect(
             "Limit to insurance types (empty = all)",
@@ -98,11 +137,12 @@ def section_run() -> None:
                         insurance_types=selected_types or None,
                         limit=limit,
                         progress=_progress,
+                        design=design,
                     )
                 )
                 st.success(
-                    f"Run {run_id} complete. Analyzed {processed}, skipped {skipped}, "
-                    f"created {len(proposal_ids)} proposal(s)."
+                    f"Run {run_id} complete ({design}). Analyzed {processed}, "
+                    f"skipped {skipped}, created {len(proposal_ids)} proposal(s)."
                 )
             except Exception as e:
                 st.exception(e)
@@ -350,7 +390,7 @@ with st.sidebar:
         except Exception as e:
             st.exception(e)
     st.caption(
-        "Runs `migrations/001_skill_updater.sql`. Idempotent — safe to re-click."
+        "Runs every file in `migrations/*.sql` in order. Idempotent — safe to re-click."
     )
 
 section_run()

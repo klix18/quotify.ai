@@ -31,6 +31,7 @@ export async function trackEvent({
   generatedPdf = "",
   clientName = "",
   skillVersion = "",
+  systemDesign = "",
   getToken,
 }) {
   try {
@@ -63,6 +64,7 @@ export async function trackEvent({
         generated_pdf: generatedPdf,
         client_name: clientName,
         skill_version: skillVersion,
+        system_design: systemDesign,
       }),
     });
 
