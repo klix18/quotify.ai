@@ -23,6 +23,7 @@ class TrackEventRequest(BaseModel):
     generated_pdf: str = ""
     client_name: str = ""
     skill_version: str = ""            # from parse result, e.g. "1.2"
+    system_design: str = ""            # parser orchestration tag, e.g. "fitz-fastpath-2026-04-30"
 
 
 @router.post("/api/track-event")
@@ -57,5 +58,6 @@ async def track_event(
         generated_pdf=payload.generated_pdf,
         client_name=payload.client_name,
         skill_version=payload.skill_version,
+        system_design=payload.system_design,
     )
     return {"status": "ok", "user_id": user_id}
