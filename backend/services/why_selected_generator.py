@@ -1,5 +1,6 @@
 # why_selected_generator.py
-# Generates "Why This Plan Was Selected" bullets using Gemini Flash.
+# Generates "Why This Plan Was Selected" bullets using Gemini Flash, with
+# an OpenAI cross-provider fallback for Gemini outages.
 #
 # Called once at the end of extraction, after the single-pass parser has
 # produced the final verified data. There is no longer a separate draft
@@ -7,10 +8,19 @@
 # pipeline (Design 1) and only the "generate fresh from final data" branch
 # was ever exercised in production. Design 2 simplified the flow.
 #
+# Failure handling: every branch logs to stderr with a [why_selected] prefix
+# so a transient Gemini 503 or malformed model response is visible in
+# Railway logs instead of silently returning "" (the old behavior). When
+# the entire Gemini chain fails the openai_fallback closure runs the same
+# bullet-generation prompt through gpt-4o-mini → gpt-4o so the panel
+# populates even during a broad Google outage.
+#
 # Tone: professional insurance advisor — confident, clear, reassuring.
 
 import json
 import os
+import re
+import sys
 
 from dotenv import load_dotenv
 from google import genai
@@ -20,8 +30,45 @@ from parsers._model_fallback import (
     DEFAULT_FALLBACKS,
     generate_with_fallback,
 )
+from parsers._openai_fallback import generate_openai_extraction
 
 load_dotenv()
+
+
+# ── Logging ─────────────────────────────────────────────────────
+# stderr with a stable prefix so the failure mode is grep-able in
+# Railway logs. Replaces a silent ``except: pass`` that turned every
+# transient Gemini hiccup into a blank panel in the UI.
+
+
+def _log(level: str, msg: str) -> None:
+    print(f"[why_selected] {level} {msg}", flush=True, file=sys.stderr)
+
+
+# Module-load marker so deploys are verifiable.
+print("[why_selected] module loaded (with openai fallback)", flush=True, file=sys.stderr)
+
+
+# ── Response shim ───────────────────────────────────────────────
+# ``generate_with_fallback`` returns whatever the openai_fallback
+# closure returns — and our caller expects ``response.text``. The
+# OpenAI helper returns a bare string, so wrap it.
+
+
+class _TextResp:
+    __slots__ = ("text",)
+
+    def __init__(self, text: str):
+        self.text = text
+
+
+# Strip ```json … ``` and bare ``` fences that OpenAI sometimes emits
+# even on temperature=0 when no response_format is enforced.
+_CODE_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def _strip_fences(s: str) -> str:
+    return _CODE_FENCE_RE.sub("", s).strip()
 
 
 def _get_client() -> genai.Client:
@@ -79,9 +126,12 @@ def generate_why_selected(
     string if generation fails. Callers should assign this directly to
     ``data["why_selected"]``.
 
-    Uses the shared Gemini fallback helper so a demand spike on the primary
-    model transparently walks the fallback chain instead of silently
-    dropping the bullets.
+    Uses the shared Gemini fallback helper for the primary call. If
+    the whole Gemini chain fails, falls through to OpenAI
+    (gpt-4o-mini → gpt-4o) running the same prompt text-only — no PDF
+    upload, this generator never sees the PDF. Every failure path logs
+    to stderr so an empty result is grep-able in Railway logs instead
+    of silently disappearing.
     """
     data_str = json.dumps(final_data, indent=2)
     content = (
@@ -89,8 +139,23 @@ def generate_why_selected(
         f"{data_str}"
     )
 
+    # OpenAI text-only fallback. Returns a ``_TextResp`` so the caller's
+    # ``response.text`` access works whether Gemini or OpenAI handled it.
+    def _openai_bullets_fallback() -> _TextResp:
+        text = generate_openai_extraction(
+            pdf_path=None,
+            system_instruction=_PROMPT,
+            user_prompt=content,
+        )
+        return _TextResp(text)
+
     try:
         client = _get_client()
+    except Exception as exc:
+        _log("FAIL", f"client init: {exc}")
+        return ""
+
+    try:
         response = generate_with_fallback(
             client,
             model,
@@ -101,12 +166,31 @@ def generate_why_selected(
                 temperature=0.3,
                 response_mime_type="application/json",
             ),
+            openai_fallback=_openai_bullets_fallback,
         )
-        bullets = json.loads(response.text.strip())
-        if isinstance(bullets, list) and len(bullets) >= 2:
-            cleaned = [b.strip() for b in bullets[:4] if b.strip()]
-            if cleaned:
-                return "\n".join(f"• {b}" for b in cleaned)
-    except Exception:
-        pass
-    return ""
+    except Exception as exc:
+        _log("FAIL", f"generate: {type(exc).__name__}: {str(exc)[:200]}")
+        return ""
+
+    raw = (getattr(response, "text", None) or "").strip()
+    if not raw:
+        _log("WARN", "empty response.text")
+        return ""
+
+    try:
+        bullets = json.loads(_strip_fences(raw))
+    except Exception as exc:
+        _log("WARN", f"json parse: {exc}  raw={raw[:160]!r}")
+        return ""
+
+    if not isinstance(bullets, list) or len(bullets) < 2:
+        _log("WARN", f"shape invalid: {type(bullets).__name__} len={len(bullets) if hasattr(bullets, '__len__') else '?'}")
+        return ""
+
+    cleaned = [b.strip() for b in bullets[:4] if isinstance(b, str) and b.strip()]
+    if not cleaned:
+        _log("WARN", "all entries empty/non-str")
+        return ""
+
+    _log("OK", f"bullets={len(cleaned)}")
+    return "\n".join(f"• {b}" for b in cleaned)
