@@ -903,18 +903,17 @@ function UserTable({ users, clerkUsers, clerkUsersList, onSelectUser, limit = 15
   };
 
   const resolveClerkId = (analyticsRow) => {
-    // Prefer the stable user_id the backend returned (Clerk sub claim after
-    // backfill). Fall back to alias lookup for the rare legacy row whose
-    // user_id is still blank. Case-insensitive so single-name users still
-    // resolve.
+    // Prefer the stable user_id the backend returned (Clerk sub claim) when
+    // it's actually in the CURRENT Clerk directory. If it isn't — common
+    // when dev-environment events (different Clerk instance) write into the
+    // shared prod analytics_events, or when an old Clerk account has been
+    // deleted — fall through to name-based alias lookup so the row merges
+    // into the user's canonical Clerk row instead of forming its own bucket.
     if (analyticsRow.user_id) {
-      // Backend may have emitted the raw user_id OR (for pre-backfill rows)
-      // the user_name as the COALESCE fallback. Trust it if it looks like a
-      // Clerk id (user_xxx), otherwise try to resolve via alias map.
-      if (analyticsRow.user_id.startsWith("user_")) return analyticsRow.user_id;
-      const lookup = clerkUsers[analyticsRow.user_id]
+      const direct = clerkUsers[analyticsRow.user_id]
         || clerkUsers[(analyticsRow.user_id || "").toLowerCase()];
-      if (lookup?.id) return lookup.id;
+      if (direct?.id) return direct.id;
+      // user_id present but not in current Clerk — intentional fall-through.
     }
     const nameKey = analyticsRow.user_name || "";
     const lookup = clerkUsers[nameKey] || clerkUsers[nameKey.toLowerCase()];
@@ -2325,7 +2324,7 @@ export default function AdminDashboard({ isAdmin, currentUserName, currentUserEm
               <Section title="Team Leaderboard" expandable action={
                 <div style={{ fontSize: 12, color: COLORS.mutedText }}>Click a user for details</div>
               }>
-                {(expanded) => <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} clerkUsersList={clerkUsersList} onSelectUser={setSelectedUser} limit={expanded ? 15 : 5} />}
+                {(expanded) => <UserTable users={data.usage_by_user} clerkUsers={clerkUsers} clerkUsersList={clerkUsersList} onSelectUser={setSelectedUser} limit={expanded ? Infinity : 5} />}
               </Section>
               <Section title="Manual Changes Leaderboard" expandable>
                 {/* Closed-state limit is 9 (not 5) because the sibling Team
