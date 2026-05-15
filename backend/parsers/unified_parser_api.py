@@ -116,6 +116,19 @@ MODEL_EXTRACT: str = "gemini-2.5-flash"   # single-pass strict-JSON extractor
 # has room to plan the extraction before committing to output.
 THINKING_BUDGET: int = 512
 
+# ── Output token cap ─────────────────────────────────────────────────
+# Generous ceiling so the complex schemas (auto with N vehicles + N drivers,
+# bundle with both home + auto) don't get truncated mid-string and trip
+# _try_parse_json's recovery into "malformed JSON" failures. The default
+# Gemini cap on 2.5-flash is well below this; uncapped requests were
+# observed truncating on real Travelers auto quotes (2 vehicles + 2 drivers
+# + confidence object mirror). 32k is ~3-5x the worst observed real output,
+# under the 65k model limit, and only costs tokens actually generated —
+# raising the ceiling doesn't increase cost for normal quotes.
+# Applied to BOTH the Gemini extraction config AND the OpenAI fallback
+# (_openai_fallback) so the safety net doesn't reintroduce the same bug.
+MAX_OUTPUT_TOKENS: int = 32000
+
 # ── System-prompt cache config ───────────────────────────────────────
 # The system instruction (CORE_SYSTEM_PROMPT + full SKILL.md +
 # supplements) is stable across requests for a given (insurance_type,
@@ -771,6 +784,13 @@ def stream_unified_quote(
                 response_mime_type="application/json",
                 response_schema=schema,
                 thinking_config=types.ThinkingConfig(thinking_budget=THINKING_BUDGET),
+                # Generous output cap so complex multi-vehicle / bundle quotes
+                # (auto schema + confidence object mirror can need 6-10k tokens)
+                # don't truncate mid-string and trip _try_parse_json's recovery.
+                # gemini-2.5-flash supports up to 65k output tokens; 32k gives
+                # ~3-5x headroom over any real-world quote while still capping
+                # damage on a runaway response.
+                max_output_tokens=MAX_OUTPUT_TOKENS,
             )
         else:
             gen_config = types.GenerateContentConfig(
@@ -779,6 +799,7 @@ def stream_unified_quote(
                 response_mime_type="application/json",
                 response_schema=schema,
                 thinking_config=types.ThinkingConfig(thinking_budget=THINKING_BUDGET),
+                max_output_tokens=MAX_OUTPUT_TOKENS,
             )
 
         full_text = ""
