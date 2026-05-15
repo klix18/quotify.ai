@@ -60,6 +60,13 @@ PARSER_FALLBACK_MODELS: List[str] = [
     "gpt-4o",
 ]
 
+# Output token cap — mirrors unified_parser_api.MAX_OUTPUT_TOKENS so the
+# fallback doesn't reintroduce the truncation bug that motivated the cap on
+# the Gemini side. gpt-4o / gpt-4o-mini both support more than this, so 32k
+# is comfortably under the model ceiling while still capping damage on a
+# runaway response.
+MAX_OUTPUT_TOKENS: int = 32000
+
 
 class _Chunk:
     """
@@ -293,6 +300,10 @@ def stream_openai_extraction(
                 ],
                 "temperature": 0,
                 "stream": True,
+                # Mirror the Gemini-side cap so the cross-provider fallback
+                # doesn't reintroduce the truncation bug — see MAX_OUTPUT_TOKENS
+                # docstring above.
+                "max_output_tokens": MAX_OUTPUT_TOKENS,
             }
             if has_schema:
                 # Force valid-JSON output so parser JSON loaders don't
@@ -400,6 +411,8 @@ def generate_openai_extraction(
                     {"role": "user", "content": user_content},
                 ],
                 "temperature": 0,
+                # Mirror the Gemini cap; see MAX_OUTPUT_TOKENS docstring.
+                "max_output_tokens": MAX_OUTPUT_TOKENS,
             }
             if has_schema:
                 create_kwargs["text"] = {"format": {"type": "json_object"}}
