@@ -222,12 +222,20 @@ _ANCHORS: dict[str, dict[str, str]] = {
 _PROMPT_RULES = """\
 You are a 20-year veteran insurance advisor writing the
 "Why This Plan Was Selected" section of a client-facing insurance
-proposal.
+proposal for THIS specific plan.
 
 Your job: fill four fixed slots with short, outcome-focused statements
-that describe what the plan does for the client in plain English. The
-proposal renders each slot under its own heading — you do not choose
-which slots to include or omit, and you do not invent new slots.
+that describe what THIS plan does for the client, drawn from the
+parsed quote data provided in the user message below. Each sentence
+must be FRESH — written for this client and this plan, never copied
+from any reference text. The proposal renders each slot under its
+own heading; you do not choose which slots to include or omit.
+
+CRITICAL: Two different plans (different carriers, different coverage
+levels, different deductibles, different premium positioning) MUST
+produce different sentences for each slot. If your output for this
+plan would read identically to what you would write for a different
+plan of the same type, you are failing the task. Personalize.
 
 ABSOLUTE RULE — NO NUMBERS: Never include dollar amounts, percentages,
 limits, deductibles, premiums, or any specific numeric values. Use
@@ -295,18 +303,36 @@ def _build_system_instruction(
         return _PROMPT_RULES, None
 
     anchor_block = "\n".join(
-        f'  "{k}": "{anchor[k]}"' for k in _TAG_KEYS
+        f'  STYLE for "{k}":\n    "{anchor[k]}"' for k in _TAG_KEYS
     )
     instruction = (
         f"{_PROMPT_RULES}\n"
-        "── APPROVED ANCHOR COPY FOR THIS PROPOSAL TYPE ────────────────\n"
-        f"This is a {insurance_type} proposal. The approved anchor copy\n"
-        "for each slot is below. Use it as the baseline and personalize\n"
-        "LIGHTLY only where the parsed quote data clearly supports a\n"
-        "more specific phrasing. If you have nothing distinctive to add\n"
-        "for a slot, return the anchor copy for that slot verbatim.\n"
-        "Match the anchor's level of generality — do not introduce\n"
-        "named coverages beyond what the anchor already uses.\n\n"
+        "── STYLE REFERENCE FOR THIS PROPOSAL TYPE ─────────────────────\n"
+        f"This is a {insurance_type} proposal. The sentences below are\n"
+        "STYLE REFERENCES — they show the right tone, sentence shape,\n"
+        "and level of generality for this proposal type. They are NOT\n"
+        "your answer. Returning any of these sentences verbatim as your\n"
+        "output is failing the task.\n"
+        "\n"
+        "Match the style reference's:\n"
+        "  - Level of generality (no numbers, no unprompted coverage names).\n"
+        "  - Sentence shape (one calm declarative sentence per slot).\n"
+        "  - Outcome-focused framing (what the plan does FOR the client).\n"
+        "\n"
+        "PERSONALIZE by drawing on what the parsed quote data shows for\n"
+        "THIS specific plan. Useful signals to lean on:\n"
+        "  - Carrier name (you may reference it directly).\n"
+        "  - Whether coverage feels broad/comprehensive vs targeted.\n"
+        "  - Whether deductibles sit low, standard, or higher relative\n"
+        "    to typical for this proposal type (mention positioning,\n"
+        "    NEVER the actual numbers).\n"
+        "  - Whether the plan reads as value, balanced, or premium tier.\n"
+        "  - Property / vehicle / risk-profile notes the data exposes\n"
+        "    (older home, multi-vehicle, coastal, high-mileage, etc.).\n"
+        "\n"
+        "Two plans from different carriers MUST produce different\n"
+        "sentences, even when both fall under the same proposal type.\n"
+        "\n"
         f"{anchor_block}\n"
     )
     return instruction, anchor
@@ -386,7 +412,14 @@ def generate_why_selected(
             contents=[content],
             config=types.GenerateContentConfig(
                 system_instruction=instruction,
-                temperature=0.3,
+                # 0.6 (was 0.3): at low temps the model latches onto the
+                # style-reference wording and outputs it verbatim. 0.6 gives
+                # enough variation to actually personalize per plan while
+                # still respecting the JSON shape (which is enforced by
+                # response_mime_type, not temperature). OpenAI fallback
+                # runs at temp=0 in the shared helper — the prompt is
+                # written to be forceful enough to work at that temp too.
+                temperature=0.6,
                 response_mime_type="application/json",
             ),
             openai_fallback=_openai_sections_fallback,
