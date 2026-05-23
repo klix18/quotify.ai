@@ -100,7 +100,10 @@ from parsers.skill_loader import (
 from parsers.post_process import post_process
 from parsers.schema_registry import get_registration, supported_types
 from services.pdf_storage_helpers import store_uploaded_pdf
-from services.why_selected_generator import generate_why_selected
+from services.why_selected_generator import (
+    generate_why_selected,
+    render_bullets,
+)
 
 load_dotenv()
 
@@ -865,11 +868,23 @@ def stream_unified_quote(
 
         # ── Generate Why Selected ──────────────────────────────
         # One short Gemini call against the final verified data produces
-        # the 3-4 "why this plan was selected" bullets shown in the UI.
-        # Why-selected generation also runs under the same "Extracting..."
+        # the four tagged "Why This Plan Was Selected" sections
+        # (protection_summary, financial_exposure, deductible_position,
+        # premium_position) rendered on the proposal. OpenAI fallback
+        # runs under the same call if Gemini fails — see the generator.
+        #
+        # We stash the structured dict on data["why_selected_sections"]
+        # for tag-aware renderers, AND a legacy bullet-joined string on
+        # data["why_selected"] so the existing PDF fillers (which expect
+        # a single string) keep working unchanged. Fillers can migrate
+        # to the tagged shape independently.
+        #
+        # Why-selected generation runs under the same "Extracting..."
         # spinner — no separate "Generating plan summary..." phase.
         yield json.dumps({"type": "status", "message": "Extracting..."}) + "\n"
-        data["why_selected"] = generate_why_selected(data, why_type)
+        sections = generate_why_selected(data, why_type)
+        data["why_selected_sections"] = sections
+        data["why_selected"] = render_bullets(sections)
 
         yield json.dumps({
             "type": "result",
