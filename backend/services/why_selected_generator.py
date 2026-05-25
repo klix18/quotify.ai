@@ -144,13 +144,13 @@ def _get_client() -> genai.Client:
 # "Why Selected" block when the model is unavailable.
 _ANCHORS: dict[str, dict[str, str]] = {
     "homeowners": {  # ⇄ HOME
-        "protection_summary": "Protection designed to help safeguard the home and property after a covered loss.",
+        "protection_summary": "Protection that helps safeguard the home and property after a covered loss.",
         "financial_exposure": "Structured to help reduce financial exposure from unexpected events.",
         "deductible_position": "Deductible options selected to help keep claim costs manageable.",
         "premium_position": "A strong overall balance between coverage, flexibility, and premium.",
     },
     "auto": {
-        "protection_summary": "Protection designed to help address both everyday driving risks and unexpected accidents.",
+        "protection_summary": "Protection that covers both everyday driving risks and unexpected accidents.",
         "financial_exposure": "Structured to help reduce financial exposure after an accident or claim.",
         "deductible_position": "Deductible options selected to help keep out of pocket costs manageable.",
         "premium_position": "A strong overall balance between protection, affordability, and flexibility.",
@@ -162,7 +162,7 @@ _ANCHORS: dict[str, dict[str, str]] = {
         "premium_position": "A strong overall balance between landlord protection and overall value.",
     },
     "bundle": {  # ⇄ BUNDLED HOME + AUTO
-        "protection_summary": "Protection designed to help keep both home and auto coverage aligned under one carrier.",
+        "protection_summary": "Protection that keeps both home and auto coverage aligned under one carrier.",
         "financial_exposure": "Structured to help simplify coverage management, billing, and claims handling.",
         "deductible_position": "Deductible options selected to help keep costs manageable across multiple policies.",
         "premium_position": "A strong overall balance between protection, convenience, and premium value.",
@@ -178,8 +178,8 @@ _ANCHORS: dict[str, dict[str, str]] = {
     },
     # Not currently wired through schema_registry; ready for when they are.
     "motorcycle": {
-        "protection_summary": "Protection designed to help safeguard both the rider and motorcycle from unexpected losses.",
-        "financial_exposure": "Structured to help reduce financial exposure tied to accidents, damage, or liability risks.",
+        "protection_summary": "Protection that safeguards both the rider and motorcycle from unexpected losses.",
+        "financial_exposure": "Reduces financial exposure tied to accidents, damage, or liability risks.",
         "deductible_position": "Deductible options selected to help keep claim costs manageable.",
         "premium_position": "A strong overall balance between protection, flexibility, and premium.",
     },
@@ -257,7 +257,7 @@ TONE:
   client, not pitching a product.
 - Conversational, not templated or robotic.
 - No passive voice. No "is included" / "is provided".
-- One sentence per slot, ~120 characters max.
+- One sentence per slot, *65 characters max*.
 
 GOOD examples (outcome-focused, jargon-free):
 - "Protection designed to help safeguard the home and property after a covered loss."
