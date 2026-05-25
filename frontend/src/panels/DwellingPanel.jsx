@@ -53,8 +53,8 @@ export default function DwellingPanel({
     <SectionCard title="Dwelling Policy">
       <div style={gridRow}>
         {DWELLING_POLICY_FIELDS.map(([key, label]) => (
-          // 6 fields → 2 rows of 3, each span 4 so every row fills full width.
-          <div key={key} style={cell4}>
+          // 4 fields → single row of 4, each span 3 so the row fills full width.
+          <div key={key} style={cell3}>
             <FieldControl
               fieldKey={key}
               label={label}
