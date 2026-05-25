@@ -349,6 +349,176 @@ def _is_valid_sections(parsed: object) -> bool:
     return True
 
 
+# ── Length budget ───────────────────────────────────────────────
+# Hard per-slot caps. The proposal layout overflows past these, so
+# we enforce them after generation with a targeted rework call.
+# The system prompt also states the limit, but at temp=0.6 the
+# model can still drift long — this is the belt to the prompt's
+# suspenders.
+_MAX_CHARS = 75
+_MAX_WORDS = 11
+_MAX_REWORK_RETRIES = 2
+
+
+def _check_lengths(sections: dict[str, str]) -> dict[str, str]:
+    """Return ``{key: reason}`` for slots over the char/word budget.
+
+    Empty dict means every slot passes. The reason string is a short
+    diagnostic like ``"82 chars / 12 words"`` for logs.
+    """
+    failing: dict[str, str] = {}
+    for key in _TAG_KEYS:
+        value = (sections.get(key) or "").strip()
+        char_count = len(value)
+        word_count = len(value.split())
+        if char_count > _MAX_CHARS or word_count > _MAX_WORDS:
+            failing[key] = (
+                f"{char_count} chars / {word_count} words "
+                f"(max {_MAX_CHARS} / {_MAX_WORDS})"
+            )
+    return failing
+
+
+def _rework_long_sections(
+    client: genai.Client,
+    model: str,
+    base_instruction: str,
+    current: dict[str, str],
+    failing_keys: list[str],
+) -> Optional[dict[str, str]]:
+    """Ask the model to shorten only the over-budget slots.
+
+    Returns the full four-key dict the model produced, or ``None`` if
+    the call/parse/shape check failed. The caller decides which keys
+    to actually swap in — we do not trust the model to leave passing
+    slots untouched.
+
+    Runs through the same Gemini → OpenAI fallback chain as the main
+    generation call, but at lower temperature (0.2) since we want
+    compliance with the length rule, not creativity.
+    """
+    rework_instruction = (
+        f"{base_instruction}\n"
+        "── REWORK PASS ────────────────────────────────────────────\n"
+        f"Your previous output was over budget on: "
+        f"{', '.join(failing_keys)}.\n"
+        f"HARD LIMIT: each sentence must be ≤ {_MAX_CHARS} characters "
+        f"AND ≤ {_MAX_WORDS} words, including spaces and punctuation. "
+        "This is non-negotiable — going over breaks the proposal "
+        "layout.\n"
+        "Rewrite ONLY the over-budget slots to fit. Preserve meaning, "
+        "tone, and the no-numbers / no-invented-coverages rules. Keep "
+        "passing slots identical to your previous output. Return the "
+        "full four-key JSON object with all four keys present.\n"
+    )
+    prior = json.dumps(current, indent=2)
+    rework_content = (
+        "Your previous output:\n\n"
+        f"{prior}\n\n"
+        f"Rewrite the over-budget slots ({', '.join(failing_keys)}) "
+        f"to ≤ {_MAX_CHARS} chars and ≤ {_MAX_WORDS} words each. "
+        "Return the full four-key JSON object."
+    )
+
+    def _openai_rework_fallback() -> _TextResp:
+        text = generate_openai_extraction(
+            pdf_path=None,
+            system_instruction=rework_instruction,
+            user_prompt=rework_content,
+            json_schema=_OUTPUT_SCHEMA,
+        )
+        return _TextResp(text)
+
+    try:
+        response = generate_with_fallback(
+            client,
+            model,
+            DEFAULT_FALLBACKS,
+            contents=[rework_content],
+            config=types.GenerateContentConfig(
+                system_instruction=rework_instruction,
+                temperature=0.2,
+                response_mime_type="application/json",
+            ),
+            openai_fallback=_openai_rework_fallback,
+        )
+    except Exception as exc:
+        _log(
+            "FAIL",
+            f"rework generate: {type(exc).__name__}: {str(exc)[:200]}",
+        )
+        return None
+
+    raw = (getattr(response, "text", None) or "").strip()
+    if not raw:
+        _log("WARN", "rework empty response.text")
+        return None
+
+    try:
+        parsed = json.loads(_strip_fences(raw))
+    except Exception as exc:
+        _log("WARN", f"rework json parse: {exc}  raw={raw[:160]!r}")
+        return None
+
+    if not _is_valid_sections(parsed):
+        shape = type(parsed).__name__
+        keys = list(parsed.keys()) if isinstance(parsed, dict) else None
+        _log("WARN", f"rework shape invalid: type={shape} keys={keys}")
+        return None
+
+    return {key: parsed[key].strip() for key in _TAG_KEYS}
+
+
+def _enforce_length_budget(
+    client: genai.Client,
+    model: str,
+    instruction: str,
+    sections: dict[str, str],
+    anchor: Optional[dict[str, str]],
+) -> dict[str, str]:
+    """Enforce per-slot length caps via targeted rework + anchor fallback.
+
+    Runs up to ``_MAX_REWORK_RETRIES`` rework calls for any slot that
+    exceeds the char/word budget, merging in only the failing-slot
+    values so passing slots are preserved as-written. Any slot still
+    over budget after all retries is swapped for the anchor copy when
+    the proposal type has one; otherwise we log and leave it.
+    """
+    failing = _check_lengths(sections)
+    if not failing:
+        return sections
+
+    for attempt in range(1, _MAX_REWORK_RETRIES + 1):
+        _log(
+            "WARN",
+            f"length retry {attempt}/{_MAX_REWORK_RETRIES}: {failing}",
+        )
+        reworked = _rework_long_sections(
+            client,
+            model,
+            instruction,
+            sections,
+            list(failing.keys()),
+        )
+        if reworked is not None:
+            for key in failing:
+                sections[key] = reworked[key]
+        failing = _check_lengths(sections)
+        if not failing:
+            _log("OK", f"length retry {attempt} cleared all slots")
+            return sections
+
+    if anchor:
+        for key, reason in failing.items():
+            _log("WARN", f"retries exhausted, anchor swap {key}: {reason}")
+            sections[key] = anchor[key]
+    else:
+        for key, reason in failing.items():
+            _log("WARN", f"retries exhausted, no anchor {key}: {reason}")
+
+    return sections
+
+
 def generate_why_selected(
     final_data: dict,
     insurance_type: str,
@@ -445,12 +615,17 @@ def generate_why_selected(
         _log("WARN", f"shape invalid: type={shape} keys={keys}")
         return dict(anchor) if anchor else {}
 
+    sections = {key: parsed[key].strip() for key in _TAG_KEYS}
+    sections = _enforce_length_budget(
+        client, model, instruction, sections, anchor,
+    )
+
     _log(
         "OK",
         f"insurance_type={insurance_type} "
         f"anchor={'yes' if anchor else 'no'}",
     )
-    return {key: parsed[key].strip() for key in _TAG_KEYS}
+    return sections
 
 
 def render_bullets(sections: dict[str, str]) -> str:
